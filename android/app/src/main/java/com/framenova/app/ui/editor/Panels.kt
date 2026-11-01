@@ -366,13 +366,13 @@ fun LayoutPanel(vm: EditorViewModel) {
 fun CanvasPanel(vm: EditorViewModel) {
     val c = vm.project.canvas
     var blur by remember { mutableFloatStateOf(c.background.blur) }
-    PanelScaffold("Canvas", { vm.panel = Panel.NONE }) {
+    PanelScaffold("Project format", { vm.panel = Panel.NONE }) {
         Text("Ratio", color = Palette.TextDim, fontSize = 12.sp)
         ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = c.aspect == a, onClick = { vm.updateCanvas { it.copy(aspect = a) } }, label = { Text(a.label) }) } }
         Text("Resolution", color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { ResolutionTier.entries.forEach { r -> FilterChip(selected = c.tier == r, onClick = { vm.updateCanvas { it.copy(tier = r) } }, label = { Text(r.label) }) } }
+        ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = c.tier == r, onClick = { vm.updateCanvas { it.copy(tier = r) } }, label = { Text(r.label) }) } }
         Text("Frame rate", color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { listOf(24, 25, 30, 50, 60).forEach { f -> FilterChip(selected = c.fps == f, onClick = { vm.updateCanvas { it.copy(fps = f) } }, label = { Text("$f fps") }) } }
+        ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = c.fps == f, onClick = { vm.updateCanvas { it.copy(fps = f) } }, label = { Text("$f fps") }) } }
         Text("Background", color = Palette.TextDim, fontSize = 12.sp)
         ChipRow {
             FilterChip(selected = c.background.mode == BackgroundMode.COLOR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.COLOR)) } }, label = { Text("Color") })
@@ -424,7 +424,7 @@ fun FontPanel(vm: EditorViewModel) {
     PanelScaffold("Font", { vm.panel = Panel.NONE }) {
         @Suppress("UNUSED_EXPRESSION") refresh
         FontGroup.entries.forEach { group ->
-            Text(when (group) { FontGroup.SYSTEM -> "System"; FontGroup.LATIN -> "English"; FontGroup.CHINESE -> "繁體中文 (download once)" }, color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text(when (group) { FontGroup.SYSTEM -> "System"; FontGroup.LATIN -> "English"; FontGroup.ART -> "Art & display"; FontGroup.CHINESE -> "繁體中文 (download once)" }, color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
             FontCatalog.all.filter { it.group == group }.forEach { def ->
                 val available = FontManager.isAvailable(def.id)
                 val p = progress[def.id]

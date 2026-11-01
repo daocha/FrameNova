@@ -1,6 +1,13 @@
 package com.framenova.app.ui.editor
 
 import androidx.compose.foundation.Canvas
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.splineBasedDecay
+import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.AnimationState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -91,6 +98,7 @@ fun TimelineView(
     onMove: (clipId: String, trackId: String, startUs: Long, newTrack: Boolean) -> Unit,
     onTrim: (clipId: String, start: Boolean, deltaUs: Long) -> Unit,
     onTransitionTap: (clipId: String) -> Unit,
+    onClipDoubleTap: (clipId: String) -> Unit,
     onTrackHeaderTap: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -103,6 +111,12 @@ fun TimelineView(
     var drag by remember { mutableStateOf<DragState?>(null) }
     var trim by remember { mutableStateOf<TrimState?>(null) }
     var snapX by remember { mutableStateOf<Float?>(null) }
+    // A quick swipe keeps the timeline moving (fling); touching it again stops it.
+    val flingScope = rememberCoroutineScope()
+    var fling by remember { mutableStateOf<Job?>(null) }
+    val decay = remember(density) { splineBasedDecay<Float>(density) }
+    var lastTapMs by remember { mutableStateOf(0L) }
+    var lastTapId by remember { mutableStateOf<String?>(null) }
 
     val rulerH = with(density) { 24.dp.toPx() }
     val gap = with(density) { 5.dp.toPx() }
@@ -230,6 +244,9 @@ fun TimelineView(
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        fling?.cancel()
+                        val velocity = VelocityTracker()
+                        velocity.addPosition(down.uptimeMillis, down.position)
                         val hit = hitTest(down.position)
                         var last = down.position
                         var mode = 0 // 0 undecided, 1 scroll, 2 move, 3 trim, 4 zoom
@@ -262,6 +279,7 @@ fun TimelineView(
                             }
                             val change = pressed.first()
                             val pos = change.position
+                            velocity.addPosition(change.uptimeMillis, pos)
                             val moved = (pos - down.position).getDistance()
                             if (mode == 0 && moved > viewConfig.touchSlop) mode = 1
                             when (mode) {
@@ -281,13 +299,39 @@ fun TimelineView(
                         when (mode) {
                             0 -> when (hit) {
                                 is Hit.TransitionButton -> onTransitionTap(hit.clipId)
-                                is Hit.Body -> onSelect(if (latest.selected == hit.clip.id) null else hit.clip.id)
+                                is Hit.Body -> {
+                                    val now = System.currentTimeMillis()
+                                    if (hit.clip.isText && hit.clip.id == lastTapId && now - lastTapMs < viewConfig.doubleTapTimeoutMillis) {
+                                        onClipDoubleTap(hit.clip.id)
+                                        lastTapId = null
+                                    } else {
+                                        onSelect(if (latest.selected == hit.clip.id) null else hit.clip.id)
+                                        lastTapId = hit.clip.id; lastTapMs = now
+                                    }
+                                }
                                 is Hit.Handle -> onSelect(hit.clip.id)
                                 is Hit.TrackHeader -> onTrackHeaderTap(hit.track)
                                 is Hit.Gap -> onGapTap(hit.timeUs)
                                 Hit.Empty -> { onSelect(null); onGapTap(null) }
                             }
-                            1 -> onScrub(latest.playhead, true)
+                            1 -> {
+                                val vx = velocity.calculateVelocity().x
+                                if (abs(vx) < 400f) onScrub(latest.playhead, true)
+                                else fling = flingScope.launch {
+                                    // Moving content left moves the playhead later.
+                                    val from = latest.playhead
+                                    try {
+                                        var last = 0f
+                                        AnimationState(initialValue = 0f, initialVelocity = vx).animateDecay(decay) {
+                                            val us = from - (value / latest.pps * 1_000_000f).toLong()
+                                            onScrub(us, false)
+                                            // Stop at either end of the project.
+                                            if (latest.playhead == last.toLong() || us <= 0 || us >= latest.project.durationUs) cancelAnimation()
+                                            last = latest.playhead.toFloat()
+                                        }
+                                    } finally { onScrub(latest.playhead, true) }
+                                }
+                            }
                             2 -> drag?.let { d ->
                                 val target = dropTarget(d)
                                 val start = snappedStart(d)
@@ -321,7 +365,8 @@ fun TimelineView(
                         drawRoundRect(Color.White.copy(alpha = 0.16f), Offset(gx0, row.top), Size(gx1 - gx0, row.height), CornerRadius(corner))
                         drawRoundRect(Color.White, Offset(gx0, row.top), Size(gx1 - gx0, row.height), CornerRadius(corner), style = Stroke(width = 3f))
                     }
-                    for (clip in row.track.clips) {
+                    // The selected clip is drawn last, so its trim handles are not covered by the clip next to it.
+                    for (clip in row.track.clips.sortedBy { it.id == selectedId }) {
                         if (drag?.clip?.id == clip.id) continue
                         var x0 = xOf(clip.startUs, ph, pps)
                         var x1 = xOf(clip.endUs, ph, pps)
@@ -400,7 +445,9 @@ private fun DrawScope.drawClip(
                 while (tx < x1) {
                     if (tx + tileW >= 0 && tx <= size.width) {
                         val tl = clip.startUs + ((tx - x0) / max(1f, x1 - x0) * clip.durationUs).toLong()
-                        val img = media.thumbnail(asset, clip.sourceTimeAt(tl), step, heightPx)
+                        // Videos: the cached filmstrip (whole clip, instant on reopening); photos: their thumbnail.
+                        val img = if (asset.type == MediaType.VIDEO) media.filmstripFrame(asset, clip.sourceTimeAt(tl))
+                            else media.thumbnail(asset, clip.sourceTimeAt(tl), step, heightPx)
                         if (img != null) {
                             val dstW = tileW.toInt().coerceAtLeast(1)
                             drawImage(img, srcOffset = IntOffset.Zero, srcSize = IntSize(img.width, img.height), dstOffset = IntOffset(tx.toInt(), top.toInt()), dstSize = IntSize(dstW, h.toInt()), alpha = alpha)

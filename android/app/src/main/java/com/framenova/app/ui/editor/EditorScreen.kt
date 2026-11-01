@@ -51,6 +51,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,6 +77,7 @@ import com.framenova.app.engine.ExportState
 import com.framenova.app.model.ClipCategory
 import com.framenova.app.model.MediaType
 import com.framenova.app.model.ResolutionTier
+import com.framenova.app.model.FRAME_RATES
 import com.framenova.app.model.TextRole
 import com.framenova.app.model.TrackKind
 import com.framenova.app.ui.media.LibraryKind
@@ -135,7 +137,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
             )
             clip == null -> listOf(
                 Tool("Media", Icons.Default.AddPhotoAlternate) { pickMedia(ImportTarget.MAIN) },
-                Tool("Overlay", Icons.Default.PictureInPicture) { pickMedia(ImportTarget.OVERLAY) },
+                Tool("Add layer", Icons.Default.Layers) { pickMedia(ImportTarget.OVERLAY) },
                 Tool("Text", Icons.Default.TextFields) { vm.addText(TextRole.TITLE) },
                 Tool("Subtitle", Icons.Default.Subtitles) { vm.addText(TextRole.SUBTITLE) },
                 Tool("Import SRT/LRC", Icons.Default.Subtitles) { pickSubs.launch(arrayOf("*/*")) },
@@ -143,7 +145,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Audio", Icons.Default.LibraryMusic) { pickMedia(ImportTarget.AUDIO) },
                 Tool("Voiceover", Icons.Default.Mic) { vm.panel = Panel.VOICEOVER },
                 Tool("Layout", Icons.Default.GridView) { vm.panel = Panel.LAYOUT },
-                Tool("Canvas", Icons.Default.AspectRatio) { vm.panel = Panel.CANVAS },
+                Tool("Ratio", Icons.Default.AspectRatio) { vm.panel = Panel.CANVAS },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
                 Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() },
             )
@@ -179,7 +181,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                     add(Tool("Adjust", Icons.Default.Tune) { vm.panel = Panel.ADJUST })
                     add(Tool("Filters", Icons.Default.PhotoFilter) { vm.panel = Panel.FILTER })
                     add(Tool("Crop", Icons.Default.Crop) { vm.panel = Panel.CROP })
-                    if (track?.kind == TrackKind.MAIN) add(Tool("To overlay", Icons.Default.PictureInPicture) { vm.toOverlay() })
+                    if (track?.kind == TrackKind.MAIN) add(Tool("To new layer", Icons.Default.Layers) { vm.toOverlay() })
                     if (track?.kind == TrackKind.OVERLAY) add(Tool("To main", Icons.Default.VerticalAlignBottom) { vm.toMain() })
                     if (isVideo) add(Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() })
                     if (isVideo && asset?.hasAudio == true) add(Tool("Extract audio", Icons.Default.MusicNote) { vm.extractAudio() })
@@ -219,6 +221,9 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     }
     val showPanel = vm.panel != Panel.NONE && vm.panel != Panel.EXPORT
 
+    // One preview for every layout: moving it between layouts keeps its view, where a new one starts out blank.
+    val preview = remember(vm) { movableContentOf { m: Modifier -> PreviewPane(vm, m) } }
+
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.Bg)) {
         val landscape = maxWidth > maxHeight
         val screenH = maxHeight
@@ -238,6 +243,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 },
                 onMove = vm::move, onTrim = vm::trim,
                 onTransitionTap = { id -> vm.transitionTargetId = id; vm.selectedId = null; vm.panel = Panel.TRANSITION },
+                onClipDoubleTap = { id -> vm.openTextEditor(id) },
                 onTrackHeaderTap = { t -> if (t.kind == TrackKind.OVERLAY) vm.toggleTrackHidden(t.id) else vm.toggleTrackMute(t.id) },
                 modifier = m,
             )
@@ -249,12 +255,23 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 }
                 vm.panel = Panel.EXPORT
             })
+            // While text is edited (words, font, style, animation, stickers), the preview takes the whole space above the
+            // panel, so the result is easy to see.
+            val textFocus = vm.panel in setOf(Panel.TEXT_EDIT, Panel.TEXT_FONT, Panel.TEXT_STYLE, Panel.TEXT_ANIM, Panel.STICKER)
             if (vm.fullscreen) {
-                PreviewPane(vm, Modifier.fillMaxWidth().weight(1f))
+                preview(Modifier.fillMaxWidth().weight(1f))
                 TransportBar(vm)
+            } else if (textFocus && landscape) {
+                Row(Modifier.fillMaxWidth().weight(1f)) {
+                    preview(Modifier.weight(1f).fillMaxHeight())
+                    Box(Modifier.width(380.dp).fillMaxHeight().background(Palette.Surface)) { panelContent() }
+                }
+            } else if (textFocus) {
+                preview(Modifier.fillMaxWidth().weight(1f))
+                Box(Modifier.fillMaxWidth().heightIn(min = 76.dp, max = screenH * 0.42f)) { panelContent() }
             } else if (landscape) {
                 Row(Modifier.fillMaxWidth().weight(0.56f)) {
-                    PreviewPane(vm, Modifier.weight(1f).fillMaxHeight())
+                    preview(Modifier.weight(1f).fillMaxHeight())
                     Box(Modifier.width(380.dp).fillMaxHeight().background(Palette.Surface)) {
                         if (showPanel) panelContent() else ToolGrid(tools)
                     }
@@ -262,7 +279,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 TransportBar(vm)
                 timeline(Modifier.fillMaxWidth().weight(0.44f))
             } else {
-                PreviewPane(vm, Modifier.fillMaxWidth().weight(1f))
+                preview(Modifier.fillMaxWidth().weight(1f))
                 TransportBar(vm)
                 timeline(Modifier.fillMaxWidth().height((screenH * 0.3f).coerceIn(180.dp, 320.dp)))
                 Box(Modifier.fillMaxWidth().heightIn(min = 76.dp, max = screenH * 0.34f)) {
@@ -318,7 +335,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
             kind = if (audio) LibraryKind.AUDIO else LibraryKind.VISUAL,
             title = when (req.target) {
                 ImportTarget.MAIN -> "Add videos and photos"
-                ImportTarget.OVERLAY -> "Add overlay"
+                ImportTarget.OVERLAY -> "Add as a layer"
                 ImportTarget.AUDIO -> "Add audio"
                 ImportTarget.REPLACE -> "Replace clip"
             },
@@ -337,10 +354,14 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
 private fun TopBar(vm: EditorViewModel, onClose: () -> Unit, onRename: () -> Unit, onExport: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-        Column(Modifier.weight(1f).clickable(onClick = onRename)) {
-            Text(vm.project.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f)) {
+            Text(vm.project.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(onClick = onRename))
             val c = vm.project.canvas
-            Text("${c.aspect.label} · ${c.tier.label} · ${c.fps} fps", color = Palette.TextDim, fontSize = 11.sp)
+            // Tapping the format opens the ratio, resolution and frame rate settings.
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).clickable { vm.selectedId = null; vm.panel = Panel.CANVAS }, verticalAlignment = Alignment.CenterVertically) {
+                Text("${c.aspect.label} · ${c.tier.label} · ${c.fps} fps", color = Palette.Accent, fontSize = 11.sp)
+                Icon(Icons.Default.ArrowDropDown, "Change format", tint = Palette.Accent, modifier = Modifier.size(16.dp))
+            }
         }
         IconButton(onClick = vm::undo, enabled = vm.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
         IconButton(onClick = vm::redo, enabled = vm.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
@@ -408,9 +429,9 @@ private fun ExportDialog(vm: EditorViewModel, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text("Resolution", color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { ResolutionTier.entries.forEach { r -> FilterChip(selected = tier == r, onClick = { tier = r }, label = { Text(r.label) }) } }
+                ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = tier == r, onClick = { tier = r }, label = { Text(r.label) }) } }
                 Text("Frame rate", color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { listOf(24, 25, 30, 50, 60).forEach { f -> FilterChip(selected = fps == f, onClick = { fps = f }, label = { Text("$f") }) } }
+                ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = fps == f, onClick = { fps = f }, label = { Text("$f") }) } }
                 Text("Codec", color = Palette.TextDim, fontSize = 12.sp)
                 ChipRow {
                     FilterChip(selected = hevc, onClick = { hevc = true }, label = { Text("HEVC (smaller)") })

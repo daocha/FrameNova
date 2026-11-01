@@ -12,7 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
-enum class FontGroup { SYSTEM, LATIN, CHINESE }
+enum class FontGroup { SYSTEM, LATIN, ART, CHINESE }
 
 /**
  * A font: bundled ([resId]), downloaded on demand from the Google Fonts repository ([remotePath]), or a system face.
@@ -46,6 +46,31 @@ object FontCatalog {
         FontDef("lobster", "Lobster", FontGroup.LATIN, R.font.lobster),
         FontDef("dancing_script", "Dancing Script", FontGroup.LATIN, R.font.dancing_script, variable = true),
         FontDef("caveat", "Caveat", FontGroup.LATIN, R.font.caveat, variable = true),
+        // Display and art styles.
+        FontDef("bangers", "Bangers", FontGroup.ART, R.font.bangers),
+        FontDef("lilita_one", "Lilita One", FontGroup.ART, R.font.lilita_one),
+        FontDef("fredoka", "Fredoka", FontGroup.ART, R.font.fredoka, variable = true),
+        FontDef("righteous", "Righteous", FontGroup.ART, R.font.righteous),
+        FontDef("bungee", "Bungee", FontGroup.ART, R.font.bungee),
+        FontDef("rubik_mono_one", "Rubik Mono One", FontGroup.ART, R.font.rubik_mono_one),
+        FontDef("shrikhand", "Shrikhand", FontGroup.ART, R.font.shrikhand),
+        FontDef("abril_fatface", "Abril Fatface", FontGroup.ART, R.font.abril_fatface),
+        FontDef("alfa_slab_one", "Alfa Slab One", FontGroup.ART, R.font.alfa_slab_one),
+        FontDef("cinzel_decorative", "Cinzel Decorative", FontGroup.ART, R.font.cinzel_decorative),
+        FontDef("rye", "Rye", FontGroup.ART, R.font.rye),
+        FontDef("black_ops_one", "Black Ops One", FontGroup.ART, R.font.black_ops_one),
+        FontDef("creepster", "Creepster", FontGroup.ART, R.font.creepster),
+        FontDef("monoton", "Monoton", FontGroup.ART, R.font.monoton),
+        FontDef("neonderthaw", "Neonderthaw", FontGroup.ART, R.font.neonderthaw),
+        FontDef("audiowide", "Audiowide", FontGroup.ART, R.font.audiowide),
+        FontDef("orbitron", "Orbitron", FontGroup.ART, R.font.orbitron, variable = true),
+        FontDef("press_start_2p", "Press Start 2P", FontGroup.ART, R.font.press_start_2p),
+        FontDef("silkscreen", "Silkscreen", FontGroup.ART, R.font.silkscreen),
+        FontDef("great_vibes", "Great Vibes", FontGroup.ART, R.font.great_vibes),
+        FontDef("sacramento", "Sacramento", FontGroup.ART, R.font.sacramento),
+        FontDef("kaushan_script", "Kaushan Script", FontGroup.ART, R.font.kaushan_script),
+        FontDef("amatic_sc", "Amatic SC", FontGroup.ART, R.font.amatic_sc),
+        FontDef("indie_flower", "Indie Flower", FontGroup.ART, R.font.indie_flower),
         FontDef("noto_sans_tc", "思源黑體 Noto Sans TC", FontGroup.CHINESE, remotePath = "notosanstc/NotoSansTC%5Bwght%5D.ttf", sizeMb = 12, variable = true, sample = "繁體字"),
         FontDef("noto_serif_tc", "思源宋體 Noto Serif TC", FontGroup.CHINESE, remotePath = "notoseriftc/NotoSerifTC%5Bwght%5D.ttf", sizeMb = 17, variable = true, sample = "繁體字"),
         FontDef("chiron_hei_hk", "昭源黑體 Chiron Hei HK", FontGroup.CHINESE, remotePath = "chironheihk/ChironHeiHK%5Bwght%5D.ttf", sizeMb = 31, variable = true, sample = "香港字"),
@@ -53,6 +78,9 @@ object FontCatalog {
         FontDef("lxgw_wenkai_tc", "霞鶩文楷 LXGW WenKai TC", FontGroup.CHINESE, remotePath = "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf", sizeMb = 13, sample = "文楷字"),
         FontDef("iansui", "芫荽 Iansui", FontGroup.CHINESE, remotePath = "iansui/Iansui-Regular.ttf", sizeMb = 9, sample = "芫荽字"),
         FontDef("huninn", "粉圓 Huninn", FontGroup.CHINESE, remotePath = "huninn/Huninn-Regular.ttf", sizeMb = 5, sample = "粉圓字"),
+        FontDef("lxgw_marker_gothic", "霞鶩漫黑 LXGW Marker Gothic", FontGroup.CHINESE, remotePath = "lxgwmarkergothic/LXGWMarkerGothic-Regular.ttf", sizeMb = 3, sample = "漫黑字"),
+        FontDef("chiron_goround_tc", "昭源圓體 Chiron GoRound TC", FontGroup.CHINESE, remotePath = "chirongoroundtc/ChironGoRoundTC%5Bwght%5D.ttf", sizeMb = 51, variable = true, sample = "圓體字"),
+        FontDef("cactus_classical_serif", "仙人掌明體 Cactus Classical Serif", FontGroup.CHINESE, remotePath = "cactusclassicalserif/CactusClassicalSerif-Regular.ttf", sizeMb = 29, sample = "明體字"),
     ).map { if (it.remotePath != null) it.copy(remotePath = BASE + it.remotePath) else it }
 
     fun byId(id: String): FontDef = all.firstOrNull { it.id == id } ?: all.first()

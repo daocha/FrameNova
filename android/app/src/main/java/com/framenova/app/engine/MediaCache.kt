@@ -62,12 +62,52 @@ class MediaCache(private val context: Context) {
         return null
     }
 
-    private fun frameAt(asset: MediaAsset, timeUs: Long, heightPx: Int): Bitmap? {
+    private fun frameAt(asset: MediaAsset, timeUs: Long, heightPx: Int, option: Int = MediaMetadataRetriever.OPTION_CLOSEST_SYNC): Bitmap? {
         val r = retrievers.getOrPut(asset.id) { MediaMetadataRetriever().apply { setDataSource(context, Uri.parse(asset.uri)) } }
         synchronized(r) {
             val w = max(1, heightPx * asset.width / max(1, asset.height))
-            return r.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, w, heightPx)
+            return r.getScaledFrameAtTime(timeUs, option, w, heightPx)
         }
+    }
+
+    private val scrubWanted = ConcurrentHashMap<String, Long>()
+    private val scrubRunning = ConcurrentHashMap.newKeySet<String>()
+    private val scrubLast = ConcurrentHashMap<String, ImageBitmap>()
+    private val scrubLastAt = ConcurrentHashMap<String, Long>()
+
+    /**
+     * A frame of [asset] at source time [timeUs] for scrubbing and live layer gestures, shown instead of the player
+     * (whose rebuilds are too slow to follow a finger). Only the latest request per asset is decoded, so a fast swipe
+     * never queues up stale frames; until it is ready the previous frame is returned.
+     */
+    fun scrubFrame(asset: MediaAsset, timeUs: Long, heightPx: Int): ImageBitmap? {
+        if (asset.type == MediaType.IMAGE) return thumbnail(asset, 0, 1, heightPx)
+        val t = timeUs / SCRUB_STEP_US * SCRUB_STEP_US
+        val key = "${asset.id}@scrub$t@$heightPx"
+        thumbs.get(key)?.let { scrubLast[asset.id] = it; scrubLastAt[asset.id] = t; return it }
+        scrubWanted[asset.id] = t
+        if (scrubRunning.add(asset.id)) scope.launch {
+            try {
+                while (true) {
+                    val want = scrubWanted[asset.id] ?: break
+                    val k = "${asset.id}@scrub$want@$heightPx"
+                    if (thumbs.get(k) == null) {
+                        val bmp = try { frameAt(asset, want, heightPx, MediaMetadataRetriever.OPTION_CLOSEST) } catch (_: Exception) { null }
+                        if (bmp != null) {
+                            val image = bmp.asImageBitmap()
+                            thumbs.put(k, image)
+                            scrubLast[asset.id] = image
+                            scrubLastAt[asset.id] = want
+                            version.intValue++
+                        }
+                    }
+                    if (scrubWanted.remove(asset.id, want)) break
+                }
+            } finally { scrubRunning.remove(asset.id) }
+        }
+        // Until the exact frame is decoded: the last one if it is close, else the nearest filmstrip frame.
+        val near = scrubLastAt[asset.id]?.let { abs(it - timeUs) < 1_000_000L } == true
+        return (if (near) scrubLast[asset.id] else null) ?: filmstripFrame(asset, timeUs) ?: scrubLast[asset.id]
     }
 
     private fun decodeImage(asset: MediaAsset, heightPx: Int): Bitmap? {
@@ -167,10 +207,109 @@ class MediaCache(private val context: Context) {
         }
     }
 
+    /*
+     * Filmstrips. Each video clip gets frames spread over its whole length, one per second (at least 10, at most
+     * MAX_STRIP_FRAMES), taken at keyframes (fast: no long decodes of the original) and written to the cache directory,
+     * so a project opens with its filmstrips at once. Missing frames are made in the background, coarse to fine: ten
+     * spread over the clip first, then the gaps, so the whole clip shows something within moments. The timeline (at
+     * any zoom) and the quick preview use the nearest frame.
+     */
+    private class Strip(val count: Int, val durationUs: Long) { val frames = arrayOfNulls<ImageBitmap>(count) }
+    private val strips = ConcurrentHashMap<String, Strip>()
+    private val stripJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    /** Two clips at a time, each with its own decoder session. */
+    private val stripSlots = Semaphore(2)
+
+    private fun stripDir(asset: MediaAsset): File {
+        val raw = "${asset.uri}|${asset.durationUs}|$STRIP_HEIGHT|v1"
+        val key = java.security.MessageDigest.getInstance("SHA-1").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+        return File(File(context.cacheDir, "filmstrip"), key)
+    }
+
+    /** Loads [asset]'s filmstrip from the cache and makes the missing frames in the background. */
+    fun prepareFilmstrip(asset: MediaAsset) {
+        if (asset.type != MediaType.VIDEO || asset.durationUs <= 0) return
+        if (stripJobs[asset.id]?.isActive == true || strips[asset.id]?.frames?.all { it != null } == true) return
+        val count = (asset.durationUs / 1_000_000L).toInt().coerceIn(10, MAX_STRIP_FRAMES)
+        val strip = strips.getOrPut(asset.id) { Strip(count, asset.durationUs) }
+        stripJobs[asset.id] = scope.launch {
+            val dir = stripDir(asset).apply { mkdirs() }
+            // Cached frames first: these show at once.
+            val load = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 }
+            for (i in 0 until strip.count) {
+                if (strip.frames[i] != null) continue
+                val f = File(dir, "$i.jpg")
+                if (f.isFile) runCatching { BitmapFactory.decodeFile(f.path, load) }.getOrNull()?.let { strip.frames[i] = it.asImageBitmap() }
+            }
+            version.intValue++
+            val missing = coarseToFine(strip.count).filter { strip.frames[it] == null }
+            if (missing.isEmpty()) return@launch
+            // Ten frames per turn: the first ten of every clip come before the rest of any, and clips then take turns
+            // (the semaphore is fair), so no clip waits for another to finish.
+            val r = MediaMetadataRetriever()
+            try {
+                r.setDataSource(context, Uri.parse(asset.uri))
+                val h = STRIP_HEIGHT
+                val w = max(1, h * asset.width / max(1, asset.height))
+                val started = System.currentTimeMillis()
+                var made = 0
+                for (batch in missing.chunked(10)) {
+                    stripSlots.withPermit {
+                        for (i in batch) {
+                            kotlinx.coroutines.yield() // stops here when the editor closes
+                            val t = strip.durationUs * (2L * i + 1) / (2L * strip.count)
+                            val frame = runCatching { r.getScaledFrameAtTime(t, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, w, h) }.getOrNull() ?: continue
+                            runCatching { File(dir, "$i.jpg").outputStream().use { frame.compress(Bitmap.CompressFormat.JPEG, 82, it) } }
+                            strip.frames[i] = (frame.copy(Bitmap.Config.RGB_565, false) ?: frame).asImageBitmap()
+                            made++
+                        }
+                    }
+                    version.intValue++
+                }
+                android.util.Log.i(com.framenova.app.LOG_TAG, "Filmstrip of ${asset.name}: $made frames in ${System.currentTimeMillis() - started} ms")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w(com.framenova.app.LOG_TAG, "Filmstrip of ${asset.name} not made", e)
+            } finally { r.release() }
+        }
+    }
+
+    /** The filmstrip frame nearest source time [timeUs] of [asset], or null until one is available. */
+    fun filmstripFrame(asset: MediaAsset, timeUs: Long): ImageBitmap? {
+        val strip = strips[asset.id] ?: run { prepareFilmstrip(asset); return null }
+        val i = (timeUs * strip.count / strip.durationUs.coerceAtLeast(1)).toInt().coerceIn(0, strip.count - 1)
+        for (d in 0 until strip.count) {
+            strip.frames.getOrNull(i - d)?.let { return it }
+            strip.frames.getOrNull(i + d)?.let { return it }
+        }
+        return null
+    }
+
+    /** Slot indices ordered so the first ten are spread over the clip, then the gaps between them fill in. */
+    private fun coarseToFine(count: Int): List<Int> {
+        val order = LinkedHashSet<Int>()
+        var stride = max(1, count / 10)
+        while (true) {
+            for (i in 0 until count step stride) order += i
+            if (stride == 1) break
+            stride = max(1, stride / 2)
+        }
+        return order.toList()
+    }
+
     fun release() {
+        stripJobs.values.forEach { it.cancel() }
+        stripJobs.clear()
         retrievers.values.forEach { runCatching { it.release() } }
         retrievers.clear()
     }
 
-    companion object { const val PEAK_US = 20_000L }
+    companion object {
+        const val PEAK_US = 20_000L
+        private const val SCRUB_STEP_US = 1_000_000L / 30
+        /** Filmstrip frame height in pixels, and the most frames per clip. */
+        private const val STRIP_HEIGHT = 128
+        private const val MAX_STRIP_FRAMES = 120
+    }
 }

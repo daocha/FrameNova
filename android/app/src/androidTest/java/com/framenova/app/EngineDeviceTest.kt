@@ -176,12 +176,10 @@ class EngineDeviceTest {
         main.post {
             val e = PreviewEngine(context)
             engine = e
-            val texture = SurfaceTexture(0).apply { setDefaultBufferSize(540, 960) }
-            surface = Surface(texture)
-            e.player.setVideoSurface(surface!!, Size(540, 960))
-            e.player.addListener(object : Player.Listener {
-                override fun onPlayerError(err: PlaybackException) { error = err; latch.countDown() }
-            })
+            surface = drainingSurface(540, 960)
+            e.attach(surface!!, Size(540, 960))
+            // Errors the engine could not recover from.
+            e.onError = { message -> error = PlaybackException(message, null, PlaybackException.ERROR_CODE_UNSPECIFIED); latch.countDown() }
             e.update(p, 0)
             e.player.play()
             main.postDelayed({ latch.countDown() }, 2500)
@@ -198,6 +196,26 @@ class EngineDeviceTest {
         done.await(5, TimeUnit.SECONDS)
         assertNull("playback error: ${error?.errorCodeName} ${error?.cause}", error)
         assertTrue("position $position", position > 300_000)
+    }
+
+    /**
+     * An off-screen output that consumes every frame, like a screen does. (A SurfaceTexture nobody reads fills its
+     * buffers, after which the GL thread blocks and releasing the player times out, leaking GPU memory.)
+     */
+    private fun drainingSurface(width: Int, height: Int): Surface {
+        val reader = android.media.ImageReader.newInstance(width, height, android.graphics.PixelFormat.RGBA_8888, 3,
+            android.hardware.HardwareBuffer.USAGE_GPU_COLOR_OUTPUT or android.hardware.HardwareBuffer.USAGE_CPU_READ_RARELY)
+        reader.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.close() }, drainHandler)
+        readers += reader
+        return reader.surface
+    }
+    private val drainThread = android.os.HandlerThread("drain").apply { start() }
+    private val drainHandler = Handler(drainThread.looper)
+    private val readers = mutableListOf<android.media.ImageReader>()
+
+    @org.junit.After fun closeReaders() {
+        readers.forEach { runCatching { it.close() } }
+        readers.clear()
     }
 
     private fun <T> onMain(block: () -> T): T {
@@ -221,8 +239,7 @@ class EngineDeviceTest {
         val unfaded = faded.setTransition(faded.mainTrack.clips[1].id, null)
         var error: String? = null
         var rendered = 0L
-        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(960, 540) }
-        val surface = Surface(texture)
+        val surface = drainingSurface(960, 540)
         val engine = onMain {
             PreviewEngine(context).also { e ->
                 e.onError = { error = it }
@@ -261,9 +278,8 @@ class EngineDeviceTest {
         main.post {
             val e = PreviewEngine(context)
             engine = e
-            val texture = SurfaceTexture(0).apply { setDefaultBufferSize(960, 540) }
-            surface = Surface(texture)
-            e.player.setVideoSurface(surface!!, Size(960, 540))
+            surface = drainingSurface(960, 540)
+            e.attach(surface!!, Size(960, 540))
             e.frameListener = { presentationTimeUs -> if (presentationTimeUs > maxRendered) maxRendered = presentationTimeUs }
             e.update(project, 0)
             e.player.play()
@@ -284,8 +300,7 @@ class EngineDeviceTest {
         val p = Project("t8", "seeks", 0, 0, canvas = canvas).addToMainAt(listOf(land, land, land), 0).addOverlayAt(land, 4_000_000)
         var error: String? = null
         var rendered = -1L
-        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(960, 540) }
-        val surface = Surface(texture)
+        val surface = drainingSurface(960, 540)
         val engine = onMain {
             PreviewEngine(context).also { e ->
                 e.onError = { error = it }
@@ -318,6 +333,42 @@ class EngineDeviceTest {
         }
     }
 
+    /** Moving and resizing a layer while paused (many live updates, as a drag or pinch makes) shows the change and does not crash. */
+    @Test fun previewShowsLiveEditsWhilePaused() {
+        val land = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!
+        val canvas = CanvasSettings(AspectPreset.R16_9, ResolutionTier.HD, 30)
+        val p = Project("t9", "live", 0, 0, canvas = canvas).addToMainAt(listOf(land), 0).addOverlayAt(land, 0)
+        val overlay = p.tracks.first { it.kind == TrackKind.OVERLAY }.clips[0].id
+        var error: String? = null
+        var frames = 0
+        val surface = drainingSurface(960, 540)
+        val engine = onMain {
+            PreviewEngine(context).also { e ->
+                e.onError = { error = it }
+                e.frameListener = { frames++ }
+                e.attach(surface, Size(960, 540))
+                e.update(p, 1_000_000)
+            }
+        }
+        try {
+            Thread.sleep(1200)
+            val before = frames
+            for (i in 1..30) {
+                val q = p.updateClip(overlay) { it.copy(transform = Transform(cx = 0.3f + i * 0.01f, cy = 0.5f, scale = 0.3f + i * 0.01f)) }
+                onMain { engine.update(q, 1_000_000) }
+                Thread.sleep(30)
+            }
+            Thread.sleep(1500)
+            assertNull("preview error $error", error)
+            assertTrue("no new frame after the edits ($before -> $frames)", frames > before)
+            onMain { engine.play(1_000_000, p.durationUs) }
+            Thread.sleep(1200)
+            assertTrue("did not play after the edits", onMain { engine.positionUs } > 1_500_000)
+        } finally {
+            onMain { engine.release(); surface.release() }
+        }
+    }
+
     /** Cuts, gaps and text on the main track play through without the picture stopping. */
     @Test fun previewPlaysThroughCuts() {
         val land = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!
@@ -328,28 +379,28 @@ class EngineDeviceTest {
         assertTrue("rendered only to ${rendered / 1000} ms", rendered > 4_200_000)
     }
 
-    /** A layer that starts after an empty stretch must not stop the preview. */
-    @org.junit.Ignore("Known Media3 1.9 issue: on the emulator the preview stops rendering when a layer starts mid-playback; check on a device")
-    @Test fun previewRendersPastGaps() {
+    /**
+     * Layers that start, change clips or end mid-playback must not stop the preview (Media3 1.9's compositor froze
+     * there; see PreviewVideoCompositor): an overlay starting and ending, a split clip moved to an overlay track, and
+     * a transition.
+     */
+    @Test fun previewRendersThroughLayerChanges() {
         val land = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!
         val port = MediaProbe.probe(context, fixture("port.mp4"), "video/mp4")!!
-        val p = Project("t5", "gaps", 0, 0, canvas = CanvasSettings(AspectPreset.R16_9, ResolutionTier.HD, 30))
-            .addToMainAt(listOf(land, land), 0).addOverlayAt(port, 1_000_000)
-        val results = mutableListOf<String>()
         val canvas = CanvasSettings(AspectPreset.R16_9, ResolutionTier.HD, 30)
-        val one = Project("a", "a", 0, 0, canvas = canvas).addToMainAt(listOf(land), 0)
         val two = Project("b", "b", 0, 0, canvas = canvas).addToMainAt(listOf(land, land), 0)
-        val overlayAt0 = one.addOverlayAt(port, 0)
-        val landOverlayAt1 = one.addOverlayAt(land, 1_000_000)
-        val mainLandPort = Project("c", "c", 0, 0, canvas = canvas).addToMainAt(listOf(land, port), 0)
-        val shortFirst = two.trimEnd(two.mainTrack.clips[0].id, -2_000_000)
-        val overlayAt2 = one.addOverlayAt(land, 2_000_000)
-        val overlayAt1Short = one.addOverlayAt(land, 1_000_000).let { q -> val id = q.tracks.first { it.kind == TrackKind.OVERLAY }.clips[0].id; q.trimEnd(id, -1_000_000) }
-        for ((name, proj) in listOf("overlayAt2" to overlayAt2, "shortFirst" to shortFirst)) {
-            results += "$name rendered=${renderedUntil(proj, 7000) / 1000}ms"
+        val overlayMidway = two.addOverlayAt(port, 1_000_000) // starts at 1 s, ends at 3 s, main cut at 3 s
+        // A split clip's second half moved onto an overlay track at 1.5 s (it starts mid-file).
+        val splitToLayer = two.splitClip(two.mainTrack.clips[1].id, 4_500_000).let { (q, second) ->
+            q.moveToOverlay(second!!).let { o -> o.moveClip(second, o.tracks.first { it.kind == TrackKind.OVERLAY }.id, 1_500_000) }
         }
-        android.util.Log.i("GapTest", results.joinToString("; "))
-        assertTrue(results.joinToString("; "), results.all { it.substringAfter("rendered=").removeSuffix("ms").toLong() > 2500 })
+        val transition = two.setTransition(two.mainTrack.clips[1].id, Transition(TransitionType.FADE, 500_000)).addOverlayAt(port, 1_000_000)
+        val results = mutableListOf<String>()
+        for ((name, proj) in listOf("overlayMidway" to overlayMidway, "splitToLayer" to splitToLayer, "transition" to transition)) {
+            results += "$name rendered=${renderedUntil(proj, 4500) / 1000}ms"
+        }
+        android.util.Log.i("LayerTest", results.joinToString("; "))
+        assertTrue(results.joinToString("; "), results.all { it.substringAfter("rendered=").removeSuffix("ms").toLong() > 3500 })
     }
 
     /** Projects survive a save/load cycle through the repository. */

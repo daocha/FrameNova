@@ -1,5 +1,6 @@
 package com.framenova.app.engine
 
+import com.framenova.app.LOG_TAG
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -122,10 +123,12 @@ object ExportManager {
         )
         builder.addListener(object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                android.util.Log.i(LOG_TAG, "Export finished: ${exportResult.durationMs} ms, ${exportResult.fileSizeBytes} bytes, video ${exportResult.videoEncoderName}, audio ${exportResult.audioEncoderName}")
                 transformer = null
                 onDone(exportResult)
             }
             override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                android.util.Log.e(LOG_TAG, "Export failed (${exportException.errorCodeName})", exportException)
                 transformer = null
                 file.delete()
                 if (onFailure != null) onFailure()
@@ -133,6 +136,8 @@ object ExportManager {
             }
         })
         val t = builder.build()
+        android.util.Log.i(LOG_TAG, "Export started: $label, ${composition.sequences.size} sequences, video ${videoMime ?: "none"}, " +
+            "${encoder?.bitrate?.let { "${it / 1_000_000} Mbps" } ?: "default bitrate"}")
         transformer = t
         _state.value = ExportState.Running(label, 0)
         ContextCompat.startForegroundService(app, Intent(app, ExportService::class.java))
@@ -185,6 +190,7 @@ object ExportManager {
                 file.delete()
                 main.post { finish(ExportState.Done(label, uri, displayName, bytes, isAudio)) }
             } catch (e: Exception) {
+                android.util.Log.e(LOG_TAG, "Could not save $displayName", e)
                 file.delete()
                 main.post { finish(ExportState.Failed(label, e.message ?: "Could not save")) }
             }

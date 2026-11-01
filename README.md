@@ -5,7 +5,7 @@ Projects and media stay on the device. Source-available under the [PolyForm Stri
 
 ## Features
 
-- **Timeline:** main track, overlay (picture-in-picture) tracks, text tracks, audio tracks. Clips stay where you put
+- **Timeline:** main track, any number of layer (picture-in-picture) tracks, text tracks, audio tracks. Clips stay where you put
   them: trimming or moving a clip leaves a gap instead of shifting the others (tap a gap to delete it), and adding
   or extending a clip pushes later clips only as far as needed. Long-press to drag clips anywhere, also between
   tracks; drag the white handles to trim; pinch to zoom; snapping to the playhead and clip edges.
@@ -20,8 +20,10 @@ Projects and media stay on the device. Source-available under the [PolyForm Stri
   sharpen, vignette), canvas background colour or blur.
 - **Transitions:** fade, dip to black/white, push and slide in four directions, zoom in/out.
 - **Text:** styles (colour, outline, shadow, background box, spacing), in/out animations, emoji stickers, subtitles and
-  lyrics from SRT/LRC files. English fonts are bundled; Traditional Chinese fonts (Noto Sans/Serif TC, Chiron Hei/Sung
-  HK, LXGW WenKai TC, Iansui, Huninn) download once on demand.
+  lyrics from SRT/LRC files. English and art/display fonts are bundled (comic, neon, retro pixel, scripts, slab, western,
+  stencil and more); Traditional Chinese fonts (Noto Sans/Serif TC, Chiron Hei/Sung HK, Chiron GoRound TC, LXGW WenKai TC,
+  LXGW Marker Gothic, Cactus Classical Serif, Iansui, Huninn) download once on demand. All are free (SIL Open Font
+  License 1.1).
 - **Audio:** music and sound from files, audio extracted from video clips, voiceover recording, saving a clip's audio
   as an `.m4a` file.
 - **Export:** 720p to 4K, 24–60 fps, HEVC or H.264, three quality levels, in the background with a notification.
@@ -55,6 +57,13 @@ Debug builds can update themselves from your computer:
 4. After each new build, the app shows **Update** (home screen banner, or Settings > Check for updates). Downloads are
    verified against the checksum and the package, and Android installs them only if the signing key matches.
 
+## Reporting a problem
+
+Tap the version in Settings ten times to unlock the developer tools. **Developer logs** shows FrameNova's recent log
+(its own lines, warnings and errors from the media libraries, and the last crash), with Copy, Share and Save; **Save
+logs** writes it to `Download/FrameNova/logs/`. Nothing leaves the phone unless you share it. The tools lock again after
+the next update, or with their switch.
+
 ## Releases and signing
 
 | Script | Purpose |
@@ -70,13 +79,9 @@ Signing settings come only from the environment (`FRAMENOVA_KEYSTORE`, `FRAMENOV
 `FRAMENOVA_KEY_PASSWORD`); passwords are asked for when unset. Release APKs update from GitHub Releases; Play builds
 update through Google Play.
 
-## Known issue
-
-When a project has picture-in-picture clips, dip transitions or a blurred background, the live preview can pause its
-picture for about a second where one of those layers moves to its next clip, then continues on its own. Projects with
-only the main track (plus text and audio) play through cuts and gaps smoothly. Exports are not affected.
-
 ## Licences
 
 FrameNova: PolyForm Strict License 1.0.0. AndroidX Media3, Jetpack Compose and Kotlin libraries: Apache License 2.0.
+`android/app/src/main/java/androidx/media3/effect/` holds two Media3 files modified for the preview, under the Apache
+License 2.0 (changes noted in each file).
 Fonts: SIL Open Font License 1.1, licence texts in `third_party/fonts/`.

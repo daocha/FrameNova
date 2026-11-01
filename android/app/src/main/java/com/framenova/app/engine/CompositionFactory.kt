@@ -87,6 +87,10 @@ class PlanHolder(plan: RenderPlan, hot: HotState) {
 
 private const val SOLID_SIZE = 16
 
+/** A tiny black video (assets) that fills empty stretches of video layers in the preview, and its length. */
+private const val FILLER_URI = "asset:///preview_filler.mp4"
+private const val FILLER_US = 120_000_000L
+
 @UnstableApi
 object CompositionFactory {
     fun outputSize(canvas: CanvasSettings, mode: PlanMode, exportLongSide: Int? = null): PixelSize = when (mode) {
@@ -145,35 +149,26 @@ object CompositionFactory {
         // Export carries the sound of video clips on separate audio-only layers (see clipAudioSequence).
         val separateAudio = mode == PlanMode.EXPORT
         val clipAudio = mutableListOf<EditedMediaItemSequence>()
-        val mainTrack = project.mainTrack
-        // In the preview, a project whose only video layer is the main track (no overlays, dip transitions or blurred
-        // backdrop) lets the main track lead the compositor and draws text after compositing. Media3 1.9's preview
-        // pauses when a secondary layer moves to its next clip, but plays through the leading layer's cuts smoothly.
-        val mainLeads = mode == PlanMode.PREVIEW && mainTrack.clips.isNotEmpty() &&
-            project.tracks.none { it.kind == TrackKind.OVERLAY && it.clips.isNotEmpty() } &&
-            mainTrack.clips.none { it.transitionIn?.type == TransitionType.DIP_BLACK || it.transitionIn?.type == TransitionType.DIP_WHITE } &&
-            project.canvas.background.mode != BackgroundMode.BLUR
-
-        if (!mainLeads) {
-            // 0: clock. The compositor's primary input sets the output frame rate and duration; it is drawn on top and
-            // carries the text. Always output-sized: the pipeline takes its frame size from the inputs, and text is
-            // drawn onto this frame.
-            val clockSize = out
-            val clockUri = solidImage(context, 0x00000000, clockSize.width, clockSize.height)
-            val clockEffects = if (textOverlays.isEmpty()) Effects.EMPTY else Effects(emptyList(), listOf<Effect>(OverlayEffect(textOverlays)))
-            sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO))
-                .addItem(stillItem(clockUri, duration, fps, clockEffects))
-                .build()
-            layers += ClockLayer(clockSize.width, clockSize.height)
-        }
+        // 0: clock. The compositor's primary input sets the output frame rate and duration; it is drawn on top and
+        // carries the text. Always output-sized: the pipeline takes its frame size from the inputs, and text is
+        // drawn onto this frame.
+        val clockSize = out
+        val clockUri = solidImage(context, 0x00000000, clockSize.width, clockSize.height)
+        val clockEffects = if (textOverlays.isEmpty()) Effects.EMPTY else Effects(emptyList(), listOf<Effect>(OverlayEffect(textOverlays)))
+        sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO))
+            .addItem(stillItem(clockUri, duration, fps, clockEffects))
+            .build()
+        layers += ClockLayer(clockSize.width, clockSize.height)
 
         // Overlay tracks, top-most first.
         for (track in project.tracks.filter { it.kind == TrackKind.OVERLAY && it.clips.isNotEmpty() }) {
             val clips = track.clips.mapNotNull { c -> project.asset(c.assetId)?.let { c to it } }
             if (clips.isEmpty()) continue
-            sequences += videoSequence(context, project, track, clips, mode, out, fps, withAudio = !separateAudio)
+            for (part in previewParts(mode, clips)) {
+                sequences += videoSequence(context, project, track, part, mode, out, fps, withAudio = !separateAudio)
+                layers += VideoLayer(track.id, VideoRole.OVERLAY, part.map { (c, a) -> layerClip(project, c, a, mode, out) })
+            }
             if (separateAudio) clipAudioSequence(project, track, clips, mode, out)?.let { clipAudio += it }
-            layers += VideoLayer(track.id, VideoRole.OVERLAY, clips.map { (c, a) -> layerClip(project, c, a, mode, out) })
         }
 
         val main = project.mainTrack
@@ -191,16 +186,23 @@ object CompositionFactory {
         val indexed = main.clips.mapIndexedNotNull { i, c -> project.asset(c.assetId)?.let { Triple(i, c, it) } }
         val mainGroups = mainLayerGroups(main.clips).map { group -> indexed.filter { it.first in group } }.filter { it.isNotEmpty() }
         for (group in mainGroups) {
-            sequences += videoSequence(context, project, main, group.map { it.second to it.third }, mode, out, fps, withAudio = !separateAudio)
-            if (separateAudio) clipAudioSequence(project, main, group.map { it.second to it.third }, mode, out)?.let { clipAudio += it }
-            layers += VideoLayer(main.id, VideoRole.MAIN, group.map { (i, c, a) -> layerClip(project, c, a, mode, out).copy(mainIndex = i) })
+            val pairs = group.map { it.second to it.third }
+            val indexOf = group.associate { (i, c, _) -> c.id to i }
+            for (part in previewParts(mode, pairs)) {
+                sequences += videoSequence(context, project, main, part, mode, out, fps, withAudio = !separateAudio)
+                layers += VideoLayer(main.id, VideoRole.MAIN, part.map { (c, a) -> layerClip(project, c, a, mode, out).copy(mainIndex = indexOf.getValue(c.id)) })
+            }
+            if (separateAudio) clipAudioSequence(project, main, pairs, mode, out)?.let { clipAudio += it }
         }
         if (project.canvas.background.mode == BackgroundMode.BLUR) {
             for (group in mainGroups) {
                 val blurW = max(2, out.width / 4 / 2 * 2)
                 val blurH = max(2, out.height / 4 / 2 * 2)
-                sequences += blurSequence(context, project, group.map { it.second to it.third }, blurW, blurH, fps)
-                layers += VideoLayer(main.id, VideoRole.BLUR, group.map { (i, c, _) -> LayerClip(c.id, c.startUs, c.endUs, blurW, blurH, i) })
+                val indexOf = group.associate { (i, c, _) -> c.id to i }
+                for (part in previewParts(mode, group.map { it.second to it.third })) {
+                    sequences += blurSequence(context, project, part, blurW, blurH, fps, mode)
+                    layers += VideoLayer(main.id, VideoRole.BLUR, part.map { (c, _) -> LayerClip(c.id, c.startUs, c.endUs, blurW, blurH, indexOf.getValue(c.id)) })
+                }
             }
         }
         val bgColor = project.canvas.background.color.toInt()
@@ -227,7 +229,6 @@ object CompositionFactory {
         val plan = RenderPlan(out.width, out.height, fps, layers, textTracks, key)
         holder = PlanHolder(plan, hot)
         val composition = Composition.Builder(sequences)
-            .apply { if (mainLeads && textOverlays.isNotEmpty()) setEffects(Effects(emptyList(), listOf<Effect>(OverlayEffect(textOverlays)))) }
             .setVideoCompositorSettings(PlanCompositorSettings(holder))
             .setHdrMode(if (anyHdr) Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL else Composition.HDR_MODE_KEEP_HDR)
             .build()
@@ -243,9 +244,10 @@ object CompositionFactory {
         val hasAudio = withAudio && clips.any { (c, a) -> a.type == MediaType.VIDEO && a.hasAudio && c.volume > 0f } && !track.muted
         val types = if (hasAudio) setOf(C.TRACK_TYPE_AUDIO, C.TRACK_TYPE_VIDEO) else setOf(C.TRACK_TYPE_VIDEO)
         val builder = EditedMediaItemSequence.Builder(types)
+        val videoFill = fillsWithVideo(mode, clips)
         var cursor = 0L
         for ((clip, asset) in clips) {
-            if (clip.startUs > cursor) builder.addGap(clip.startUs - cursor)
+            if (clip.startUs > cursor) addGap(builder, clip.startUs - cursor, videoFill)
             val gain = if (track.muted) 0f else clip.volume
             val (fadeIn, fadeOut) = audioFades(project, track, clip)
             builder.addItem(
@@ -254,8 +256,36 @@ object CompositionFactory {
             )
             cursor = clip.endUs
         }
-        padToEnd(builder, cursor, project.durationUs)
+        padToEnd(builder, cursor, project.durationUs, videoFill)
         return builder.build()
+    }
+
+    /**
+     * In the preview, a layer's video clips and stills go on separate sequences. Media3 1.9's preview player can only
+     * move a lower layer from a still (or an empty stretch, which it fills with still frames) to a video once the whole
+     * preview has ended, so such a layer would stay blank for seconds. Kept apart, and with empty stretches between video
+     * clips filled with a tiny black video ([addGap]), every layer only switches between items of one kind. The parts
+     * never overlap in time, so their order does not matter. Exports are not affected.
+     */
+    private fun previewParts(mode: PlanMode, clips: List<Pair<Clip, MediaAsset>>): List<List<Pair<Clip, MediaAsset>>> =
+        if (mode != PlanMode.PREVIEW) listOf(clips)
+        else clips.partition { it.second.type == MediaType.VIDEO }.toList().filter { it.isNotEmpty() }
+
+    private fun fillsWithVideo(mode: PlanMode, clips: List<Pair<Clip, MediaAsset>>): Boolean =
+        mode == PlanMode.PREVIEW && clips.all { it.second.type == MediaType.VIDEO }
+
+    /** An empty stretch: a gap, or (see [previewParts]) the filler video, hidden by the compositor settings. */
+    private fun addGap(builder: EditedMediaItemSequence.Builder, durationUs: Long, videoFill: Boolean) {
+        if (!videoFill) { builder.addGap(durationUs); return }
+        var left = durationUs
+        while (left > 0) {
+            val part = minOf(left, FILLER_US)
+            val item = MediaItem.Builder().setUri(FILLER_URI).setClippingConfiguration(
+                MediaItem.ClippingConfiguration.Builder().setEndPositionUs(part).build()
+            ).build()
+            builder.addItem(EditedMediaItem.Builder(item).setDurationUs(FILLER_US).setRemoveAudio(true).build())
+            left -= part
+        }
     }
 
     /** Fade-in and fade-out of a clip's sound; on the main track the sound crossfades under video transitions. */
@@ -297,20 +327,21 @@ object CompositionFactory {
      * Fills a layer to the end of the project. Media3 1.9 fails when a layer that has already ended is prepared at a
      * later position (the compositor rejects its frame), so no video layer ends early.
      */
-    private fun padToEnd(builder: EditedMediaItemSequence.Builder, cursor: Long, durationUs: Long) {
-        if (durationUs - cursor >= 1_000) builder.addGap(durationUs - cursor)
+    private fun padToEnd(builder: EditedMediaItemSequence.Builder, cursor: Long, durationUs: Long, videoFill: Boolean = false) {
+        if (durationUs - cursor >= 1_000) addGap(builder, durationUs - cursor, videoFill)
     }
 
-    private fun blurSequence(context: Context, project: Project, clips: List<Pair<Clip, MediaAsset>>, w: Int, h: Int, fps: Int): EditedMediaItemSequence {
+    private fun blurSequence(context: Context, project: Project, clips: List<Pair<Clip, MediaAsset>>, w: Int, h: Int, fps: Int, mode: PlanMode): EditedMediaItemSequence {
         val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO))
         val sigma = 4f + 26f * project.canvas.background.blur
         val effects = listOf<Effect>(
             Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP),
             GaussianBlur(sigma / 4f),
         )
+        val videoFill = fillsWithVideo(mode, clips)
         var cursor = 0L
         for ((clip, asset) in clips) {
-            if (clip.startUs > cursor) builder.addGap(clip.startUs - cursor)
+            if (clip.startUs > cursor) addGap(builder, clip.startUs - cursor, videoFill)
             val item = when {
                 asset.type == MediaType.IMAGE -> stillItem(Uri.parse(asset.uri), clip.durationUs, fps, Effects(emptyList(), effects))
                 // A speed change not yet rendered (preview only): leave the backdrop empty, since a second video copy of a
@@ -319,10 +350,10 @@ object CompositionFactory {
                 else -> EditedMediaItem.Builder(videoMediaItem(clip, asset)).setDurationUs(asset.durationUs).setRemoveAudio(true)
                     .setEffects(Effects(emptyList(), effects)).build()
             }
-            if (item != null) builder.addItem(item) else builder.addGap(clip.durationUs)
+            if (item != null) builder.addItem(item) else addGap(builder, clip.durationUs, videoFill)
             cursor = clip.endUs
         }
-        padToEnd(builder, cursor, project.durationUs)
+        padToEnd(builder, cursor, project.durationUs, videoFill)
         return builder.build()
     }
 

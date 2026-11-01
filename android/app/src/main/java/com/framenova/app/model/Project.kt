@@ -19,7 +19,15 @@ enum class AspectPreset(val w: Int, val h: Int, val label: String) {
 @Serializable
 enum class ResolutionTier(val longSide: Int, val label: String) {
     HD(1280, "720p"), FHD(1920, "1080p"), QHD(2560, "2K"), UHD(3840, "4K");
+
+    companion object {
+        /** For pickers: highest first. */
+        val highToLow: List<ResolutionTier> get() = entries.reversed()
+    }
 }
+
+/** Frame rates offered for projects and exports, highest first. */
+val FRAME_RATES = listOf(60, 50, 30, 25, 24)
 
 @Serializable
 enum class BackgroundMode { COLOR, BLUR }

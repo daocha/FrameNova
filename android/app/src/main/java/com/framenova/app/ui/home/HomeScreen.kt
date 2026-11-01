@@ -41,6 +41,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -69,10 +72,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import com.framenova.app.BuildConfig
+import com.framenova.app.DevLogPanel
+import com.framenova.app.DevTools
+import com.framenova.app.saveLogToast
 import com.framenova.app.data.ProjectRepository
 import com.framenova.app.data.ProjectSummary
 import com.framenova.app.engine.MediaProbe
 import com.framenova.app.model.AspectPreset
+import com.framenova.app.model.FRAME_RATES
 import com.framenova.app.model.CanvasSettings
 import com.framenova.app.model.MediaAsset
 import com.framenova.app.model.MediaType
@@ -263,9 +270,9 @@ private fun NewProjectDialog(assets: List<MediaAsset>, onDismiss: () -> Unit, on
                 Text("Ratio", color = Palette.TextDim, fontSize = 12.sp)
                 ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = canvas.aspect == a, onClick = { canvas = canvas.copy(aspect = a) }, label = { Text(a.label) }) } }
                 Text("Resolution", color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { ResolutionTier.entries.forEach { r -> FilterChip(selected = canvas.tier == r, onClick = { canvas = canvas.copy(tier = r) }, label = { Text(r.label) }) } }
+                ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = canvas.tier == r, onClick = { canvas = canvas.copy(tier = r) }, label = { Text(r.label) }) } }
                 Text("Frame rate", color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { listOf(24, 25, 30, 50, 60).forEach { f -> FilterChip(selected = canvas.fps == f, onClick = { canvas = canvas.copy(fps = f) }, label = { Text("$f fps") }) } }
+                ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = canvas.fps == f, onClick = { canvas = canvas.copy(fps = f) }, label = { Text("$f fps") }) } }
                 Text("${canvas.size.width} × ${canvas.size.height}", color = Palette.TextDim, fontSize = 12.sp)
             }
         },
@@ -277,12 +284,27 @@ private fun NewProjectDialog(assets: List<MediaAsset>, onDismiss: () -> Unit, on
 @Composable
 private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
     val ui = updates.ui
+    val context = LocalContext.current
+    var devTools by remember { mutableStateOf(DevTools.enabled(context)) }
+    var versionTaps by remember { mutableIntStateOf(0) }
+    var showLog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Like Android's build number: ten taps on the version unlock the developer tools.
+    val versionModifier = Modifier.clickable(interactionSource = null, indication = null) {
+        if (devTools) return@clickable
+        if (++versionTaps >= DevTools.UNLOCK_TAPS) {
+            DevTools.enable(context)
+            devTools = true
+            android.widget.Toast.makeText(context, "Developer tools enabled", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    if (showLog) DevLogPanel { showLog = false }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("FrameNova") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = Palette.TextDim, fontSize = 13.sp)
+                Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", versionModifier, color = Palette.TextDim, fontSize = 13.sp)
                 Spacer(Modifier.height(12.dp))
                 if (updates.enabled) {
                     Text("Updates · " + when (ui.source) { UpdateSource.LAN -> "local network"; UpdateSource.PLAY -> "Google Play"; UpdateSource.GITHUB -> "GitHub releases"; UpdateSource.NONE -> "" }, fontWeight = FontWeight.Medium)
@@ -310,13 +332,26 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
                 } else {
                     Text("This build doesn't update itself. Debug builds update over the local network when built with a LAN update host.", color = Palette.TextDim, fontSize = 13.sp)
                 }
+                if (devTools) {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Developer tools", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        // Turning them off locks them again; ten taps on the version unlock them.
+                        Switch(true, { DevTools.disable(context); devTools = false; versionTaps = 0 })
+                    }
+                    OutlinedButton(onClick = { showLog = true }) { Text("Developer logs") }
+                    OutlinedButton(onClick = { scope.launch { saveLogToast(context) } }) { Text("Save logs") }
+                }
                 Spacer(Modifier.height(16.dp))
                 Text("Licenses", fontWeight = FontWeight.Medium)
                 Text(
                     "FrameNova is source-available under the PolyForm Strict License 1.0.0.\n" +
                         "Uses AndroidX Media3, Jetpack Compose and Kotlin libraries (Apache License 2.0).\n" +
-                        "Fonts: Inter, Montserrat, Oswald, Bebas Neue, Playfair Display, Roboto Mono, Pacifico, Lobster, Dancing Script, Caveat, " +
-                        "Noto Sans/Serif TC, Chiron Hei/Sung HK, LXGW WenKai TC, Iansui and Huninn, all under the SIL Open Font License 1.1.",
+                        "Fonts, all under the SIL Open Font License 1.1: " +
+                        com.framenova.app.engine.FontCatalog.all.filter { it.group != com.framenova.app.engine.FontGroup.SYSTEM }
+                            .joinToString(", ") { it.name } + ".",
                     color = Palette.TextDim, fontSize = 12.sp,
                 )
             }

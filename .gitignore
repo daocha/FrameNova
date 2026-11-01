@@ -14,3 +14,6 @@ local.properties
 .env
 android/dist/
 /dist/
+
+# Logs from the developer tools
+/debug/

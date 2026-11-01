@@ -1,5 +1,6 @@
 package com.framenova.app.ui.editor
 
+import com.framenova.app.LOG_TAG
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
@@ -60,7 +61,14 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     var panel by mutableStateOf(Panel.NONE)
     var transitionTargetId by mutableStateOf<String?>(null)
     var pxPerSecond by mutableFloatStateOf(app.resources.displayMetrics.density * 56f)
-    var message by mutableStateOf<String?>(null)
+    /** A short notice for the user; every one is also written to the log (developer tools). */
+    private var messageState by mutableStateOf<String?>(null)
+    var message: String?
+        get() = messageState
+        set(value) {
+            if (value != null) android.util.Log.w(LOG_TAG, "Shown: $value")
+            messageState = value
+        }
     var busy by mutableStateOf<String?>(null)
     var recording by mutableStateOf(false); private set
     var recordingStartUs by mutableLongStateOf(0L); private set
@@ -77,6 +85,23 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         engine.onEnded = { playing = false }
         engine.update(project, 0)
         scheduleSpeedRenders()
+        logProject()
+        // Filmstrips for every video, from the cache or made in the background, before the timeline needs them.
+        project.assets.forEach { media.prepareFilmstrip(it) }
+    }
+
+    /** Writes the project's canvas and media (with their track formats) to the log, for the developer tools. */
+    private fun logProject() {
+        val p = project
+        viewModelScope.launch(Dispatchers.IO) {
+            val c = p.canvas
+            val lines = p.assets.joinToString("") { a ->
+                "\n  ${a.type} ${a.name}: ${a.width}x${a.height} ${a.durationUs / 1000} ms" +
+                    (if (a.type == MediaType.IMAGE) "" else " · " + MediaProbe.describeTracks(getApplication(), Uri.parse(a.uri)))
+            }
+            android.util.Log.i(LOG_TAG, "Opened project ${c.aspect.label} ${c.tier.label} ${c.fps} fps, " +
+                "${p.tracks.size} tracks, ${p.tracks.sumOf { it.clips.size }} clips:$lines")
+        }
     }
 
     /** Speed-changed clips that still need their normal-speed render. */
@@ -97,6 +122,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                     SpeedRenders.render(getApplication(), clip, asset)
                     engine.update(project, playheadUs)
                 } catch (e: Exception) {
+                    android.util.Log.w(LOG_TAG, "Speed render failed", e)
                     message = e.message ?: "Speed render failed"
                     break
                 }
@@ -149,11 +175,36 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
 
     fun live(p: Project) {
         project = p
-        engine.update(p, playheadUs)
+        // During a layer gesture the editor draws quick frames; the player is rebuilt once the gesture ends.
+        engine.update(p, playheadUs, redraw = !layerGesture)
+    }
+
+    /** The timeline is being dragged: the preview shows quick frames instead of the player. */
+    var scrubbing by mutableStateOf(false); private set
+    /** A layer is being moved, resized or rotated on the preview: the preview shows quick frames instead of the player. */
+    var layerGesture by mutableStateOf(false)
+    /**
+     * After a scrub or a layer gesture, the quick preview stays until the rebuilt player's frame is on screen: the
+     * player's last frame (from before the gesture) would otherwise show the old position or size for a moment.
+     */
+    private var holdQuick by mutableStateOf(false)
+    val quickPreview: Boolean get() = scrubbing || layerGesture || (holdQuick && engine.updating)
+
+    private fun holdQuickPreview() { holdQuick = engine.updating }
+
+    init {
+        // The quick preview held after a gesture goes once the rebuilt frame is on screen.
+        viewModelScope.launch {
+            androidx.compose.runtime.snapshotFlow { engine.waitingForFrame.value }.collect { waiting ->
+                if (!waiting && !engine.updating) holdQuick = false
+            }
+        }
     }
 
     fun endGesture() {
-        val start = gestureStart ?: return
+        val wasLayerGesture = layerGesture
+        layerGesture = false
+        val start = gestureStart ?: run { if (wasLayerGesture) { engine.update(project, playheadUs); holdQuickPreview() }; return }
         gestureStart = null
         if (start != project) {
             undoStack.addLast(start); redoStack.clear()
@@ -162,6 +213,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
             engine.update(project, playheadUs)
             scheduleSave()
         }
+        if (wasLayerGesture) holdQuickPreview()
     }
 
     private fun scheduleSave() {
@@ -195,7 +247,10 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun scrubTo(us: Long, ended: Boolean) {
         if (playing) engine.pause()
         playheadUs = us.coerceIn(0, max(0L, project.durationUs))
+        val wasScrubbing = scrubbing
+        scrubbing = !ended
         engine.seekTo(playheadUs, scrubbing = !ended)
+        if (ended && wasScrubbing) holdQuickPreview()
     }
 
     fun jumpTo(us: Long) = scrubTo(us, true)
@@ -299,6 +354,13 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         val id = selectedId ?: return
         beginGesture()
         live(project.updateClip(id, f))
+    }
+
+    /** Selects text clip [id] and opens its editor (double tap on the preview or timeline). */
+    fun openTextEditor(id: String) {
+        if (project.clip(id)?.isText != true) return
+        selectedId = id
+        panel = Panel.TEXT_EDIT
     }
 
     fun updateText(f: (TextStyle) -> TextStyle) = updateSelected { c -> c.text?.let { c.copy(text = f(it)) } ?: c }
@@ -428,6 +490,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                     SpeedRenders.render(getApplication(), clip, asset)
                 }
             } catch (e: Exception) {
+                android.util.Log.w(LOG_TAG, "Speed render failed", e)
                 busy = null
                 message = e.message ?: "Speed render failed"
                 return@launch
@@ -448,6 +511,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
             recording = true
             if (project.durationUs > 0 && playheadUs < project.durationUs - frameUs) engine.play(playheadUs, project.durationUs)
         } catch (e: Exception) {
+            android.util.Log.w(LOG_TAG, "Recording failed", e)
             message = "Couldn't start recording: ${e.message}"
         }
     }

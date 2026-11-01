@@ -1,5 +1,6 @@
 package com.framenova.app.engine
 
+import com.framenova.app.LOG_TAG
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.media.MediaExtractor
@@ -20,7 +21,34 @@ object MediaProbe {
             mime.startsWith("image/") -> probeImage(context, uri, name)
             else -> probeAv(context, uri, name, mime)
         }
-    } catch (_: Exception) { null }
+    } catch (e: Exception) {
+        android.util.Log.w(LOG_TAG, "Could not read $uri", e)
+        null
+    }
+
+    /** The tracks of a media file as the decoders see them (codec, size, frame rate, profile, colour), for the log. */
+    fun describeTracks(context: Context, uri: Uri): String = try {
+        val ex = MediaExtractor()
+        try {
+            ex.setDataSource(context, uri, null)
+            (0 until ex.trackCount).joinToString("; ") { i ->
+                val f = ex.getTrackFormat(i)
+                fun int(k: String) = if (f.containsKey(k)) f.getInteger(k).toString() else null
+                listOfNotNull(
+                    f.getString(MediaFormat.KEY_MIME),
+                    int(MediaFormat.KEY_WIDTH)?.let { "${it}x${int(MediaFormat.KEY_HEIGHT)}" },
+                    int(MediaFormat.KEY_FRAME_RATE)?.let { "${it}fps" },
+                    int(MediaFormat.KEY_PROFILE)?.let { "profile $it" },
+                    int(MediaFormat.KEY_LEVEL)?.let { "level $it" },
+                    int(MediaFormat.KEY_COLOR_TRANSFER)?.let { "transfer $it" },
+                    int(MediaFormat.KEY_COLOR_STANDARD)?.let { "standard $it" },
+                    int("rotation-degrees")?.let { "rotation $it" },
+                    int(MediaFormat.KEY_SAMPLE_RATE)?.let { "${it}Hz" },
+                    int(MediaFormat.KEY_CHANNEL_COUNT)?.let { "${it}ch" },
+                ).joinToString(" ")
+            }
+        } finally { ex.release() }
+    } catch (e: Exception) { "unreadable ($e)" }
 
     fun displayName(context: Context, uri: Uri): String {
         if (uri.scheme == "file") return uri.lastPathSegment ?: "media"

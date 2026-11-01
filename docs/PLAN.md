@@ -45,8 +45,7 @@ Each layer is a Media3 sequence; the compositor draws input 0 on top and takes i
 | next | Blurred copies of the main track (blur background), then a background colour |
 | last | Audio tracks |
 
-Every video layer is padded to the end of the project. In the preview, a project whose only video layer is the main
-track drops the clock: the main track leads the compositor and text is drawn after compositing (see below).
+Every video layer is padded to the end of the project.
 
 Positions, scale, rotation, opacity, keyframes and transitions are computed per frame from the current project
 (`PlanCompositorSettings`), so dragging a layer or editing text updates the preview without rebuilding the pipeline.
@@ -60,18 +59,34 @@ inserting or extending pushes later clips only where they would overlap (`Timeli
 
 ### Preview player (Media3 1.9)
 
-- A used `CompositionPlayer` keeps its video graph across `setComposition`, and a new composition on it can fail to
-  start (or crash when the number of layers changes). Every rebuild gets a new player (`PreviewEngine`).
-- The compositor needs two frames from each secondary input before it composites, so a secondary layer stalls briefly
-  where it moves to its next clip. The leading (primary) input does not, hence the main-track-leads mode. The stall
-  watchdog prepares the composition again if the picture stops.
-- A layer that has ended and is then prepared at a later position makes the compositor throw, hence the padding.
-- The multi-input video graph does not clear the compositor on a seek: old frames stay queued, so the player waits
-  forever (or throws once a layer has ended). Every seek therefore prepares a new player at the target, at most every
-  250 ms while dragging and once at the final position; play prepares one when the player is not at the playhead.
+Media3 1.9's preview player needed several workarounds, all in `PreviewEngine` and `CompositionFactory` (exports use
+`Transformer` and are not affected unless noted):
+
+- **Lower layers changing clips froze the picture.** The compositor waited for a second frame from every lower layer,
+  while that layer could only move to its next clip once its last frame was consumed. `PreviewVideoCompositor` (a
+  modified copy in `androidx.media3.effect`, used through `PreviewMultipleInputVideoGraph`) uses a single waiting frame.
+- **A lower layer going from a still or an empty stretch to a video stayed blank for seconds:** the still renderer only
+  counts as finished when the whole preview ends. In the preview, video clips and stills of a layer go on separate
+  sequences, and empty stretches between video clips are filled with a tiny black video (`assets/preview_filler.mp4`).
+- **Released players leaked** (CompositionTrackSelector never releases its DefaultTrackSelector, whose spatializer
+  listener keeps the player reachable). `PreviewEngine.releasePlayer` removes that listener after releasing the player
+  (releasing the selector before made the player, still preparing, fail on it).
+- **Seeking and redrawing are unreliable** on the multi-input graph (old frames stay queued; `experimentalRedrawLastFrame`
+  throws on the playback thread). A seek or paused edit prepares a new player at the position (edits at most every
+  250 ms). While the timeline is dragged or a layer is moved on the preview, nothing is rebuilt: `PreviewPane` draws a
+  quick composite from decoded stills (`MediaCache.scrubFrame`, only the latest request per clip is decoded), and the
+  player is prepared once when the finger lifts.
+- **A layer that ended and is prepared later makes the compositor throw**, so every video layer is padded to the end.
+- A watchdog and an automatic re-prepare on player errors remain as a safety net.
 - Export: a layer declared with audio and video whose first clip has no sound makes the exporter add a silent track,
-  which races with the other layers' setup (`SequenceAssetLoader` null consumer). Exports carry clip sound on separate
-  audio-only layers instead.
+  which races with other layers (`SequenceAssetLoader`); exports carry clip sound on separate audio-only layers.
+
+### Filmstrips
+
+`MediaCache.prepareFilmstrip` gives every video clip frames over its whole length (one per second, 10 to 120), taken
+at keyframes and saved as JPEGs under `cache/filmstrip/`, so a reopened project shows them at once. Missing frames are
+made in the background, coarse to fine (ten spread over the clip first). The timeline and the quick preview use the
+nearest frame.
 
 ### Speed changes
 
@@ -98,7 +113,7 @@ Tests:
 - Device tests for layer placement (pixel check), a full-feature export, preview playback and storage.
 
 Next:
-1. Check preview behaviour on the S26 for projects with overlays (brief pauses where a layer changes clips).
+1. Check preview smoothness on the S26 with several 4K layers.
 2. Verify 4K60 HEVC preview and export performance on the device; tune the preview resolution if needed.
 3. Clip animations (in/out) for video layers, masks and rounded corners for picture-in-picture.
 4. Traditional Chinese UI translation.
