@@ -162,6 +162,32 @@ class EngineDeviceTest {
         assertTrue(result.fileSizeBytes > 0)
     }
 
+    @Test fun previewMuteSurvivesPlayerRebuildsAndRestoresAudio() {
+        val asset = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!
+        val project = Project("mute", "Mute preview", 0, 0).addToMainAt(listOf(asset), 0)
+        val surface = drainingSurface(960, 540)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val engine = PreviewEngine(context)
+            try {
+                engine.attach(surface, Size(960, 540))
+                assertEquals(1f, engine.player.volume, 0f)
+                engine.update(project, 0)
+                engine.audioMuted = true
+                assertEquals(0f, engine.player.volume, 0f)
+                val previousPlayer = engine.player
+                engine.update(project, 500_000, force = true)
+                assertTrue("preview player should have been replaced", previousPlayer !== engine.player)
+                assertEquals(0f, engine.player.volume, 0f)
+                engine.audioMuted = false
+                assertEquals(1f, engine.player.volume, 0f)
+                engine.update(project, 0, force = true)
+                assertEquals(1f, engine.player.volume, 0f)
+            } finally {
+                engine.release()
+            }
+        }
+    }
+
     /** The preview player plays a multi-layer composition without errors and advances. */
     @Test fun previewPlays() {
         val land = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!

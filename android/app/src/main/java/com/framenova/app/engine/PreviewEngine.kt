@@ -17,6 +17,13 @@ import kotlin.math.abs
  */
 @UnstableApi
 class PreviewEngine(private val context: Context) {
+    /** Silences preview output without changing clip or track audio settings. */
+    var audioMuted: Boolean = false
+        set(value) {
+            field = value
+            player.volume = if (value) 0f else 1f
+        }
+
     /**
      * The current player. Media3 1.9 keeps a player's video graph across setComposition calls; a new composition on a
      * used player can fail to start (or crash when the number of layers changes), so every rebuild gets a new player.
@@ -45,6 +52,7 @@ class PreviewEngine(private val context: Context) {
             // Layers are composited, so the preview needs the multi-input video graph (the default handles one input only).
             .setVideoGraphFactory(androidx.media3.effect.PreviewMultipleInputVideoGraph.Factory())
             .build()
+        p.volume = if (audioMuted) 0f else 1f
         p.setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
             lastRenderedUs = presentationTimeUs
             renderedSinceBuild = true

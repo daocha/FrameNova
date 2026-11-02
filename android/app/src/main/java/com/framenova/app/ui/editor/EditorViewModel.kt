@@ -506,11 +506,15 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun startRecording() {
         if (recording) return
         try {
+            engine.audioMuted = true
             recorder.start(repo.voiceFile(projectId))
             recordingStartUs = playheadUs
             recording = true
             if (project.durationUs > 0 && playheadUs < project.durationUs - frameUs) engine.play(playheadUs, project.durationUs)
         } catch (e: Exception) {
+            recording = false
+            engine.pause()
+            try { recorder.stop() } finally { engine.audioMuted = false }
             android.util.Log.w(LOG_TAG, "Recording failed", e)
             message = "Couldn't start recording: ${e.message}"
         }
@@ -520,7 +524,8 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         if (!recording) return
         recording = false
         engine.pause()
-        val file = recorder.stop() ?: run { message = "Recording failed"; return }
+        val file = try { recorder.stop() } finally { engine.audioMuted = false }
+            ?: run { message = "Recording failed"; return }
         viewModelScope.launch {
             val asset = withContext(Dispatchers.IO) { MediaProbe.probe(getApplication(), Uri.fromFile(file), "audio/mp4") }
             if (asset == null) { message = "Recording was too short"; return@launch }
