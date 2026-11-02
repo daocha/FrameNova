@@ -295,9 +295,13 @@ class EngineDeviceTest {
         android.util.Log.i("EditsTest", results.joinToString("; ") + "; rendered ${rendered / 1000} ms")
     }
 
-    /** Plays [project] for [ms] and returns the latest presentation time the preview actually rendered. */
-    private fun renderedUntil(project: Project, ms: Long): Long {
-        var maxRendered = 0L
+    /**
+     * Plays [project] until the preview has rendered past [targetUs] or [timeoutMs] passes, and returns the latest
+     * presentation time it rendered. Waiting for a target instead of sleeping a fixed time keeps slow software-rendered
+     * emulators from failing; a frozen preview still never reaches the target.
+     */
+    private fun renderedUntil(project: Project, targetUs: Long, timeoutMs: Long = 40_000): Long {
+        val maxRendered = java.util.concurrent.atomic.AtomicLong(0L)
         var engine: PreviewEngine? = null
         var surface: Surface? = null
         val started = CountDownLatch(1)
@@ -306,17 +310,18 @@ class EngineDeviceTest {
             engine = e
             surface = drainingSurface(960, 540)
             e.attach(surface!!, Size(960, 540))
-            e.frameListener = { presentationTimeUs -> if (presentationTimeUs > maxRendered) maxRendered = presentationTimeUs }
+            e.frameListener = { presentationTimeUs -> maxRendered.accumulateAndGet(presentationTimeUs) { a, b -> maxOf(a, b) } }
             e.update(project, 0)
             e.player.play()
             started.countDown()
         }
         started.await(5, TimeUnit.SECONDS)
-        Thread.sleep(ms)
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (maxRendered.get() <= targetUs && System.currentTimeMillis() < deadline) Thread.sleep(100)
         val done = CountDownLatch(1)
         main.post { engine?.release(); surface?.release(); done.countDown() }
         done.await(5, TimeUnit.SECONDS)
-        return maxRendered
+        return maxRendered.get()
     }
 
     /** Dragging the playhead (many quick seeks), jumping to the end and back, then playing, all work. */
@@ -401,7 +406,7 @@ class EngineDeviceTest {
         val canvas = CanvasSettings(AspectPreset.R16_9, ResolutionTier.HD, 30)
         var p = Project("t7", "cuts", 0, 0, canvas = canvas).addToMainAt(listOf(land, land), 0).addTextAt(TextStyle(text = "Cut"), 0)
         p = p.trimStart(p.mainTrack.clips[1].id, 500_000) // a gap from 3.0 to 3.5 s
-        val rendered = renderedUntil(p, 5000)
+        val rendered = renderedUntil(p, 4_200_000)
         assertTrue("rendered only to ${rendered / 1000} ms", rendered > 4_200_000)
     }
 
@@ -423,7 +428,7 @@ class EngineDeviceTest {
         val transition = two.setTransition(two.mainTrack.clips[1].id, Transition(TransitionType.FADE, 500_000)).addOverlayAt(port, 1_000_000)
         val results = mutableListOf<String>()
         for ((name, proj) in listOf("overlayMidway" to overlayMidway, "splitToLayer" to splitToLayer, "transition" to transition)) {
-            results += "$name rendered=${renderedUntil(proj, 4500) / 1000}ms"
+            results += "$name rendered=${renderedUntil(proj, 3_500_000) / 1000}ms"
         }
         android.util.Log.i("LayerTest", results.joinToString("; "))
         assertTrue(results.joinToString("; "), results.all { it.substringAfter("rendered=").removeSuffix("ms").toLong() > 3500 })
