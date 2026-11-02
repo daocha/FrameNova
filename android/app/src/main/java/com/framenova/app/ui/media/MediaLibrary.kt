@@ -42,12 +42,12 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -87,6 +87,10 @@ import kotlinx.coroutines.withContext
 
 /** What the library shows: videos and photos, or audio files. */
 enum class LibraryKind { VISUAL, AUDIO }
+
+private enum class VisualFilter(val label: String) {
+    LIBRARY("Library"), VIDEOS("Videos"), PHOTOS("Photos")
+}
 
 /** [date] is when a photo or video was taken, or when the file was added if that is unknown, in milliseconds. */
 internal data class LibraryItem(
@@ -185,7 +189,7 @@ private fun durationLabel(ms: Long): String {
 /**
  * Full-screen picker over the device's media library, with Recent and Albums (Folders for audio), sorting, and
  * multi-select by tapping or by holding an item and dragging across others. Videos and photos are returned in the
- * order they were selected. [onBrowseFiles] offers the system file picker for files outside the media library.
+ * order they were selected.
  */
 @Composable
 fun MediaLibrary(
@@ -194,11 +198,11 @@ fun MediaLibrary(
     multiple: Boolean,
     limit: Int = 50,
     onDismiss: () -> Unit,
-    onBrowseFiles: (() -> Unit)? = null,
     onChoose: (List<Uri>) -> Unit,
 ) {
     val context = LocalContext.current
     val audioOnly = kind == LibraryKind.AUDIO
+    var visualFilter by rememberSaveable(kind) { mutableStateOf(VisualFilter.LIBRARY) }
     var chosen by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     val permissions = remember(kind) { mediaPermissions(kind) }
     var access by remember(kind) { mutableStateOf(libraryAccess(context, permissions)) }
@@ -233,20 +237,29 @@ fun MediaLibrary(
     }
     var menuExpanded by remember { mutableStateOf(false) }
     var sortExpanded by remember { mutableStateOf(false) }
-    val albums = remember(items, sort) {
-        val grouped = items.orEmpty().groupBy { it.albumId }.map { (id, members) ->
+    val filteredItems = remember(items, visualFilter, audioOnly) {
+        items.orEmpty().filter {
+            audioOnly || when (visualFilter) {
+                VisualFilter.LIBRARY -> true
+                VisualFilter.VIDEOS -> it.video
+                VisualFilter.PHOTOS -> !it.video && !it.audio
+            }
+        }
+    }
+    val albums = remember(filteredItems, sort) {
+        val grouped = filteredItems.groupBy { it.albumId }.map { (id, members) ->
             LibraryAlbum(id, members.first().albumName, members.first(), members.size, members.maxOf { it.date }, members.minOf { it.date })
         }
         librarySorted(grouped, sort, { it.name }, { if (sort == LibrarySort.OLDEST) it.oldest else it.newest })
     }
-    val shown = remember(items, sort, section, selectedAlbum) {
-        librarySorted(items.orEmpty().filter { section == "recent" || it.albumId == selectedAlbum }, sort, { it.name }, { it.date })
+    val shown = remember(filteredItems, sort, section, selectedAlbum) {
+        librarySorted(filteredItems.filter { section == "recent" || it.albumId == selectedAlbum }, sort, { it.name }, { it.date })
     }
-    val grid = key(section, selectedAlbum, sort) { rememberLazyGridState() }
+    val grid = key(section, selectedAlbum, sort, visualFilter) { rememberLazyGridState() }
     val gridKeys = remember(shown) { shown.map { it.uri.toString() } }
     // A remembered album that is gone falls back to Recent.
-    LaunchedEffect(albums) {
-        if (items != null && selectedAlbum != null && albums.none { it.id == selectedAlbum }) {
+    LaunchedEffect(items, selectedAlbum) {
+        if (items != null && selectedAlbum != null && items.orEmpty().none { it.albumId == selectedAlbum }) {
             section = "recent"
             selectedAlbum = null
         }
@@ -259,12 +272,17 @@ fun MediaLibrary(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = Palette.Bg, contentColor = Palette.Text) {
             Column(Modifier.systemBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    if (onBrowseFiles != null) TextButton(onClick = onBrowseFiles) {
-                        Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text("Files")
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (audioOnly) {
+                        Text(title, Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    } else Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        VisualFilter.entries.forEach { filter ->
+                            FilterChip(
+                                selected = visualFilter == filter,
+                                onClick = { visualFilter = filter },
+                                label = { Text(filter.label) },
+                            )
+                        }
                     }
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
                 }
@@ -272,10 +290,18 @@ fun MediaLibrary(
                     Text("Manage access")
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (section == "albums" && selectedAlbum != null) {
+                        IconButton(onClick = { selectedAlbum = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "All ${albumsLabel.lowercase()}") }
+                    }
                     Box(Modifier.weight(1f)) {
                         TextButton(onClick = { menuExpanded = true }) {
-                            Text(if (section == "recent") "Recent" else albumsLabel)
-                            Icon(Icons.Default.ArrowDropDown, null)
+                            Text(
+                                if (section == "recent") "Recent"
+                                else if (selectedAlbum == null) albumsLabel
+                                else items.orEmpty().firstOrNull { it.albumId == selectedAlbum }?.albumName.orEmpty(),
+                                modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            Icon(Icons.Default.ArrowDropDown, "Choose ${albumsLabel.lowercase()}")
                         }
                         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                             DropdownMenuItem(text = { Text("Recent") }, onClick = { section = "recent"; selectedAlbum = null; menuExpanded = false })
@@ -295,10 +321,6 @@ fun MediaLibrary(
                         }
                     }
                 }
-                if (section == "albums" && selectedAlbum != null) Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { selectedAlbum = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "All ${albumsLabel.lowercase()}") }
-                    Text(albums.firstOrNull { it.id == selectedAlbum }?.name.orEmpty(), fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                }
                 Box(Modifier.weight(1f)) {
                     when {
                         !access.allowed -> Column(
@@ -309,8 +331,15 @@ fun MediaLibrary(
                             Button(onClick = { permission.launch(permissions) }) { Text("Allow access") }
                         }
                         items == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                        items!!.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(if (audioOnly) "No audio files found" else "No videos or photos found", color = Palette.TextDim)
+                        filteredItems.isEmpty() || (section == "albums" && selectedAlbum != null && shown.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (audioOnly) "No audio files found" else when (visualFilter) {
+                                    VisualFilter.LIBRARY -> "No videos or photos found"
+                                    VisualFilter.VIDEOS -> "No videos found"
+                                    VisualFilter.PHOTOS -> "No photos found"
+                                },
+                                color = Palette.TextDim,
+                            )
                         }
                         audioOnly -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
                             if (section == "albums" && selectedAlbum == null) {
