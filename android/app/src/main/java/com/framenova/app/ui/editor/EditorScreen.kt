@@ -105,24 +105,15 @@ private data class Tool(val label: String, val icon: ImageVector, val enabled: B
 @Composable
 fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     val context = LocalContext.current
-    var importTarget by remember { mutableStateOf(ImportTarget.MAIN) }
     var renaming by remember { mutableStateOf(false) }
     var micGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
-    // The in-app library is the main picker; the system pickers cover files outside the media library.
     var library by remember { mutableStateOf<LibraryRequest?>(null) }
-    val pickVisualFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) { library = null; vm.import(if (importTarget == ImportTarget.REPLACE) uris.take(1) else uris, importTarget) }
-    }
-    val pickAudioFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) { library = null; vm.import(uris, ImportTarget.AUDIO) }
-    }
     val pickSubs = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importSubtitles(uri) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { micGranted = it }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val exportState by ExportManager.state.collectAsState()
 
     fun pickMedia(target: ImportTarget) {
-        importTarget = target
         library = LibraryRequest(target)
     }
 
@@ -341,9 +332,6 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
             },
             multiple = req.target != ImportTarget.REPLACE,
             onDismiss = { library = null },
-            onBrowseFiles = {
-                if (audio) pickAudioFiles.launch(arrayOf("audio/*", "video/*")) else pickVisualFiles.launch(arrayOf("video/*", "image/*"))
-            },
         ) { uris -> library = null; vm.import(uris, req.target) }
     }
     if (renaming) RenameDialog(vm.project.name, onDismiss = { renaming = false }) { vm.rename(it); renaming = false }
@@ -357,10 +345,17 @@ private fun TopBar(vm: EditorViewModel, onClose: () -> Unit, onRename: () -> Uni
         Column(Modifier.weight(1f)) {
             Text(vm.project.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(onClick = onRename))
             val c = vm.project.canvas
-            // Tapping the format opens the ratio, resolution and frame rate settings.
-            Row(Modifier.clip(RoundedCornerShape(6.dp)).clickable { vm.selectedId = null; vm.panel = Panel.CANVAS }, verticalAlignment = Alignment.CenterVertically) {
+            // Tapping the format toggles the ratio, resolution and frame rate settings.
+            Row(Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                vm.selectedId = null
+                vm.panel = if (vm.panel == Panel.CANVAS) Panel.NONE else Panel.CANVAS
+            }, verticalAlignment = Alignment.CenterVertically) {
                 Text("${c.aspect.label} · ${c.tier.label} · ${c.fps} fps", color = Palette.Accent, fontSize = 11.sp)
-                Icon(Icons.Default.ArrowDropDown, "Change format", tint = Palette.Accent, modifier = Modifier.size(16.dp))
+                Icon(
+                    if (vm.panel == Panel.CANVAS) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    if (vm.panel == Panel.CANVAS) "Hide project format" else "Show project format",
+                    tint = Palette.Accent, modifier = Modifier.size(16.dp),
+                )
             }
         }
         IconButton(onClick = vm::undo, enabled = vm.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }

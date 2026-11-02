@@ -3,8 +3,6 @@ package com.framenova.app.ui.home
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -133,10 +133,9 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
             pending = assets.takeIf { it.isNotEmpty() }
         }
     }
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> if (uris.isNotEmpty()) startProject(uris) }
     if (library) MediaLibrary(
         kind = LibraryKind.VISUAL, title = "New project", multiple = true,
-        onDismiss = { library = false }, onBrowseFiles = { files.launch(arrayOf("video/*", "image/*")) },
+        onDismiss = { library = false },
     ) { uris -> startProject(uris) }
 
     Column(Modifier.fillMaxSize()) {
@@ -288,6 +287,7 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
     var devTools by remember { mutableStateOf(DevTools.enabled(context)) }
     var versionTaps by remember { mutableIntStateOf(0) }
     var showLog by remember { mutableStateOf(false) }
+    var licensesExpanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Like Android's build number: ten taps on the version unlock the developer tools.
     val versionModifier = Modifier.clickable(interactionSource = null, indication = null) {
@@ -345,15 +345,29 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
                     OutlinedButton(onClick = { scope.launch { saveLogToast(context) } }) { Text("Save logs") }
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("Licenses", fontWeight = FontWeight.Medium)
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { licensesExpanded = !licensesExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Licenses", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    Icon(
+                        if (licensesExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                        if (licensesExpanded) "Hide license details" else "Show license details",
+                    )
+                }
                 Text(
-                    "FrameNova is source-available under the PolyForm Strict License 1.0.0.\n" +
-                        "Uses AndroidX Media3, Jetpack Compose and Kotlin libraries (Apache License 2.0).\n" +
-                        "Fonts, all under the SIL Open Font License 1.1: " +
-                        com.framenova.app.engine.FontCatalog.all.filter { it.group != com.framenova.app.engine.FontGroup.SYSTEM }
-                            .joinToString(", ") { it.name } + ".",
+                    "FrameNova is source-available under the PolyForm Strict License 1.0.0.",
                     color = Palette.TextDim, fontSize = 12.sp,
                 )
+                if (licensesExpanded) {
+                    Text(
+                        "Uses AndroidX Media3, Jetpack Compose and Kotlin libraries (Apache License 2.0).\n" +
+                            "Fonts, all under the SIL Open Font License 1.1: " +
+                            com.framenova.app.engine.FontCatalog.all.filter { it.group != com.framenova.app.engine.FontGroup.SYSTEM }
+                                .joinToString(", ") { it.name } + ".",
+                        color = Palette.TextDim, fontSize = 12.sp,
+                    )
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
