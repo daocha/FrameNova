@@ -56,7 +56,6 @@ jobs:
 
   device-tests:
     name: Emulator tests (API 35)
-    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -90,7 +89,7 @@ jobs:
           heap-size: 512M
           disable-animations: true
           # Host-backed video decoding fails on runners without a GPU; use guest software codecs.
-          emulator-options: -no-window -gpu swiftshader -feature -HardwareDecoder -noaudio -no-boot-anim -no-snapshot -no-metrics -camera-back none
+          emulator-options: -no-window -gpu swangle -feature -HardwareDecoder -noaudio -no-boot-anim -no-snapshot -no-metrics -camera-back none
           working-directory: android
           script: ./gradlew --no-daemon --console=plain -Dorg.gradle.jvmargs="-Xmx2g -Dfile.encoding=UTF-8" :app:connectedDebugAndroidTest
       - name: Upload device test reports
