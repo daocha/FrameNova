@@ -89,7 +89,8 @@ jobs:
           ram-size: 3072M
           heap-size: 512M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Host-backed video decoding fails on runners without a GPU; use guest software codecs.
+          emulator-options: -no-window -gpu swiftshader -feature -HardwareDecoder -noaudio -no-boot-anim -no-snapshot -no-metrics -camera-back none
           working-directory: android
           script: ./gradlew --no-daemon --console=plain -Dorg.gradle.jvmargs="-Xmx2g -Dfile.encoding=UTF-8" :app:connectedDebugAndroidTest
       - name: Upload device test reports
