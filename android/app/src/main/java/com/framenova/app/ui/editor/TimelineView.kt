@@ -3,6 +3,8 @@ package com.framenova.app.ui.editor
 import androidx.compose.foundation.Canvas
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.splineBasedDecay
@@ -244,7 +246,9 @@ fun TimelineView(
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        val interruptedFling = fling?.isActive == true
                         fling?.cancel()
+                        val scrub = TimelineScrubPosition(latest.playhead)
                         val velocity = VelocityTracker()
                         velocity.addPosition(down.uptimeMillis, down.position)
                         val hit = hitTest(down.position)
@@ -286,7 +290,7 @@ fun TimelineView(
                                 1 -> {
                                     val dx = pos.x - last.x
                                     val dy = pos.y - last.y
-                                    if (dx != 0f) onScrub(latest.playhead - (dx / latest.pps * 1_000_000f).toLong(), false)
+                                    if (dx != 0f) onScrub(scrub.moveBy(dx, latest.pps, latest.project.durationUs), false)
                                     val maxV = max(0f, contentHeight(latest.project) - heightPx)
                                     vOffset = (vOffset - dy).coerceIn(0f, maxV)
                                 }
@@ -316,20 +320,22 @@ fun TimelineView(
                             }
                             1 -> {
                                 val vx = velocity.calculateVelocity().x
-                                if (abs(vx) < 400f) onScrub(latest.playhead, true)
+                                if (abs(vx) < 400f) onScrub(scrub.positionUs, true)
                                 else fling = flingScope.launch {
                                     // Moving content left moves the playhead later.
-                                    val from = latest.playhead
                                     try {
-                                        var last = 0f
+                                        var lastValue = 0f
                                         AnimationState(initialValue = 0f, initialVelocity = vx).animateDecay(decay) {
-                                            val us = from - (value / latest.pps * 1_000_000f).toLong()
+                                            val us = scrub.moveBy(value - lastValue, latest.pps, latest.project.durationUs)
+                                            lastValue = value
                                             onScrub(us, false)
                                             // Stop at either end of the project.
-                                            if (latest.playhead == last.toLong() || us <= 0 || us >= latest.project.durationUs) cancelAnimation()
-                                            last = latest.playhead.toFloat()
+                                            if (us <= 0 || us >= latest.project.durationUs) cancelAnimation()
                                         }
-                                    } finally { onScrub(latest.playhead, true) }
+                                    } finally {
+                                        // A new touch owns scrubbing once this animation is cancelled.
+                                        if (currentCoroutineContext().isActive) onScrub(scrub.positionUs, true)
+                                    }
                                 }
                             }
                             2 -> drag?.let { d ->
@@ -345,7 +351,9 @@ fun TimelineView(
                                 snapX = null
                             }
                         }
-                        if (mode != 1 && mode != 4 && startPlayhead != latest.playhead) onScrub(latest.playhead, true)
+                        if (mode != 1 && (interruptedFling || (mode != 4 && startPlayhead != latest.playhead))) {
+                            onScrub(latest.playhead, true)
+                        }
                     }
                 }
         ) {
