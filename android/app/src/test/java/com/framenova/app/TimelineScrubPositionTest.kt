@@ -42,4 +42,19 @@ class TimelineScrubPositionTest {
         assertEquals(0L, scrub.moveBy(-100f, pps, 0L))
         assertEquals(0L, scrub.moveBy(100f, pps, 0L))
     }
+
+    @Test fun reversalRespectsTheCurrentZoom() {
+        val scrub = TimelineScrubPosition(10_000_000L)
+        assertEquals(12_000_000L, scrub.moveBy(-100f, 50f, durationUs))
+        assertEquals(11_500_000L, scrub.moveBy(100f, 200f, durationUs))
+        assertEquals(10_000_000L, scrub.moveBy(300f, 200f, durationUs))
+    }
+
+    @Test fun repeatedOverscrollDoesNotDelayReversal() {
+        val scrub = TimelineScrubPosition(10_000_000L)
+        repeat(10) { assertEquals(0L, scrub.moveBy(2000f, pps, durationUs)) }
+        assertEquals(100_000L, scrub.moveBy(-10f, pps, durationUs))
+        repeat(10) { assertEquals(durationUs, scrub.moveBy(-3000f, pps, durationUs)) }
+        assertEquals(durationUs - 100_000L, scrub.moveBy(10f, pps, durationUs))
+    }
 }
