@@ -48,6 +48,9 @@ struct DesktopMediaBrowser: View {
                     }
                 }.padding(10)
             }
+            .onChange(of:model.project.assets.map(\.id)) {old,new in
+                if let added = new.first(where:{!old.contains($0)}) {query = "";filter = "All";selectedID = added}
+            }
             Divider()
             if let asset = selection {
                 VStack(alignment: .leading, spacing: 8) {

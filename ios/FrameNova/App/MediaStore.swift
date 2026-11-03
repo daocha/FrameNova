@@ -58,7 +58,13 @@ final class ProjectStore: ObservableObject {
     static func ingest(_ url: URL) async throws -> MediaAsset {
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let ext = url.pathExtension.lowercased(), path = newID()+"."+ext, destination = mediaURL(path)
-        try FileManager.default.copyItem(at: url, to: destination)
+        try FileManager.default.createDirectory(at:destination.deletingLastPathComponent(),withIntermediateDirectories:true)
+        let coordinator = NSFileCoordinator()
+        var coordinationError:NSError?,copyError:Error?
+        coordinator.coordinate(readingItemAt:url,options:[],error:&coordinationError) {readable in
+            do {try FileManager.default.copyItem(at:readable,to:destination)} catch {copyError = error}
+        }
+        if let error = copyError ?? coordinationError {try? FileManager.default.removeItem(at:destination);throw error}
         do {
             if let image = UIImage(contentsOfFile: destination.path) {
                 return MediaAsset(path: path,type: .image,name: url.lastPathComponent,durationUs: 3_000_000,width: Int(image.size.width*image.scale),height: Int(image.size.height*image.scale))

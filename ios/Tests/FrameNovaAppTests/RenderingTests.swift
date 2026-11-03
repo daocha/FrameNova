@@ -130,6 +130,28 @@ private actor DecodeCalls {
 
 @Suite(.serialized) @MainActor struct PersistentThumbnailTests {
     private func image()->UIImage {UIGraphicsImageRenderer(size:CGSize(width:32,height:18)).image {context in UIColor.red.setFill();context.fill(CGRect(x:0,y:0,width:32,height:18))}}
+    @Test func fileImportKeepsSuccessfulFilesWhenAnotherFileFails() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),store = ProjectStore(directory:folder)
+        let source = folder.appendingPathComponent("Selected image.png")
+        try #require(image().pngData()).write(to:source)
+        let model = EditorModel(project:Project(name:"File import"),store:store)
+        defer {
+            model.close()
+            for asset in model.project.assets {try? FileManager.default.removeItem(at:ProjectStore.mediaURL(asset.path))}
+            try? FileManager.default.removeItem(at:folder)
+        }
+        model.ingest([source,folder.appendingPathComponent("missing.wav")],kind:.main,libraryOnly:true)
+        let deadline = Date().addingTimeInterval(10)
+        while model.busy && Date()<deadline {try await Task.sleep(nanoseconds:20_000_000)}
+        #expect(!model.busy)
+        let asset = try #require(model.project.assets.first)
+        #expect(asset.type == .image);#expect(model.project.assets.count == 1)
+        #expect(model.project.durationUs == 0)
+        #expect(model.error?.contains("missing.wav") == true)
+        #expect(FileManager.default.fileExists(atPath:ProjectStore.mediaURL(asset.path).path))
+        #expect(FileManager.default.fileExists(atPath:source.path))
+        #expect(ProjectStore(directory:folder).projects.first?.assets.count == 1)
+    }
     @Test func concurrentRequestsDecodeOnceAndReopeningReadsDisk() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),calls = DecodeCalls(),frame = image()
         defer {try? FileManager.default.removeItem(at:folder)}

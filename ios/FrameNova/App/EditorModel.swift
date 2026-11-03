@@ -134,9 +134,10 @@ import SwiftUI
         change { $0.place(c,kind:.text) }; selected = c.id
     }
     func ingest(_ urls:[URL],kind:TrackKind,replace:Bool = false,subtitles:Bool = false,libraryOnly:Bool = false) {
+        let scoped = urls.filter {$0.startAccessingSecurityScopedResource()}
         busy = true
         Task {
-            defer { busy = false }
+            defer {busy = false;scoped.forEach {$0.stopAccessingSecurityScopedResource()}}
             do {
                 if subtitles {
                     for url in urls {
@@ -146,8 +147,13 @@ import SwiftUI
                     }
                 } else {
                     var assets: [MediaAsset] = []
-                    for url in urls { assets.append(try await ProjectStore.ingest(url)) }
+                    var failures:[String] = []
+                    for url in urls {
+                        do {assets.append(try await ProjectStore.ingest(url))}
+                        catch {failures.append("\(url.lastPathComponent): \(error.localizedDescription)")}
+                    }
                     imported(assets,kind:kind,replace:replace,libraryOnly:libraryOnly)
+                    if !failures.isEmpty {error = failures.joined(separator:"\n")}
                 }
             } catch { self.error = error.localizedDescription }
         }
