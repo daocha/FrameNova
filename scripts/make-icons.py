@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Builds FrameNova's icons from art/FrameNova-appicon.png (a rounded tile with a glowing rim on black).
+"""Builds FrameNova's icons from art/FrameNova-appicon.png (a rounded tile with a glowing rim).
 
 Writes:
   art/FrameNova-icon-square-1024.png   flat square master (no rounded corners, no rim)
+  ios/FrameNova/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png   opaque iOS icon (1024 x 1024)
   art/FrameNova-play-icon-512.png      Google Play store icon (512 x 512, opaque; Play rounds the corners itself)
   android/app/src/main/res/mipmap-*/ic_launcher_background.png   adaptive icon layer (108 dp, full bleed)
   android/app/src/main/res/mipmap-*/ic_launcher_monochrome.png   themed icon layer (white logo, Android 13+)
 
-The tile's rim and the black corners are replaced by a smooth gradient fitted to the tile's own background, faded in
+The tile's rim and its transparent or black exterior are replaced by a gradient fitted to the tile's background, faded in
 under the artwork, so the square is flat to its edges. Needs Pillow and numpy:  python3 scripts/make-icons.py
 """
 import os
@@ -39,7 +40,10 @@ def rounded_mask(size, inset, radius, feather):
 
 
 def main():
-    src = np.asarray(Image.open(SRC).convert("RGB")).astype(np.float32)
+    # Composite alpha before finding the tile so invisible RGB cannot affect its bounds or gradient.
+    source = Image.open(SRC).convert("RGBA")
+    opaque = Image.alpha_composite(Image.new("RGBA", source.size, (0, 0, 0, 255)), source)
+    src = np.asarray(opaque.convert("RGB")).astype(np.float32)
     x0, y0, x1, y1 = tile_bounds(src.sum(axis=2))
     side = min(x1 - x0, y1 - y0)
     tile = src[y0:y0 + side, x0:x0 + side]
@@ -59,7 +63,10 @@ def main():
     master = Image.fromarray(square.astype(np.uint8)).resize((1024, 1024), Image.LANCZOS)
     os.makedirs(os.path.join(ROOT, "art"), exist_ok=True)
     master.save(os.path.join(ROOT, "art", "FrameNova-icon-square-1024.png"))
-    master.resize((512, 512), Image.LANCZOS).convert("RGBA").save(os.path.join(ROOT, "art", "FrameNova-play-icon-512.png"))
+    ios_icon = os.path.join(ROOT, "ios", "FrameNova", "Resources", "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png")
+    os.makedirs(os.path.dirname(ios_icon), exist_ok=True)
+    master.save(ios_icon)
+    master.resize((512, 512), Image.LANCZOS).save(os.path.join(ROOT, "art", "FrameNova-play-icon-512.png"))
 
     # Adaptive icon (108 dp): the square fills the 66 dp safe zone, on the same gradient extended to the edges, so
     # every launcher mask (circle, squircle, square) shows the whole logo.
