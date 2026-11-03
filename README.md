@@ -42,6 +42,16 @@ scripts/build-android-debug.sh --install  # and install it with adb
 Or directly: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` in `android/`. Engine tests that run
 on a device or emulator: `./gradlew :app:connectedDebugAndroidTest`.
 
+## iOS and desktop
+
+The iOS implementation is in `ios/`, with an adaptive tablet layout and an Apple silicon desktop target.
+Build and validation instructions, platform differences and current validation status are in [the iOS guide](docs/IOS.md).
+
+```bash
+scripts/build-ios-debug.sh --run
+scripts/build-ios-debug.sh --mac --run
+```
+
 ## Updating over the local network
 
 Debug builds can update themselves from your computer:
