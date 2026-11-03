@@ -41,20 +41,46 @@ updates the version configuration automatically; it does not fetch dependencies 
 
 ## Layout and controls
 
-Compact windows stack preview, transport, timeline and tools. At 900 points wide, the inspector appears beside
-the editing area. Drag its divider to resize it; drag the timeline divider to adjust its height. Tablet and desktop
-windows keep scrollable track controls aligned with their clips. Project cards use an adaptive grid.
-Desktop windows have a minimum size of 720 × 520 points.
+Phone windows stack preview, transport, timeline and tools. Tablet windows at 900 points wide add an inspector
+beside the editing area. The desktop build uses its own workspace with a persistent media browser on the left,
+a preview in the center, a contextual inspector on the right, and a timeline across the full window below them.
+Desktop windows have a minimum size of 1000 × 640 points.
 
-Select a timeline clip to reveal its tools. Drag clips horizontally to move them, or vertically onto a compatible
-track. Drag the white handles to trim. Pinch to zoom the timeline, or use its zoom buttons. The ruler seeks the
-preview. Drag, pinch and rotate a selected visual layer in the preview. Track controls mute, hide or lock tracks.
+The desktop browser supports searching, filtering by media type, thumbnail previews and file drops. Import adds
+files to the project's media bin without changing its timeline. Double-click an asset to insert it at the playhead,
+use its menu to add a layer or audio, or drag it onto a track at a chosen time. Empty drop lanes create layer and
+audio tracks. Incompatible media is retained in the bin, with a message explaining the destination restriction.
+Locked tracks reject edits and drops.
+
+Drag the desktop dividers to resize the media browser, inspector and timeline. Panel sizes and visibility are
+remembered across sessions. The Workspace menu toggles panels and resets the layout. The inspector follows
+the selected clip and reuses the same controls as the phone and tablet versions. Clip actions, including Split
+followed immediately by To new layer, appear in the desktop toolbar and menus.
+
+The shared timeline supports live drag/trim feedback, playhead and edge snapping, zoom buttons, pinch zoom,
+and track mute/hide/lock controls. Desktop controls add a snapping toggle, track-height adjustment and Fit for
+long projects. Playback follows the playhead horizontally. Drag clips onto compatible tracks to move them;
+trim handles preserve the original source limits and gap behavior. Preview gestures still move, scale and rotate
+a selected visual layer.
+
+Desktop menus and shortcuts apply to the active editor window:
+
+| Shortcut | Action |
+|---|---|
+| Command-I / Command-E | Import media / export project |
+| Command-Z / Command-Shift-Z | Undo / redo; text entry retains its text undo history |
+| Command-B / Command-D | Split / duplicate selected clip |
+| Command-Shift-L / Command-Shift-T | Move selected clip to a layer / add text |
+| Option-Q / Option-W | Trim selected clip's start / end to the playhead |
+| Command-Option-1 / Command-Option-2 | Toggle media browser / inspector |
+| Command-Plus / Command-Minus / Shift-Z | Zoom in / zoom out / fit timeline |
+
+Click the desktop timeline or ruler to focus it. Space plays/pauses; left/right arrows step one frame; Shift-arrows
+step ten frames; Option-arrows move to adjacent cuts; Command-arrows seek to the start/end. Delete removes the
+selected clip and Escape clears selection. These timeline keys do not intercept typing in search or text fields.
 
 Tap the version in Settings ten times to unlock local developer logs. Sharing logs uses the system share sheet.
 The tools lock again when the version changes.
-
-Keyboard shortcuts: Space plays/pauses; Command-Z undoes; Command-Shift-Z redoes; Command-B splits;
-Delete removes the selection; Command-E opens export. Context menus provide clip actions for pointer use.
 
 ## Media and rendering
 
@@ -75,10 +101,12 @@ flows use system interfaces, so those interfaces follow the platform's behavior.
 ## Validation status
 
 Core timeline, sizing, persistence and subtitle tests run with `swift test --disable-xctest --package-path ios`.
-App tests exercise rendering without video sources and a still-only export, including its size and duration.
+Core tests also cover desktop media placement, locked tracks, zoom-aware snapping and cut navigation.
+App tests exercise rendering, still-only export, media-bin persistence and undo, locked editing actions, and
+frame-step boundaries. Persistence tests use temporary project directories.
 Run them through the generated project's scheme or the debug build script.
 
-The app and rendering tests pass type checking for the Apple silicon desktop target, and all ten core tests
+The app and rendering tests pass type checking for the Apple silicon desktop target, and all nineteen core tests
 pass. The app has not been built or visually validated with full Xcode. Exact parity is not yet verified. In particular, the system media picker differs from the custom Android library, the update
 installation flow follows platform distribution, and background export is subject to the platform limit described above.
 
@@ -86,7 +114,7 @@ Before shipping, run the following checks on both a tablet simulator and an Appl
 
 - Import ordered video/photo selections and audio files; reopen projects after terminating the app.
 - Edit portrait and landscape projects with multiple visual, text and audio tracks. Resize the window through
-  the 900-point breakpoint; check track scrolling, inspector resizing, pointer actions and keyboard shortcuts.
+  the tablet 900-point breakpoint; check the desktop full-width timeline, panel resizing, pointer actions and shortcuts.
 - Compare source trims, gaps, split boundaries, speed, keyframes, layouts, text, each filter and transition with
   the Android version, using the same media and timeline positions.
 - Compare preview and exported frames at cuts and overlaps; check audio pitch, fades and synchronization.

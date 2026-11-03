@@ -7,23 +7,24 @@ final class ProjectStore: ObservableObject {
     static let root: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FrameNova", isDirectory: true)
     @Published var projects: [Project] = []
     @Published var error: String? {didSet {if let error {AppLog.record(error)}}}
-    init() { refresh() }
+    private let directory: URL
+    init(directory: URL = ProjectStore.root) { self.directory = directory; refresh() }
     static func mediaURL(_ path: String) -> URL { root.appendingPathComponent("Media").appendingPathComponent(path) }
     func refresh() {
         do {
-            try FileManager.default.createDirectory(at: Self.root.appendingPathComponent("Media"), withIntermediateDirectories: true)
-            projects = try FileManager.default.contentsOfDirectory(at: Self.root, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }.map { try JSONDecoder().decode(Project.self, from: Data(contentsOf: $0)) }.sorted { $0.modifiedAt > $1.modifiedAt }
+            try FileManager.default.createDirectory(at: directory.appendingPathComponent("Media"), withIntermediateDirectories: true)
+            projects = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }.map { try JSONDecoder().decode(Project.self, from: Data(contentsOf: $0)) }.sorted { $0.modifiedAt > $1.modifiedAt }
         } catch { self.error = error.localizedDescription }
     }
     func save(_ project: Project) throws {
         var project = project; project.modifiedAt = Date()
-        try JSONEncoder().encode(project).write(to: Self.root.appendingPathComponent(project.id+".json"), options: .atomic)
+        try JSONEncoder().encode(project).write(to: directory.appendingPathComponent(project.id+".json"), options: .atomic)
         refresh()
     }
     func delete(_ project: Project) throws {
-        try FileManager.default.removeItem(at: Self.root.appendingPathComponent(project.id+".json")); refresh()
+        try FileManager.default.removeItem(at: directory.appendingPathComponent(project.id+".json")); refresh()
         let referenced = Set(projects.flatMap(\.assets).map(\.path))
-        for asset in project.assets where !referenced.contains(asset.path) { try? FileManager.default.removeItem(at: Self.mediaURL(asset.path)) }
+        for asset in project.assets where !referenced.contains(asset.path) { try? FileManager.default.removeItem(at: directory.appendingPathComponent("Media").appendingPathComponent(asset.path)) }
     }
     static func ingest(_ url: URL) async throws -> MediaAsset {
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }

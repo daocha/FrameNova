@@ -3,6 +3,7 @@ import AVFoundation
 
 // Keep stored view state on the property-wrapper API across supported SDKs.
 typealias ViewState<Value> = SwiftUI.State<Value>
+typealias EditorFocus<Value: Hashable> = SwiftUI.FocusState<Value>
 
 extension Color { init(argb:UInt32) { self.init(uiColor:UIColor(argb:argb)) } }
 enum Palette {
@@ -16,10 +17,14 @@ enum Palette {
         WindowGroup { HomeView().onAppear {
             FontRegistry.register()
             #if targetEnvironment(macCatalyst)
-            for scene in UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}) {scene.sizeRestrictions?.minimumSize = CGSize(width:720,height:520)}
+            for scene in UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}) {scene.sizeRestrictions?.minimumSize = CGSize(width:1000,height:640)}
             #endif
         }.environmentObject(store).preferredColorScheme(.dark).tint(Palette.accent) }
-        .commands { CommandGroup(replacing:.help) { Link("FrameNova license",destination:URL(string:"https://polyformproject.org/licenses/strict/1.0.0/")!) } }
+        .commands {
+            #if targetEnvironment(macCatalyst)
+            DesktopEditorCommands()
+            #endif
+            CommandGroup(replacing:.help) { Link("FrameNova license",destination:URL(string:"https://polyformproject.org/licenses/strict/1.0.0/")!) } }
     }
 }
 struct HomeView: View {

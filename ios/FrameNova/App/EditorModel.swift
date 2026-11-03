@@ -67,14 +67,14 @@ import SwiftUI
         else { if playhead >= project.durationUs { seek(0) }; player.play(); playing = true }
     }
     func close() { if recording {toggleRecording()}; rebuild?.cancel(); player.pause(); persist(); if let observer { player.removeTimeObserver(observer); self.observer = nil }; if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }; recorder?.stop() }
-    func split() { guard let id = selected ?? project.tracks[project.mainIndex].clips.first(where: { $0.contains(playhead) })?.id else { return }; change { selected = $0.split(id,at:playhead) ?? id } }
+    func split() { guard let id = selected ?? project.tracks[project.mainIndex].clips.first(where: { $0.contains(playhead) })?.id else { return }; guard project.track(id)?.locked != true else {return}; change { selected = $0.split(id,at:playhead) ?? id } }
     func delete() { guard let id = selected, project.track(id)?.locked != true else { return }; change { $0.delete(id) }; selected = nil }
     func addText(_ role:String,content:String = "Text") {
         var style = TextStyle(); style.text = content; style.role = role
         let c = Clip(startUs:playhead,transform:Transform(cy:role == "Subtitle" ? 0.86:0.5),text:style)
         change { $0.place(c,kind:.text) }; selected = c.id
     }
-    func ingest(_ urls:[URL],kind:TrackKind,replace:Bool = false,subtitles:Bool = false) {
+    func ingest(_ urls:[URL],kind:TrackKind,replace:Bool = false,subtitles:Bool = false,libraryOnly:Bool = false) {
         busy = true
         Task {
             defer { busy = false }
@@ -88,20 +88,43 @@ import SwiftUI
                 } else {
                     var assets: [MediaAsset] = []
                     for url in urls { assets.append(try await ProjectStore.ingest(url)) }
-                    imported(assets,kind:kind,replace:replace)
+                    imported(assets,kind:kind,replace:replace,libraryOnly:libraryOnly)
                 }
             } catch { self.error = error.localizedDescription }
         }
     }
-    func imported(_ assets:[MediaAsset],kind:TrackKind,replace:Bool = false) {
+    func imported(_ assets:[MediaAsset],kind:TrackKind,replace:Bool = false,libraryOnly:Bool = false) {
+        if libraryOnly {change {$0.addLibraryAssets(assets)}; return}
         if replace, let a = assets.first, let id = selected {
             change { p in
                 p.assets.append(a); p.update(id) { c in c.assetID = a.id; c.srcInUs = 0; c.srcOutUs = a.type == .image ? max(minimumClip,c.durationUs):a.durationUs; c.speed = 1 }
             }
         } else { change { $0.add(assets,kind:kind,at:playhead) } }
     }
+    var canEditSelection: Bool {selected.map {project.clip($0) != nil && project.track($0)?.locked != true} ?? false}
+    func duplicateSelected() {
+        guard let id = selected, canEditSelection else {return}
+        change {selected = $0.duplicate(id)}
+    }
+    func moveSelectionToLayer() {
+        guard var clip = clip, canEditSelection, project.track(clip.id)?.kind == .main else {return}
+        clip.transitionIn = nil; clip.transform.scale *= 0.6
+        change {$0.delete(clip.id); $0.place(clip,kind:.overlay)}
+    }
+    func insert(_ asset:MediaAsset,kind:TrackKind? = nil,trackID:String? = nil,at time:Int64? = nil) {
+        let destination = kind ?? (asset.type == .audio ? .audio:.main)
+        change {p in
+            if let id = p.insertAsset(asset,kind:destination,trackID:trackID,at:time ?? playhead) {selected = id}
+            else {error = "This media cannot be added to that track. Check the track type and lock."}
+        }
+    }
+    func stepFrames(_ frames:Int) {seek(playhead+Int64(frames)*1_000_000/Int64(project.canvas.fps))}
+    func trimToPlayhead(start:Bool) {
+        guard let clip, clip.contains(playhead), canEditSelection else {return}
+        change {if start {$0.trimStart(clip.id,delta:playhead-clip.startUs)} else {$0.trimEnd(clip.id,delta:playhead-clip.endUs)}}
+    }
     func extractAudio() {
-        guard let c = clip, project.asset(c.assetID)?.hasAudio == true else { return }
+        guard let c = clip, canEditSelection, project.asset(c.assetID)?.hasAudio == true else { return }
         var audio = c; audio.id = newID(); audio.audioOnly = true; audio.transitionIn = nil; audio.keyframes = []
         change { $0.update(c.id) { $0.volume = 0 }; $0.place(audio,kind:.audio) }; selected = audio.id
     }

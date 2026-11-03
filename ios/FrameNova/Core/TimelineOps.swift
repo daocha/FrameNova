@@ -25,7 +25,7 @@ extension Project {
     }
     mutating func delete(_ id: String) { for i in tracks.indices { tracks[i].clips.removeAll { $0.id == id } }; normalize() }
     mutating func place(_ clip: Clip, kind: TrackKind, preferred: String? = nil) {
-        func free(_ t: Track) -> Bool { t.kind == kind && !t.clips.contains { $0.startUs < clip.endUs && clip.startUs < $0.endUs } }
+        func free(_ t: Track) -> Bool { t.kind == kind && !t.locked && !t.clips.contains { $0.startUs < clip.endUs && clip.startUs < $0.endUs } }
         let candidates = tracks.indices.filter { free(tracks[$0]) }
         let target = candidates.first { tracks[$0].id == preferred } ?? (kind == .overlay ? candidates.last : candidates.first)
         if let i = target { tracks[i].clips.append(clip) }
