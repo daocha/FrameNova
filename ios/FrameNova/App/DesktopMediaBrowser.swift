@@ -38,7 +38,7 @@ struct DesktopMediaBrowser: View {
                         if query.isEmpty && filter == "All" {
                             Text("Import once, then drag onto the timeline or double-click to add at the playhead.")
                                 .font(.caption).foregroundStyle(Palette.dim).multilineTextAlignment(.center)
-                            Button("Import files…", action: onImport).buttonStyle(.bordered).disabled(model.busy)
+                            Button("Import media…", action: onImport).buttonStyle(.bordered).disabled(model.busy)
                         }
                     }.padding(20).frame(maxWidth: .infinity).padding(.top, 24)
                 }

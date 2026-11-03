@@ -61,6 +61,7 @@ struct TimelineView: View {
         }
         .padding(.vertical, 5)
         .background(Palette.bg)
+        .coordinateSpace(name:"editor.timelineDrag")
         .focusable()
         .focused($keyboardFocus)
         .focusEffectDisabled()
@@ -139,13 +140,17 @@ struct TimelineView: View {
 
     private func trackRow(_ track: Track, width: Double) -> some View {
         ZStack(alignment: .leading) {
-            hoveredTrack == track.id ? Palette.accent.opacity(0.15) : Palette.surface
+            (hoveredTrack == track.id ? Palette.accent.opacity(0.15) : Palette.surface)
+                .contentShape(Rectangle())
+                .onTapGesture {point in
+                    if desktop {keyboardFocus = true}
+                    model.selected = nil;model.selectedGap = nil;model.scrub(geometry.time(at:point.x))
+                }
             ForEach(track.clips) { clip in clipView(clip, track: track) }
             if hoveredTrack == track.id, let dropTime { dropMarker(dropTime) }
         }
         .frame(width: width, height: rowHeight)
         .contentShape(Rectangle())
-        .onTapGesture { point in if desktop {keyboardFocus = true}; model.selected = nil; model.seek(geometry.time(at: point.x)) }
         .onDrop(of: WorkspaceDrop.types, delegate: TimelineMediaDrop(model: model, geometry: geometry, kind: track.kind, trackID: track.id,
             hoverTime: Binding(get: { hoveredTrack == track.id ? dropTime : nil }, set: { dropTime = $0; hoveredTrack = $0 == nil ? nil : track.id })))
         .opacity(track.hidden ? 0.55 : 1)
@@ -175,16 +180,17 @@ struct TimelineView: View {
         let shown = displayedClip(clip)
         let clipWidth = max(24,x(shown.durationUs))
         return HStack(spacing: 0) {
-            if selected { handle(clip, start: true) }
+            if selected && !track.locked { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
                 Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip").font(.caption2).lineLimit(1)
                 if desktop && rowHeight >= 64 {
                     Text("\(formatTime(clip.durationUs))\(clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")").font(.system(size: 9)).foregroundStyle(.white.opacity(0.65))
                 }
             }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
-            if selected { handle(clip, start: false) }
+            if selected && !track.locked { handle(clip, start: false) }
         }
         .frame(width: clipWidth, height: rowHeight-6)
+        .contentShape(Rectangle())
         .background {
             ZStack {
                 Palette.track(track.kind)
@@ -204,29 +210,27 @@ struct TimelineView: View {
         .offset(x: max(0,x(shown.startUs)+(dragging ? movement.width:0)),
                 y: dragging ? movement.height : 0)
         .zIndex(dragging ? 10 : selected ? 1 : 0)
-        .onTapGesture {
+        .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("editor.timelineDrag")).onChanged {value in
             if desktop {keyboardFocus = true}
-            model.selected = clip.id
-            if !desktop || !clip.contains(model.playhead) { model.seek(clip.startUs) }
-        }
-        .gesture(DragGesture(minimumDistance: 8).onChanged { value in
-            guard !track.locked else { return }
-            if desktop {keyboardFocus = true}; movingID = clip.id; movement = value.translation; model.selected = clip.id
-        }.onEnded { value in
-            defer { movingID = nil; movement = .zero }
-            guard !track.locked else { return }
-            let time = geometry.snap(max(0, clip.startUs+Int64(value.translation.width/display.pointsPerSecond*1_000_000)),
-                                     project: model.project, playhead: model.playhead, excluding: clip.id)
-            let tracks = model.project.tracks, index = tracks.firstIndex(where: { $0.id == track.id }) ?? 0
-            let destination = clamp(index+Int((value.translation.height/(rowHeight+5)).rounded()), 0, tracks.count-1)
-            model.change { $0.move(clip.id, to: tracks[destination].id, at: time) }
+            if model.selected != clip.id {model.selected = clip.id}
+            model.selectedGap = nil
+            if model.playing {model.scrub(model.playhead)}
+            guard !track.locked,hypot(value.translation.width,value.translation.height)>=4 else {return}
+            movingID = clip.id;movement = value.translation
+        }.onEnded {value in
+            defer {movingID = nil;movement = .zero}
+            guard !track.locked,movingID == clip.id else {return}
+            let time = geometry.snappedStart(clip.startUs+Int64(value.translation.width/display.pointsPerSecond*1_000_000),duration:clip.durationUs,project:model.project,playhead:model.playhead,excluding:clip.id)
+            let tracks = model.project.tracks,index = tracks.firstIndex(where:{$0.id == track.id}) ?? 0
+            let destination = clamp(index+Int((value.translation.height/(rowHeight+5)).rounded()),0,tracks.count-1)
+            model.change {$0.move(clip.id,to:tracks[destination].id,at:time)}
         })
         .contextMenu {
-            Button("Split") { model.selected = clip.id; model.split() }
-            if track.kind == .main { Button("To new layer") { model.selected = clip.id; model.moveSelectionToLayer() } }
-            Button("Duplicate") { model.selected = clip.id; model.duplicateSelected() }
-            Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }
-        }.disabled(track.locked)
+            Button("Split") { model.selected = clip.id; model.split() }.disabled(track.locked)
+            if track.kind == .main { Button("To new layer") { model.selected = clip.id; model.moveSelectionToLayer() }.disabled(track.locked) }
+            Button("Duplicate") { model.selected = clip.id; model.duplicateSelected() }.disabled(track.locked)
+            Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }.disabled(track.locked)
+        }
         .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")
     }
 

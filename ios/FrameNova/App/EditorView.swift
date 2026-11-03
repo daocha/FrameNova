@@ -19,6 +19,7 @@ struct EditorView: View {
     @ViewState<Bool> private var export = false
     @ViewState<Bool> private var picker = false
     @ViewState<Bool> private var files = false
+    @ViewState<Bool> private var mediaSources = false
     @ViewState<Bool> private var subtitleFiles = false
     @ViewState<Bool> private var replace = false
     @ViewState<Bool> private var libraryOnly = false
@@ -65,6 +66,11 @@ struct EditorView: View {
         .sheet(isPresented:$picker) { MediaPicker(multiple:!replace) { assets,error in picker = false; model.imported(assets,kind:importKind,replace:replace,libraryOnly:libraryOnly); if let error {model.error = error} } }
         .fileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace) { result in
             do { model.ingest(try result.get(),kind:importKind,replace:replace,subtitles:subtitleFiles,libraryOnly:libraryOnly) } catch {model.error = error.localizedDescription}
+        }
+        .confirmationDialog("Choose media source",isPresented:$mediaSources,titleVisibility:.visible) {
+            Button("Files…") {files = true}
+            Button("Photos…") {picker = true}
+            Button("Cancel",role:.cancel) {}
         }
         .sheet(isPresented:$export) { ExportView(project:model.project,exporter:model.exporter) }
         .sheet(isPresented:Binding(get:{model.shareURL != nil},set:{if !$0 {model.shareURL = nil}})) {if let url = model.shareURL {ShareSheet(url:url)}}
@@ -130,11 +136,19 @@ struct EditorView: View {
     private func replaceMedia() {
         libraryOnly = false; subtitleFiles = false; replace = true
         importKind = model.selected.flatMap {model.project.track($0)?.kind} == .audio ? .audio:.main
-        files = true
+        chooseMediaSource()
     }
     private func importSubtitles() {libraryOnly = false; replace = false; subtitleFiles = true; files = true}
-    private func importLibrary() {libraryOnly = true; subtitleFiles = false; replace = false; files = true}
-    private func pick(_ kind:TrackKind,replace:Bool = false) {libraryOnly = false; importKind = kind; self.replace = replace; subtitleFiles = false; if kind == .audio {files = true} else {picker = true}}
+    private func importLibrary() {libraryOnly = true;subtitleFiles = false;replace = false;importKind = .main;chooseMediaSource()}
+    private func pick(_ kind:TrackKind,replace:Bool = false) {libraryOnly = false; importKind = kind; self.replace = replace; subtitleFiles = false; chooseMediaSource()}
+    private func chooseMediaSource() {
+        if importKind == .audio {files = true;return}
+        #if targetEnvironment(macCatalyst)
+        mediaSources = true
+        #else
+        picker = true
+        #endif
+    }
     private var tools:some View {
         ScrollView(.horizontal,showsIndicators:false) {HStack(spacing:8) {toolButtons}.padding(10)}
             .background(Palette.surface).accessibilityIdentifier("editor.tools")

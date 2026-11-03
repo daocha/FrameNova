@@ -58,6 +58,10 @@ frame. Timeline filmstrips and waveform peaks are cached on disk; both timelines
 use the same thumbnail service. Filmstrips fill coarse to fine with 10–120 frames per video. Reopening reads cached
 images and peaks, generating only missing entries; the operating system can reclaim temporary media caches.
 
+Desktop New project, Media, Add layer, Replace and Import offer Files and Photos as media sources.
+Files opens the file selection interface; Photos opens the library browser. Audio uses file selection.
+A seek bar sits directly below the desktop player. Pressing a timeline clip selects it without changing the playhead;
+dragging moves it in stable timeline coordinates. Empty track space and the ruler seek independently.
 The desktop browser supports searching, filtering by media type, thumbnail previews and file drops. Import adds
 files to the project's media bin without changing its timeline. Double-click an asset to insert it at the playhead,
 use its menu to add a layer or audio, or drag it onto a track at a chosen time. Empty drop lanes create layer and

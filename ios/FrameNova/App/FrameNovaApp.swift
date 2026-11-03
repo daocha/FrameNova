@@ -43,6 +43,7 @@ struct HomeView: View {
     @ViewState<Project?> private var selected: Project?
     @ViewState<Bool> private var picker = false
     @ViewState<Bool> private var files = false
+    @ViewState<Bool> private var mediaSources = false
     @ViewState<Bool> private var settings = false
     @ViewState<Bool> private var importing = false
     @ViewState<[MediaAsset]> private var pending: [MediaAsset] = []
@@ -72,12 +73,15 @@ struct HomeView: View {
                         }
                     } header: {
                         VStack(alignment:.leading,spacing:16) {
-                            Button { picker = true } label: {
+                            Button {
+                                #if targetEnvironment(macCatalyst)
+                                mediaSources = true
+                                #else
+                                picker = true
+                                #endif
+                            } label: {
                                 HStack(spacing:12) { Image(systemName:"plus").font(.largeTitle); VStack(alignment:.leading) { Text("New project").font(.title3.bold()); Text("Pick videos and photos to start").font(.footnote) } }.frame(maxWidth:.infinity,minHeight:120)
                             }.buttonStyle(.plain).background(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.topLeading,endPoint:.bottomTrailing)).clipShape(RoundedRectangle(cornerRadius:18))
-                            #if targetEnvironment(macCatalyst)
-                            Button("Files",systemImage:"folder") { files = true }
-                            #endif
                             if importing { ProgressView("Importing…") }
                             if store.projects.isEmpty { Text("Your projects appear here. Everything stays on this device.").font(.subheadline).foregroundStyle(Palette.dim).padding(8) }
                         }.padding(.bottom,12)
@@ -87,6 +91,11 @@ struct HomeView: View {
                 .toolbar { ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape") }.accessibilityLabel("Settings") } }
                 .navigationDestination(isPresented:Binding(get:{selected != nil},set:{if !$0 {selected = nil}})) { if let project = selected { EditorView(project:project,store:store) } }
         }
+        }
+        .confirmationDialog("New project",isPresented:$mediaSources,titleVisibility:.visible) {
+            Button("Files…") {files = true}
+            Button("Photos…") {picker = true}
+            Button("Cancel",role:.cancel) {}
         }
         .sheet(isPresented:$picker) { MediaPicker { media,error in picker = false; receive(media); if let error { store.error = error } } }
         .fileImporter(isPresented:$files,allowedContentTypes:[.movie,.image],allowsMultipleSelection:true) { result in
