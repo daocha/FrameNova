@@ -24,6 +24,8 @@
 	<string>Record voiceovers for your projects.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save exported videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Browse and select videos and photos to edit in your projects.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

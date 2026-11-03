@@ -14,8 +14,10 @@ enum Palette {
 @main struct FrameNovaApp: App {
     @StateObject private var store = ProjectStore()
     var body: some Scene {
-        WindowGroup { HomeView().onAppear {
+        WindowGroup { root.onAppear {
             FontRegistry.register()
+            try? AVAudioSession.sharedInstance().setCategory(.playback,mode:.moviePlayback)
+            try? AVAudioSession.sharedInstance().setActive(true)
             #if targetEnvironment(macCatalyst)
             for scene in UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}) {scene.sizeRestrictions?.minimumSize = CGSize(width:1000,height:640)}
             #endif
@@ -26,6 +28,15 @@ enum Palette {
             #endif
             CommandGroup(replacing:.help) { Link("FrameNova license",destination:URL(string:"https://polyformproject.org/licenses/strict/1.0.0/")!) } }
     }
+    @ViewBuilder private var root:some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--editor-ui-fixture") {InteractionFixtureView()}
+        else {HomeView()}
+        #else
+        HomeView()
+        #endif
+    }
+
 }
 struct HomeView: View {
     @EnvironmentObject var store: ProjectStore
@@ -63,7 +74,9 @@ struct HomeView: View {
                             Button { picker = true } label: {
                                 HStack(spacing:12) { Image(systemName:"plus").font(.largeTitle); VStack(alignment:.leading) { Text("New project").font(.title3.bold()); Text("Pick videos and photos to start").font(.footnote) } }.frame(maxWidth:.infinity,minHeight:120)
                             }.buttonStyle(.plain).background(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.topLeading,endPoint:.bottomTrailing)).clipShape(RoundedRectangle(cornerRadius:18))
+                            #if targetEnvironment(macCatalyst)
                             Button("Files",systemImage:"folder") { files = true }
+                            #endif
                             if importing { ProgressView("Importing…") }
                             if store.projects.isEmpty { Text("Your projects appear here. Everything stays on this device.").font(.subheadline).foregroundStyle(Palette.dim).padding(8) }
                         }.padding(.bottom,12)

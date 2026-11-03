@@ -51,39 +51,3 @@ enum MediaError: LocalizedError {
     case invalid, export, missing(String)
     var errorDescription: String? { switch self { case .invalid: return "This media cannot be opened."; case .export: return "The export could not be created."; case .missing(let name): return "Missing media: \(name)" } }
 }
-struct MediaPicker: UIViewControllerRepresentable {
-    var completion: ([MediaAsset], String?) -> Void
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration(photoLibrary: .shared()); config.selectionLimit = 0; config.selection = .ordered; config.filter = .any(of: [.videos,.images]); config.preferredAssetRepresentationMode = .current
-        let picker = PHPickerViewController(configuration: config); picker.delegate = context.coordinator; return picker
-    }
-    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
-    func makeCoordinator() -> Coordinator { Coordinator(completion) }
-    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let completion: ([MediaAsset], String?) -> Void
-        init(_ completion: @escaping ([MediaAsset], String?) -> Void) { self.completion = completion }
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-            Task { @MainActor in
-                var media: [MediaAsset] = [], failures: [String] = []
-                for result in results {
-                    let provider = result.itemProvider
-                    let type = provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) ? UTType.movie.identifier : UTType.image.identifier
-                    do {
-                        let local: URL = try await withCheckedThrowingContinuation { continuation in
-                            provider.loadFileRepresentation(forTypeIdentifier: type) { url,error in
-                                guard let url else { continuation.resume(throwing: error ?? MediaError.invalid); return }
-                                let dest = FileManager.default.temporaryDirectory.appendingPathComponent(newID()+"."+url.pathExtension)
-                                do { try FileManager.default.copyItem(at: url,to: dest); continuation.resume(returning: dest) }
-                                catch { continuation.resume(throwing: error) }
-                            }
-                        }
-                        defer { try? FileManager.default.removeItem(at: local) }
-                        media.append(try await ProjectStore.ingest(local))
-                    } catch { failures.append(error.localizedDescription) }
-                }
-                completion(media,failures.isEmpty ? nil : failures.joined(separator:"\n"))
-            }
-        }
-    }
-}

@@ -31,9 +31,9 @@ enum FilterCube {
         return zip([r,g,b],o).map { clamp($0+($1-$0)*clamp(intensity,0,1),0,1) }
     }
     static func data(_ id:String,intensity:Double) -> Data {
-        var values: [Float] = []; values.reserveCapacity(16*16*16*4)
-        for b in 0..<16 { for g in 0..<16 { for r in 0..<16 {
-            values += apply(id,Double(r)/15,Double(g)/15,Double(b)/15,intensity:intensity).map(Float.init)+[1]
+        var values: [Float] = []; values.reserveCapacity(33*33*33*4)
+        for b in 0..<33 { for g in 0..<33 { for r in 0..<33 {
+            values += apply(id,Double(r)/32,Double(g)/32,Double(b)/32,intensity:intensity).map(Float.init)+[1]
         } } }
         return values.withUnsafeBufferPointer { Data(buffer:$0) }
     }

@@ -46,7 +46,7 @@ extension Project {
         for cue in cues.sorted(by: { $0.start < $1.start }) {
             let start = max(cue.start, clips.last?.endUs ?? 0)
             if cue.end-start >= minimumClip {
-                var style = TextStyle(); style.text = cue.text; style.role = "Subtitle"
+                var style = TextStyle(); style.text = cue.text; style.role = "Subtitle";style.size = 0.055;style.strokeWidth = 0.08
                 clips.append(Clip(startUs: start, srcOutUs: cue.end-start, transform: Transform(cy: 0.86), text: style))
             }
         }

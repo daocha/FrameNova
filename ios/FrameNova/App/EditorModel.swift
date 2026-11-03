@@ -3,20 +3,28 @@ import SwiftUI
 
 @MainActor final class EditorModel: ObservableObject {
     @Published var project: Project
-    @Published var selected: String?
+    @Published var selected: String? {didSet {if selected != oldValue {selectedGap = nil}}}
+    @Published var selectedGap: Int64?
     @Published var playhead: Int64 = 0
     @Published var playing = false
     @Published var error: String? {didSet {if let error {AppLog.record(error)}}}
     @Published var busy = false
     @Published var revision = 0
     @Published var recording = false
+    @Published var recordingLevel = 0.0
+    @Published var recordingElapsed = 0.0
+    private var recordingMeter:Task<Void,Never>?
     @Published var shareURL:URL?
     private var gestureStart:Project?
+    private var previewState:PreviewProjectState?
     let player = AVPlayer()
     let exporter = Exporter()
     let store: ProjectStore
     private var undoStack: [Project] = [], redoStack: [Project] = []
     private var rebuild: Task<Void,Never>?
+    private var seekInProgress = false
+    private var pendingSeek:Int64?
+    private var seekGeneration = 0
     private var observer: Any?
     private var recorder: AVAudioRecorder?
     private var recordStart: Int64 = 0
@@ -37,31 +45,69 @@ import SwiftUI
         let old = project; body(&project)
         guard old != project else { return }
         if gestureStart == nil {undoStack.append(old); if undoStack.count > 100 {undoStack.removeFirst()}}; redoStack = []
-        persist(); revision += 1; schedulePreview()
+        reconcileSelection()
+        revision += 1
+        if gestureStart != nil && old.usesSameComposition(as:project) {refreshVisualPreview()}
+        else {persist();schedulePreview()}
     }
     func beginGesture() {if gestureStart == nil {gestureStart = project}}
-    func endGesture() {if let old = gestureStart, old != project {undoStack.append(old)}; gestureStart = nil}
+    func endGesture() {
+        if let old = gestureStart,old != project {undoStack.append(old);if undoStack.count>100 {undoStack.removeFirst()};redoStack = [];persist()}
+        gestureStart = nil
+    }
+    func liveVisualEdit(_ body:(inout Clip)->Void) {
+        guard let id = selected,canEditSelection else {return}
+        beginGesture();change {$0.update(id,body)}
+    }
+    private func refreshVisualPreview() {
+        previewState?.update(project)
+        if let video = player.currentItem?.videoComposition {player.currentItem?.videoComposition = video.mutableCopy() as? AVVideoComposition}
+        seek(playhead)
+    }
+
     func edit(_ body:(inout Clip)->Void) {
         guard let id = selected, project.track(id)?.locked != true else { return }
         change { $0.update(id,body) }
     }
-    func undo() { guard let p = undoStack.popLast() else { return }; redoStack.append(project); project = p; persist(); revision += 1; schedulePreview() }
-    func redo() { guard let p = redoStack.popLast() else { return }; undoStack.append(project); project = p; persist(); revision += 1; schedulePreview() }
+    func undo() { guard let p = undoStack.popLast() else { return }; redoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
+    func redo() { guard let p = redoStack.popLast() else { return }; undoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
+    private func reconcileSelection() {
+        if let selected,project.clip(selected) == nil {self.selected = nil}
+        if let selectedGap,project.mainGap(at:selectedGap) == nil {self.selectedGap = nil}
+        playhead = clamp(playhead,0,project.durationUs)
+    }
     func persist() { do { try store.save(project) } catch { self.error = error.localizedDescription } }
     func schedulePreview() {
-        rebuild?.cancel(); player.pause(); playing = false
+        rebuild?.cancel(); player.pause(); playing = false; seekGeneration += 1; seekInProgress = false; pendingSeek = nil
         let snapshot = project
+        let state = PreviewProjectState(snapshot);previewState = state
         rebuild = Task {
             do {
                 try await Task.sleep(nanoseconds:160_000_000)
                 guard snapshot.durationUs > 0 else { player.replaceCurrentItem(with:nil); return }
-                let built = try await CompositionFactory.build(snapshot)
+                let built = try await CompositionFactory.build(snapshot,previewState:state)
                 try Task.checkCancellation()
                 player.replaceCurrentItem(with:built.playerItem()); seek(min(playhead,snapshot.durationUs))
             } catch is CancellationError {} catch { self.error = error.localizedDescription }
         }
     }
-    func seek(_ time:Int64) { playhead = clamp(time,0,project.durationUs); player.seek(to:mediaTime(playhead),toleranceBefore:.zero,toleranceAfter:.zero) }
+    func seek(_ time:Int64) {
+        playhead = clamp(time,0,project.durationUs)
+        pendingSeek = playhead
+        flushSeek()
+    }
+    func scrub(_ time:Int64) {player.pause();playing = false;seek(time)}
+    private func flushSeek() {
+        guard !seekInProgress,player.currentItem != nil,let time = pendingSeek else {return}
+        pendingSeek = nil;seekInProgress = true
+        let generation = seekGeneration
+        player.seek(to:mediaTime(time),toleranceBefore:.zero,toleranceAfter:.zero) {[weak self] _ in
+            Task {@MainActor in
+                guard let self,self.seekGeneration == generation else {return}
+                self.seekInProgress = false;self.flushSeek()
+            }
+        }
+    }
     func play() {
         if playing { player.pause(); playing = false }
         else { if playhead >= project.durationUs { seek(0) }; player.play(); playing = true }
@@ -69,8 +115,11 @@ import SwiftUI
     func close() { if recording {toggleRecording()}; rebuild?.cancel(); player.pause(); persist(); if let observer { player.removeTimeObserver(observer); self.observer = nil }; if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }; recorder?.stop() }
     func split() { guard let id = selected ?? project.tracks[project.mainIndex].clips.first(where: { $0.contains(playhead) })?.id else { return }; guard project.track(id)?.locked != true else {return}; change { selected = $0.split(id,at:playhead) ?? id } }
     func delete() { guard let id = selected, project.track(id)?.locked != true else { return }; change { $0.delete(id) }; selected = nil }
-    func addText(_ role:String,content:String = "Text") {
-        var style = TextStyle(); style.text = content; style.role = role
+    func addText(_ role:String,content:String? = nil) {
+        var style = TextStyle();style.role = role
+        if role == "Subtitle" {style.text = content ?? "Subtitle";style.size = 0.055;style.strokeWidth = 0.08}
+        else if role == "Sticker" {style.text = content ?? "⭐";style.size = content == nil ? 0.18:0.2;style.bold = false;style.shadow = false}
+        else {style.text = content ?? "Your title";style.size = 0.09}
         let c = Clip(startUs:playhead,transform:Transform(cy:role == "Subtitle" ? 0.86:0.5),text:style)
         change { $0.place(c,kind:.text) }; selected = c.id
     }
@@ -97,7 +146,7 @@ import SwiftUI
         if libraryOnly {change {$0.addLibraryAssets(assets)}; return}
         if replace, let a = assets.first, let id = selected {
             change { p in
-                p.assets.append(a); p.update(id) { c in c.assetID = a.id; c.srcInUs = 0; c.srcOutUs = a.type == .image ? max(minimumClip,c.durationUs):a.durationUs; c.speed = 1 }
+                p.addLibraryAssets([a]);p.update(id) {c in let range = c.srcOutUs-c.srcInUs;c.assetID = a.id;c.srcInUs = 0;c.srcOutUs = a.type == .image ? range:min(a.durationUs,range);c.crop = CropRect()}
             }
         } else { change { $0.add(assets,kind:kind,at:playhead) } }
     }
@@ -167,9 +216,18 @@ import SwiftUI
     }
     func toggleRecording() {
         if recording {
-            recorder?.stop(); recording = false
+            recorder?.stop(); recording = false;recordingMeter?.cancel();recordingMeter = nil;recordingLevel = 0;player.pause();playing = false;player.isMuted = false
+            try? AVAudioSession.sharedInstance().setCategory(.playback,mode:.moviePlayback)
             guard let url = recorder?.url else { return }; recorder = nil
-            Task { do { let a = try await ProjectStore.ingest(url); change { $0.add([a],kind:.audio,at:recordStart) }; try? FileManager.default.removeItem(at:url) } catch { self.error = error.localizedDescription } }
+            Task {
+                defer {try? FileManager.default.removeItem(at:url)}
+                do {
+                    var asset = try await ProjectStore.ingest(url);asset.name = "Voiceover"
+                    let before = Set(project.tracks.flatMap(\.clips).map(\.id))
+                    change {$0.add([asset],kind:.audio,at:recordStart)}
+                    selected = project.tracks.flatMap(\.clips).first(where:{!before.contains($0.id)})?.id
+                } catch {self.error = error.localizedDescription}
+            }
             return
         }
         Task {
@@ -181,8 +239,20 @@ import SwiftUI
                 try AVAudioSession.sharedInstance().setActive(true)
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(newID()+".m4a")
                 recorder = try AVAudioRecorder(url:url,settings:[AVFormatIDKey:kAudioFormatMPEG4AAC,AVSampleRateKey:48000,AVNumberOfChannelsKey:1,AVEncoderBitRateKey:128000]); recordStart = playhead
+                recorder?.isMeteringEnabled = true;recordingElapsed = 0
                 recording = recorder?.record() == true
-            } catch { self.error = error.localizedDescription }
+                guard recording else {throw MediaError.invalid}
+                player.isMuted = true
+                if project.durationUs>playhead {player.play();playing = true}
+                recordingMeter = Task {[weak self] in
+                    while !Task.isCancelled {
+                        guard let self,self.recording,let recorder = self.recorder else {return}
+                        recorder.updateMeters();self.recordingLevel = clamp(pow(10,Double(recorder.averagePower(forChannel:0))/20),0,1)
+                        self.recordingElapsed = recorder.currentTime
+                        try? await Task.sleep(nanoseconds:60_000_000)
+                    }
+                }
+            } catch {recording = false;player.isMuted = false;self.error = error.localizedDescription}
         }
     }
 }

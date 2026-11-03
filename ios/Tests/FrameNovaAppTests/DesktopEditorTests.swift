@@ -51,3 +51,47 @@ import Foundation
         #expect(model.playhead == 1_000_000)
     }
 }
+
+@Suite(.serialized) @MainActor struct EditorParityTests {
+    @Test func visualGestureMakesOneUndoStepAndKeepsSourceTiming() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        var project = Project(name:"Live edit")
+        project.tracks[0].clips = [Clip(id:"clip",srcOutUs:5_000_000,text:TextStyle())]
+        let model = EditorModel(project:project,store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.selected = "clip"
+        model.liveVisualEdit {$0.transform.cx = 0.7}
+        model.liveVisualEdit {$0.transform.scale = 1.5}
+        model.endGesture()
+        #expect(model.project.clip("clip")?.srcOutUs == 5_000_000)
+        model.undo()
+        #expect(model.project == project)
+        #expect(!model.canUndo)
+        model.redo()
+        #expect(model.project.clip("clip")?.transform.scale == 1.5)
+    }
+    @Test func replacementPreservesSourceRangeSpeedAndResetsCrop() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        let old = MediaAsset(path:newID()+".mov",type:.video,name:"Old",durationUs:10_000_000)
+        var project = Project(name:"Replace");project.assets = [old]
+        project.tracks[0].clips = [Clip(id:"clip",assetID:old.id,srcInUs:2_000_000,srcOutUs:8_000_000,speed:2,crop:CropRect(left:0.2))]
+        let model = EditorModel(project:project,store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.selected = "clip"
+        let photo = MediaAsset(path:newID()+".png",type:.image,name:"New",durationUs:3_000_000)
+        model.imported([photo],kind:.main,replace:true)
+        #expect(model.clip?.srcInUs == 0);#expect(model.clip?.srcOutUs == 6_000_000)
+        #expect(model.clip?.speed == 2);#expect(model.clip?.durationUs == 3_000_000)
+        #expect(model.clip?.crop == CropRect())
+    }
+    @Test func roleDefaultsMatchTitleSubtitleAndStickerTools() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),store = ProjectStore(directory:folder)
+        let model = EditorModel(project:Project(name:"Roles"),store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.addText("Title");#expect(model.clip?.text?.text == "Your title");#expect(model.clip?.text?.size == 0.09)
+        model.addText("Subtitle");#expect(model.clip?.text?.strokeWidth == 0.08);#expect(model.clip?.transform.cy == 0.86)
+        model.addText("Sticker",content:"⭐");#expect(model.clip?.text?.size == 0.2);#expect(model.clip?.text?.shadow == false)
+    }
+}

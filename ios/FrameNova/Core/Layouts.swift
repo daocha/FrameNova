@@ -19,11 +19,11 @@ struct LayoutPreset: Identifiable {
 }
 extension Project {
     mutating func layout(_ preset: LayoutPreset, at time: Int64, gap: Double = 0) {
-        let visible = tracks.reversed().filter { !$0.hidden && ($0.kind == .main || $0.kind == .overlay) }.flatMap { $0.clips.filter { $0.contains(time) } }
+        let visible = tracks.reversed().filter { !$0.hidden && ($0.kind == .main || $0.kind == .overlay) }.compactMap { $0.clips.first { $0.contains(time) } }
         let size = canvas.size, w = Double(size.width), h = Double(size.height)
         for (i,c) in visible.enumerated() {
             guard let a = asset(c.assetID), a.width > 0, a.height > 0 else { continue }
-            if preset.id == "fit" { update(c.id) { $0.transform = Transform(); $0.crop = CropRect(); $0.keyframes = [] }; continue }
+            if preset.id == "fit" { update(c.id) { $0.transform = Transform(opacity:c.transform.opacity); $0.crop = CropRect(); $0.keyframes = [] }; continue }
             let cell = preset.cells[i % preset.cells.count], g = gap * min(w,h)
             let cw = max(2,cell.w*w-2*g), ch = max(2,cell.h*h-2*g), ratio = cw/ch, source = Double(a.width)/Double(a.height)
             var crop = CropRect()

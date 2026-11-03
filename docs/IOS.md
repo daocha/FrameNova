@@ -41,8 +41,8 @@ updates the version configuration automatically; it does not fetch dependencies 
 
 ## Layout and controls
 
-Phone windows stack preview, transport, timeline and tools. Tablet windows at 900 points wide add an inspector
-beside the editing area. The desktop build uses its own workspace with a persistent media browser on the left,
+Phone windows stack preview, transport, timeline and inline tools/panels. Landscape windows place tools beside
+the preview. Text editing gives the preview the space above its controls; fullscreen hides editing controls. The desktop build uses its own workspace with a persistent media browser on the left,
 a preview in the center, a contextual inspector on the right, and a timeline across the full window below them.
 Desktop windows have a minimum size of 1000 × 640 points.
 
@@ -57,8 +57,9 @@ remembered across sessions. The Workspace menu toggles panels and resets the lay
 the selected clip and reuses the same controls as the phone and tablet versions. Clip actions, including Split
 followed immediately by To new layer, appear in the desktop toolbar and menus.
 
-The shared timeline supports live drag/trim feedback, playhead and edge snapping, zoom buttons, pinch zoom,
-and track mute/hide/lock controls. Desktop controls add a snapping toggle, track-height adjustment and Fit for
+The phone/tablet timeline uses a fixed center playhead: swipe to scrub and fling, hold a clip before dragging,
+and drag its white handles to trim. It draws filmstrips, waveforms, keyframes and fades. Header taps mute
+main/audio tracks or hide layers. The desktop timeline retains pointer controls and track mute/hide/lock actions. Desktop controls add a snapping toggle, track-height adjustment and Fit for
 long projects. Playback follows the playhead horizontally. Drag clips onto compatible tracks to move them;
 trim handles preserve the original source limits and gap behavior. Preview gestures still move, scale and rotate
 a selected visual layer.
@@ -95,8 +96,8 @@ selected and are cached locally. Export offers H.264 or HEVC, resolution, frame 
 The exported file can be shared or saved to the photo library. Microphone access is requested for voiceover.
 
 The operating system limits background execution. An export cancels when its background time expires; keep
-the app active for long exports. Projects remain editable after cancellation. The media picker and save/share
-flows use system interfaces, so those interfaces follow the platform's behavior.
+the app active for long exports. Projects remain editable after cancellation. The media browser has Library/Photos/Videos filters, Recent/Albums, sorting and ordered drag selection.
+Photo access supports limited-library management. Audio selection and save/share flows use system interfaces.
 
 ## Validation status
 
@@ -106,15 +107,16 @@ App tests exercise rendering, still-only export, media-bin persistence and undo,
 frame-step boundaries. Persistence tests use temporary project directories.
 Run them through the generated project's scheme or the debug build script.
 
-The app and rendering tests pass type checking for the Apple silicon desktop target, and all nineteen core tests
-pass. The app has not been built or visually validated with full Xcode. Exact parity is not yet verified. In particular, the system media picker differs from the custom Android library, the update
-installation flow follows platform distribution, and background export is subject to the platform limit described above.
+Thirty-three core tests pass. App/model/rendering tests have been added for live preview, replacement, defaults and
+filmstrip frames. The dedicated `FrameNovaInteractions` scheme covers the reported gesture and picker regressions.
+Full app builds and device test execution remain pending on a machine with full Xcode; exact parity is unverified.
+See [the alignment matrix](IOS_PARITY.md) for implemented behavior, regression coverage and remaining checks.
 
 Before shipping, run the following checks on both a tablet simulator and an Apple silicon desktop build:
 
 - Import ordered video/photo selections and audio files; reopen projects after terminating the app.
 - Edit portrait and landscape projects with multiple visual, text and audio tracks. Resize the window through
-  the tablet 900-point breakpoint; check the desktop full-width timeline, panel resizing, pointer actions and shortcuts.
+  portrait/landscape layouts; check the desktop full-width timeline, panel resizing, pointer actions and shortcuts.
 - Compare source trims, gaps, split boundaries, speed, keyframes, layouts, text, each filter and transition with
   the Android version, using the same media and timeline positions.
 - Compare preview and exported frames at cuts and overlaps; check audio pitch, fades and synchronization.

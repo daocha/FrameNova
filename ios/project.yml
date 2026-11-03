@@ -82,6 +82,19 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FrameNova.app/FrameNova"
         "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/FrameNova.app/Contents/MacOS/FrameNova"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  FrameNovaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/FrameNovaUITests
+    dependencies:
+      - target: FrameNova
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.framenova.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SUPPORTS_MACCATALYST: NO
+
 schemes:
   FrameNova:
     build:
@@ -100,3 +113,13 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  FrameNovaInteractions:
+    build:
+      targets:
+        FrameNova: all
+        FrameNovaUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - FrameNovaUITests

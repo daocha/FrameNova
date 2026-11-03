@@ -21,7 +21,7 @@ struct DesktopWorkspace<Preview: View, Transport: View>: View {
 
     private var panels: [String] {
         guard let clip = model.clip else { return ["Ratio", "Layout", "Stickers", "Voiceover"] }
-        if clip.text != nil { return ["Text", "Position", "Ratio"] }
+        if clip.text != nil { return ["Text", "Font", "Style", "Animation", "Position", "Ratio"] }
         if clip.audioOnly || model.project.asset(clip.assetID)?.type == .audio { return ["Volume", "Speed", "Ratio"] }
         var choices = ["Position", "Crop", "Adjust", "Filters", "Layout"]
         if model.project.asset(clip.assetID)?.type == .video { choices += ["Speed", "Volume"] }
