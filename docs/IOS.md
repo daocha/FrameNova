@@ -1,12 +1,13 @@
 # FrameNova for iOS and desktop
 
 The app sources live in `ios/FrameNova`. The minimum deployment versions are iOS 17 and macOS 14.
-The desktop target uses Mac Catalyst and supports Apple silicon. Project files are generated from sources;
-there are no downloaded build dependencies. Version and build numbers come from the Android build settings.
+The desktop target uses Mac Catalyst and supports Apple silicon. Project generation uses `ios/project.yml`.
+Version and build numbers are synchronized from the Android build settings into `ios/Config/Version.xcconfig`
+by the generation hook.
 
 ## Build
 
-Full Xcode with the required SDK and simulator runtime, Python 3, and Swift 6 or newer are required.
+Full Xcode with the required SDK and simulator runtime, XcodeGen, Python 3, and Swift 6 or newer are required.
 The scripts install no software and do not change the selected developer directory. If necessary, export
 `DEVELOPER_DIR` with the path to the installed developer directory before building.
 
@@ -25,8 +26,18 @@ Artifacts go in the gitignored `dist/` directory. Archives retain their debug sy
 locally and never upload or submit a build. Signing credentials come from the environment and local signing
 identities. Release provisioning profiles must already be available.
 
-To open the project manually, run `python3 scripts/generate-ios-project.py` and open
-`ios/FrameNova.xcodeproj`. Do not edit generated project metadata. Change the generator instead.
+To generate and open the project manually:
+
+```bash
+cd ios
+xcodegen generate
+open FrameNova.xcodeproj
+```
+
+Both build scripts run `xcodegen generate` automatically. Make `xcodegen` available on `PATH` before running
+them; they install no tools. Edit `ios/project.yml` to change targets, resources, build settings, or the shared
+scheme. The app and rendering-test targets support both iOS and the desktop destination. Project generation
+updates the version configuration automatically; it does not fetch dependencies or signing credentials.
 
 ## Layout and controls
 

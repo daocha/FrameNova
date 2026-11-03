@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Archive and export a signed release without uploading it.
 # Usage: DEVELOPMENT_TEAM=<team> scripts/build-ios-app-store.sh [--skip-tests] [--mac]
-# Requires full Xcode, Python 3, and an existing signing identity and provisioning profile.
+# Requires full Xcode, XcodeGen, Python 3, and an existing signing identity and provisioning profile.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 tests=1; mac=0
@@ -14,14 +14,16 @@ for arg in "$@"; do
     *) fail "Unknown option: $arg" ;;
   esac
 done
+command -v xcodegen >/dev/null || fail 'XcodeGen is required. Make xcodegen available on PATH; this script installs nothing.'
 xcodebuild -version >/dev/null 2>&1 || fail 'Full Xcode is required. Set DEVELOPER_DIR to its Contents/Developer directory.'
+command -v python3 >/dev/null || fail 'Python 3 is required.'
 [[ "${DEVELOPMENT_TEAM:-}" =~ ^[A-Z0-9]{10}$ ]] || fail 'Set DEVELOPMENT_TEAM to the signing team ID.'
 if [ "$tests" = 1 ]; then
   test_args=()
   if [ "$mac" = 1 ]; then test_args=(--mac); fi
   "$root/scripts/build-ios-debug.sh" "${test_args[@]}"
 fi
-python3 "$root/scripts/generate-ios-project.py"
+(cd "$root/ios" && xcodegen generate)
 platform=ios; destination='generic/platform=iOS'; method=app-store-connect
 if [ "$mac" = 1 ]; then platform=mac; destination='generic/platform=macOS,variant=Mac Catalyst'; fi
 output="$root/dist/FrameNova-$platform-$(date +%Y%m%d-%H%M%S)"

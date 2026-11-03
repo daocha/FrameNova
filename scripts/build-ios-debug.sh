@@ -2,7 +2,7 @@
 # Build FrameNova for a simulator, a device, or an Apple silicon desktop.
 # Usage: scripts/build-ios-debug.sh [--skip-tests] [--device | --mac] [--run]
 # Device builds require DEVELOPMENT_TEAM. SIMULATOR_ID selects a simulator.
-# Requires full Xcode and Python 3. Installs no tools.
+# Requires full Xcode, XcodeGen, and Python 3. Installs no tools.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 tests=1; platform=simulator; run=0
@@ -18,11 +18,12 @@ for arg in "$@"; do
   esac
 done
 [ "$(uname)" = Darwin ] || fail 'This build requires macOS.'
+command -v xcodegen >/dev/null || fail 'XcodeGen is required. Make xcodegen available on PATH; this script installs nothing.'
 xcodebuild -version >/dev/null 2>&1 || fail 'Full Xcode is required. Set DEVELOPER_DIR to its Contents/Developer directory.'
 command -v python3 >/dev/null || fail 'Python 3 is required.'
 [ "$platform" != device ] || [ "$run" = 0 ] || fail 'Install device builds using Xcode.'
 if [ "$tests" = 1 ]; then swift test --disable-xctest --package-path "$root/ios" --scratch-path "$root/ios/build/core-tests"; fi
-python3 "$root/scripts/generate-ios-project.py"
+(cd "$root/ios" && xcodegen generate)
 extra=()
 case "$platform" in
   device)
