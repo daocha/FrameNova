@@ -24,6 +24,8 @@ struct TimelineView: View {
     @ViewState<Double> private var trimDelta = 0
     @ViewState<Int64?> private var dropTime: Int64?
     @ViewState<String?> private var hoveredTrack: String?
+    @ViewState<Double> private var horizontalOffset = 0
+    @ViewState<CGPoint?> private var rulerHover = nil
 
     private var geometry: TimelineGeometry { display.geometry }
     private var headerWidth: Double { desktop ? 136 : 90 }
@@ -34,12 +36,13 @@ struct TimelineView: View {
         GeometryReader { viewport in
             let width = max(Double(viewport.size.width) - headerWidth, max(600, x(model.project.durationUs) + 180))
             ScrollView(.vertical) {
-                HStack(alignment: .top, spacing: 0) {
+                LazyVStack(spacing:5,pinnedViews:[.sectionHeaders]) {
+                  Section {
+                   HStack(alignment: .top, spacing: 0) {
                     headers
                     ScrollViewReader { reader in
                         ScrollView(.horizontal) {
                             VStack(alignment: .leading, spacing: 5) {
-                                ruler(width: width)
                                 ForEach(model.project.tracks) { track in trackRow(track, width: width) }
                                 if desktop {
                                     newTrackRow(.overlay, width: width)
@@ -47,7 +50,10 @@ struct TimelineView: View {
                                 }
                             }
                             .overlay(alignment: .topLeading) { playhead }
+                            .background(GeometryReader {proxy in Color.clear.preference(key:TimelineOffsetKey.self,value:-proxy.frame(in:.named("timeline.scrollViewport")).minX)})
                         }
+                        .coordinateSpace(name:"timeline.scrollViewport")
+                        .onPreferenceChange(TimelineOffsetKey.self) {horizontalOffset = $0}
                         .onChange(of: model.playhead) { _, time in
                             if model.playing { withAnimation(.linear(duration: 0.12)) { reader.scrollTo("playhead", anchor: .center) } }
                         }
@@ -56,6 +62,14 @@ struct TimelineView: View {
                             display.pointsPerSecond = clamp((initialScale ?? 70) * factor, 0.1, 600)
                         }.onEnded { _ in initialScale = nil })
                     }
+                   }
+                  } header: {
+                    HStack(spacing:0) {
+                        Text("Tracks").font(.caption.bold()).frame(width:headerWidth,height:28).background(Palette.surface)
+                        ruler(width:width).offset(x:-horizontalOffset)
+                            .frame(width:max(0,viewport.size.width-headerWidth),alignment:.leading).clipped()
+                    }.background(Palette.surface).zIndex(20)
+                  }
                 }
             }
         }
@@ -87,20 +101,13 @@ struct TimelineView: View {
 
     private var headers: some View {
         VStack(spacing: 5) {
-            HStack {
-                if desktop { Text("Tracks").font(.caption.bold()); Spacer() }
-                else {
-                    Button { display.zoom(1/1.3) } label: { Image(systemName: "minus.magnifyingglass") }
-                    Button { display.zoom(1.3) } label: { Image(systemName: "plus.magnifyingglass") }
-                }
-            }.frame(height: 28).padding(.horizontal, 8)
             ForEach(model.project.tracks) { track in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized).font(.caption2.bold())
                     HStack(spacing: desktop ? 16 : 8) {
                         trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: "Mute track")
                         trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: "Hide track")
-                        trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: "Lock track")
+                        trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: track.locked ? "Unlock track" : "Lock track")
                     }.font(.system(size: desktop ? 12 : 10))
                 }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(Palette.surface2)
             }
@@ -128,7 +135,12 @@ struct TimelineView: View {
                 }.foregroundStyle(Palette.dim).offset(x: Double(tick*step)*display.pointsPerSecond, y: 3)
             }
         }.frame(width: width, height: 28).contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { if desktop {keyboardFocus = true}; model.seek(geometry.time(at: $0.location.x)) })
+            .overlay(alignment:.topLeading) {
+                if let rulerHover {Image(systemName:"arrow.left.and.right").font(.system(size:13,weight:.bold)).padding(3).background(Palette.surface2,in:RoundedRectangle(cornerRadius:3)).offset(x:rulerHover.x+12,y:3).allowsHitTesting(false)}
+            }
+            .onContinuousHover {phase in switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}}
+            .help("Drag left or right to seek")
+            .gesture(DragGesture(minimumDistance: 0).onChanged { if desktop {keyboardFocus = true}; model.scrub(geometry.time(at: $0.location.x)) })
     }
 
     private var playhead: some View {
@@ -144,7 +156,7 @@ struct TimelineView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {point in
                     if desktop {keyboardFocus = true}
-                    model.selected = nil;model.selectedGap = nil;model.scrub(geometry.time(at:point.x))
+                    model.selected = nil;model.selectedGap = nil
                 }
             ForEach(track.clips) { clip in clipView(clip, track: track) }
             if hoveredTrack == track.id, let dropTime { dropMarker(dropTime) }
@@ -256,3 +268,5 @@ struct TimelineView: View {
             })
     }
 }
+
+private struct TimelineOffsetKey:PreferenceKey {static let defaultValue:Double = 0;static func reduce(value:inout Double,nextValue:()->Double) {value = nextValue()}}

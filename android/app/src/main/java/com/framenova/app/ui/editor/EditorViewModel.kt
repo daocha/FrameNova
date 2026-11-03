@@ -140,7 +140,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     // History
 
     fun commit(p: Project) {
-        if (p == project) return
+        if (p == project || !project.preservesLockedClips(p)) return
         undoStack.addLast(project)
         if (undoStack.size > 120) undoStack.removeFirst()
         redoStack.clear()
@@ -174,6 +174,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun beginGesture() { if (gestureStart == null) gestureStart = project }
 
     fun live(p: Project) {
+        if (!project.preservesLockedClips(p)) return
         project = p
         // During a layer gesture the editor draws quick frames; the player is rebuilt once the gesture ends.
         engine.update(p, playheadUs, redraw = !layerGesture)
@@ -469,6 +470,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         commit(p)
     }
 
+    fun toggleTrackLock(trackId: String) = commit(project.updateTrack(trackId) { it.copy(locked = !it.locked) })
     fun toggleTrackMute(trackId: String) = commit(project.updateTrack(trackId) { it.copy(muted = !it.muted) })
     fun toggleTrackHidden(trackId: String) = commit(project.updateTrack(trackId) { it.copy(hidden = !it.hidden) })
 

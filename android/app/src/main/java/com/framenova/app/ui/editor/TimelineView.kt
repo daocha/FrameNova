@@ -71,6 +71,7 @@ private sealed interface Hit {
     data class Handle(val clip: Clip, val track: Track, val start: Boolean) : Hit
     data class TransitionButton(val clipId: String) : Hit
     data class TrackHeader(val track: Track) : Hit
+    data class TrackLock(val track: Track) : Hit
     data class Gap(val timeUs: Long) : Hit
     data object Empty : Hit
 }
@@ -102,6 +103,7 @@ fun TimelineView(
     onTransitionTap: (clipId: String) -> Unit,
     onClipDoubleTap: (clipId: String) -> Unit,
     onTrackHeaderTap: (Track) -> Unit,
+    onTrackLockTap: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -123,7 +125,7 @@ fun TimelineView(
     val rulerH = with(density) { 24.dp.toPx() }
     val gap = with(density) { 5.dp.toPx() }
     val handleW = with(density) { 14.dp.toPx() }
-    val headerW = with(density) { 30.dp.toPx() }
+    val headerW = with(density) { 60.dp.toPx() }
     val snapPx = with(density) { 10.dp.toPx() }
     val corner = with(density) { 6.dp.toPx() }
     fun rowHeight(kind: TrackKind) = with(density) {
@@ -151,9 +153,9 @@ fun TimelineView(
             val p = latest.project
             val rs = rows(p)
             val row = rs.firstOrNull { pos.y >= it.top && pos.y < it.top + it.height }
-            if (row != null && pos.x < headerW && row.track.kind != TrackKind.TEXT) return Hit.TrackHeader(row.track)
+            if (row != null && pos.x < headerW) return if (pos.x >= headerW / 2) Hit.TrackLock(row.track) else Hit.TrackHeader(row.track)
             // The selected clip's trim handles come first, so they can always be grabbed.
-            if (row != null) row.track.clips.firstOrNull { it.id == latest.selected }?.let { clip ->
+            if (row != null && !row.track.locked) row.track.clips.firstOrNull { it.id == latest.selected }?.let { clip ->
                 val x0 = xOf(clip.startUs, latest.playhead, latest.pps)
                 val x1 = xOf(clip.endUs, latest.playhead, latest.pps)
                 if (pos.x in (x0 - handleW)..(x0 + handleW * 0.4f)) return Hit.Handle(clip, row.track, true)
@@ -260,7 +262,7 @@ fun TimelineView(
                         if (hit is Hit.Handle) { mode = 3; trim = TrimState(hit.clip, hit.start, 0f) }
                         while (true) {
                             val remaining = viewConfig.longPressTimeoutMillis - (System.currentTimeMillis() - downAt)
-                            val event: PointerEvent? = if (mode == 0 && hit is Hit.Body) withTimeoutOrNull(max(1L, remaining)) { awaitPointerEvent() } else awaitPointerEvent()
+                            val event: PointerEvent? = if (mode == 0 && hit is Hit.Body && !hit.track.locked) withTimeoutOrNull(max(1L, remaining)) { awaitPointerEvent() } else awaitPointerEvent()
                             if (event == null) {
                                 // Long press without movement: pick the clip up.
                                 mode = 2
@@ -315,6 +317,7 @@ fun TimelineView(
                                 }
                                 is Hit.Handle -> onSelect(hit.clip.id)
                                 is Hit.TrackHeader -> onTrackHeaderTap(hit.track)
+                                is Hit.TrackLock -> onTrackLockTap(hit.track)
                                 is Hit.Gap -> onGapTap(hit.timeUs)
                                 Hit.Empty -> { onSelect(null); onGapTap(null) }
                             }
@@ -383,7 +386,7 @@ fun TimelineView(
                         drawClip(p, row, clip, x0, x1, corner, media, measurer, clip.id == selectedId, handleW, alpha = if (row.track.hidden) 0.35f else 1f)
                     }
                     if (row.track.kind == TrackKind.MAIN) drawTransitionButtons(row, transitionPoints(row.track, selectedId), ph, pps, centerX, handleW)
-                    if (row.track.kind != TrackKind.TEXT) drawTrackHeader(row, headerW, measurer)
+                    drawTrackHeader(row, headerW, measurer)
                 }
             }
             drag?.let { d ->
@@ -561,5 +564,6 @@ private fun DrawScope.drawTrackHeader(row: Row, headerW: Float, measurer: androi
         t.kind == TrackKind.AUDIO || t.kind == TrackKind.MAIN -> if (t.muted) "🔇" else "🔊"
         else -> if (t.hidden) "🚫" else "👁"
     }
-    drawText(measurer, icon, Offset(5f, row.top + row.height / 2 - 18f), TextStyle(fontSize = 13.sp))
+    drawText(measurer, if (t.kind == TrackKind.TEXT) "T" else icon, Offset(5.dp.toPx(), row.top + row.height / 2 - 9.dp.toPx()), TextStyle(fontSize = 13.sp))
+    drawText(measurer, if (t.locked) "🔒" else "🔓", Offset(35.dp.toPx(), row.top + row.height / 2 - 9.dp.toPx()), TextStyle(fontSize = 13.sp))
 }

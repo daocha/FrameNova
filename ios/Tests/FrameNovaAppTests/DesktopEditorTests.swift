@@ -32,7 +32,12 @@ import Foundation
         #expect(!model.canEditSelection)
         model.split(); model.duplicateSelected(); model.delete(); model.trimToPlayhead(start: true)
         #expect(model.project == project)
+        model.change {$0.tracks[0].clips.removeAll()}
+        #expect(model.project == project)
         #expect(!model.canUndo)
+        model.change {$0.tracks[0].locked = false}
+        model.delete()
+        #expect(model.project.tracks[0].clips.isEmpty)
     }
 
     @Test func frameSteppingClampsToProjectBounds() {

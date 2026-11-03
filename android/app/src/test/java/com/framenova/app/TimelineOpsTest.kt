@@ -16,6 +16,14 @@ class TimelineOpsTest {
 
     private fun base() = Project("id", "Test", 0, 0).addToMainAt(listOf(video, photo, video2), 0)
 
+    @Test fun lockedTrackRejectsClipEditsButAllowsUnlockAndMute() {
+        val p = base().let { it.copy(tracks = it.tracks.map { t -> t.copy(locked = true) }) }
+        assertTrue(!p.preservesLockedClips(p.copy(tracks = emptyList())))
+        assertTrue(!p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(clips = emptyList()) })))
+        assertTrue(p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(locked = false) })))
+        assertTrue(p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(muted = true) })))
+    }
+
     @Test fun mainTrackIsLaidEndToEnd() {
         val p = base()
         val clips = p.mainTrack.clips

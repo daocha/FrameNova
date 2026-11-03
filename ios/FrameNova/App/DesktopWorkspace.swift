@@ -47,10 +47,6 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                             Text("\(model.project.canvas.size.width) × \(model.project.canvas.size.height)").font(.caption2.monospacedDigit()).foregroundStyle(Palette.dim)
                         }.padding(.horizontal, 16).padding(.top, 10)
                         preview().frame(maxWidth: .infinity, maxHeight: .infinity)
-                        Slider(value:Binding(get:{Double(model.playhead)},set:{model.scrub(Int64($0))}),in:0...Double(max(1,model.project.durationUs)),onEditingChanged:{active in if active {model.scrub(model.playhead)}})
-                            .disabled(model.project.durationUs == 0).padding(.horizontal,16).padding(.top,8)
-                            .accessibilityLabel("Playback position").accessibilityValue(formatTime(model.playhead))
-                            .accessibilityIdentifier("desktop.playbackProgress")
                         transport()
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     if showInspector {

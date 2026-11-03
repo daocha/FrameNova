@@ -45,6 +45,7 @@ import SwiftUI
     func change(_ body:(inout Project)->Void) {
         let old = project; body(&project)
         guard old != project else { return }
+        guard old.tracks.filter(\.locked).allSatisfy({track in project.tracks.first(where:{$0.id == track.id})?.clips == track.clips}) else {project = old;return}
         if old.assets != project.assets {TimelineThumbnails.shared.prepare(project.assets)}
         if gestureStart == nil {undoStack.append(old); if undoStack.count > 100 {undoStack.removeFirst()}}; redoStack = []
         reconcileSelection()

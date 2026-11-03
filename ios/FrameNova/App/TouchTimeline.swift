@@ -27,7 +27,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     var onText:((String)->Void)?
     var onTrack:((Track)->Void)?
     private struct Row {var track:Track;var rect:CGRect}
-    private enum Hit {case clip(Clip,Track),handle(Clip,Bool),transition(String),header(Track),gap(Int64),empty}
+    private enum Hit {case clip(Clip,Track),handle(Clip,Bool),transition(String),header(Track),lock(Track),gap(Int64),empty}
     private enum Mode {case scrub,trim(Clip,Bool),move(Clip,Track)}
     private var mode:Mode?
     private var verticalOffset:CGFloat = 0
@@ -87,7 +87,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     private func hit(_ point:CGPoint) -> Hit {
         guard point.y>=24,let model else {return .empty}
         guard let row = rows.first(where:{$0.rect.contains(point)}) else {return .empty}
-        if point.x<30 && row.track.kind != .text {return .header(row.track)}
+        if point.x<60 {return point.x>=30 ? .lock(row.track):.header(row.track)}
         if let clip = row.track.clips.first(where:{$0.id == model.selected}),!row.track.locked {
             if abs(point.x-x(clip.startUs))<16 {return .handle(clip,true)}
             if abs(point.x-x(clip.endUs))<16 {return .handle(clip,false)}
@@ -105,7 +105,8 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             if clip.text != nil,lastTap?.0 == clip.id,now-(lastTap?.1 ?? 0)<0.32 {model.selected = clip.id;onText?(clip.id);lastTap = nil}
             else {model.selectedGap = nil;model.selected = model.selected == clip.id ? nil:clip.id;lastTap = (clip.id,now)}
         case .handle(let clip,_):model.selected = clip.id
-        case .header(let track):onTrack?(track)
+        case .header(let track):if track.kind != .text {onTrack?(track)}
+        case .lock(let track):model.change {p in if let i = p.tracks.firstIndex(where:{$0.id == track.id}) {p.tracks[i].locked.toggle()}}
         case .transition(let id):model.selected = id;onTransition?(id)
         case .gap(let time):model.selected = nil;model.selectedGap = time
         case .empty:model.selected = nil;model.selectedGap = nil
@@ -229,10 +230,11 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                 (clip.transitionIn == nil ? UIColor.white:UIColor(argb:0xFF8B6CFF)).setFill();UIBezierPath(roundedRect:box,cornerRadius:4).fill()
                 text("=",in:box,color:clip.transitionIn == nil ? .black:.white,size:12)
             }
-            if row.track.kind != .text {
-                UIColor(argb:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:30,height:row.rect.height))
-                let icon = row.track.locked ? "lock.fill" : row.track.hidden ? "eye.slash" : row.track.muted ? "speaker.slash" : row.track.kind == .audio ? "waveform":"film"
+            do {
+                UIColor(argb:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:60,height:row.rect.height))
+                let icon = row.track.kind == .text ? "textformat" : row.track.hidden ? "eye.slash" : row.track.muted ? "speaker.slash" : row.track.kind == .audio ? "waveform":"film"
                 UIImage(systemName:icon)?.withTintColor(.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:7,y:row.rect.midY-8,width:16,height:16))
+                UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? .systemYellow:.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:row.rect.midY-8,width:16,height:16))
             }
         }
         if case .move(let clip,let track) = mode,let row = rows.first(where:{$0.track.id == track.id}) {

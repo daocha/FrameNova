@@ -235,7 +235,8 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 onMove = vm::move, onTrim = vm::trim,
                 onTransitionTap = { id -> vm.transitionTargetId = id; vm.selectedId = null; vm.panel = Panel.TRANSITION },
                 onClipDoubleTap = { id -> vm.openTextEditor(id) },
-                onTrackHeaderTap = { t -> if (t.kind == TrackKind.OVERLAY) vm.toggleTrackHidden(t.id) else vm.toggleTrackMute(t.id) },
+                onTrackLockTap = { t -> vm.toggleTrackLock(t.id) },
+                onTrackHeaderTap = { t -> if (t.kind == TrackKind.TEXT) Unit else if (t.kind == TrackKind.OVERLAY) vm.toggleTrackHidden(t.id) else vm.toggleTrackMute(t.id) },
                 modifier = m,
             )
         }

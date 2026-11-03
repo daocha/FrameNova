@@ -13,6 +13,8 @@ single-surface timeline rather than nested scroll views competing for the same t
 | Timeline visuals | Source-time video/photo filmstrips on touch and desktop timelines; persistent image/peak caches; clip labels, speed/mute/effect badges, keyframes and fade lines | Real-frame, disk reuse and corrupt-cache recovery app tests; device visual checks pending |
 | Gaps and track headers | Tap a gap to select/delete it; header taps mute main/audio tracks or hide layers | Gap/placement tests |
 | Preview | Gray surround, 12-point margin and white canvas edge; layer/corner hit testing, drag/pinch/rotate, corner resize, center/right-angle snapping, orange off-canvas warning and text double tap | Canvas/rotation geometry and live-edit tests; device gestures pending |
+| Desktop seeking | Pinned ruler above the layers; horizontal-arrow hover cue; clip and empty-track clicks do not seek | Source checks; pointer/scroll verification pending |
+| Track locks | Separate header buttons on every track; locked tracks remain selectable and reject clip edits, moves and trims | Lock regression tests; device interaction checks pending |
 | Desktop actions | Same contextual tools as touch editing, beside Undo/Redo and Snap in one timeline row; horizontal overflow on smaller windows | Shared action implementation; window sizing/pointer checks pending |
 | Panels | Inline portrait panels; landscape side panels; text-focus layout; fullscreen preview | Layout UI test; rotation checks pending |
 | Layout | Visual diagrams for every preset, active clip count, spacing, cropped cell placement | Shared layout math; device comparison pending |
