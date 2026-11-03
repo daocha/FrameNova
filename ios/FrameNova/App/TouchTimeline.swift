@@ -4,6 +4,8 @@ import UIKit
 struct TouchTimeline: UIViewRepresentable {
     @ObservedObject var model:EditorModel
     @ObservedObject var display:TimelineDisplay
+    @ObservedObject private var thumbnails = TimelineThumbnails.shared
+    @ObservedObject private var waveforms = AudioWaveforms.shared
     var onTransition:(String)->Void
     var onText:(String)->Void
     var onTrack:(Track)->Void
@@ -273,7 +275,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             while box.minX+CGFloat(tile)*step<end {
                 let tileX = box.minX+CGFloat(tile)*step
                 let at = clip.sourceTime(at:clip.startUs+Int64(CGFloat(tile)*step/(display?.pointsPerSecond ?? 70)*1_000_000))
-                if let image = TimelineThumbnails.shared.image(asset,at:at,ready:{[weak self] in self?.setNeedsDisplay()}) {
+                if let image = TimelineThumbnails.shared.image(asset,at:at) {
                     let target = CGRect(x:tileX,y:box.minY,width:step,height:box.height)
                     let factor = max(target.width/image.size.width,target.height/image.size.height)
                     let size = CGSize(width:image.size.width*factor,height:image.size.height*factor)
@@ -288,7 +290,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             UIColor(argb:0xFF2FD1C1).setStroke();context.setLineWidth(2)
             while position<min(box.maxX,bounds.width) {
                 let timeline = clip.startUs+Int64((position-box.minX)/(display?.pointsPerSecond ?? 70)*1_000_000)
-                let index = Int(clip.sourceTime(at:timeline)/50_000)
+                let index = Int(clip.sourceTime(at:timeline)/AudioWaveforms.stepUs)
                 let value = index<peaks.count ? peaks[index]:0
                 let amplitude = CGFloat(clamp(Double(value)*min(clip.volume,1.5),0.02,1))*box.height*0.42
                 context.move(to:CGPoint(x:position,y:box.midY-amplitude));context.addLine(to:CGPoint(x:position,y:box.midY+amplitude));position += 3

@@ -37,6 +37,7 @@ import SwiftUI
         endObserver = NotificationCenter.default.addObserver(forName:.AVPlayerItemDidPlayToEndTime,object:nil,queue:.main) { [weak self] notification in
             Task { @MainActor in guard let self, notification.object as? AVPlayerItem === self.player.currentItem else { return }; self.playing = false }
         }
+        TimelineThumbnails.shared.prepare(project.assets)
         schedulePreview()
     }
     var clip: Clip? { project.clip(selected) }
@@ -44,6 +45,7 @@ import SwiftUI
     func change(_ body:(inout Project)->Void) {
         let old = project; body(&project)
         guard old != project else { return }
+        if old.assets != project.assets {TimelineThumbnails.shared.prepare(project.assets)}
         if gestureStart == nil {undoStack.append(old); if undoStack.count > 100 {undoStack.removeFirst()}}; redoStack = []
         reconcileSelection()
         revision += 1
@@ -112,7 +114,15 @@ import SwiftUI
         if playing { player.pause(); playing = false }
         else { if playhead >= project.durationUs { seek(0) }; player.play(); playing = true }
     }
-    func close() { if recording {toggleRecording()}; rebuild?.cancel(); player.pause(); persist(); if let observer { player.removeTimeObserver(observer); self.observer = nil }; if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }; recorder?.stop() }
+    func close() {
+        if recording {toggleRecording()}
+        rebuild?.cancel();player.pause();persist()
+        let snapshot = project
+        Task {[store] in _ = await store.cover(snapshot)}
+        if let observer {player.removeTimeObserver(observer);self.observer = nil}
+        if let endObserver {NotificationCenter.default.removeObserver(endObserver);self.endObserver = nil}
+        recorder?.stop()
+    }
     func split() { guard let id = selected ?? project.tracks[project.mainIndex].clips.first(where: { $0.contains(playhead) })?.id else { return }; guard project.track(id)?.locked != true else {return}; change { selected = $0.split(id,at:playhead) ?? id } }
     func delete() { guard let id = selected, project.track(id)?.locked != true else { return }; change { $0.delete(id) }; selected = nil }
     func addText(_ role:String,content:String? = nil) {

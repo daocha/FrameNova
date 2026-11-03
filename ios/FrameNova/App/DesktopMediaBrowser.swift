@@ -101,23 +101,12 @@ struct MediaThumbnail: View {
     let asset: MediaAsset
     @ViewState<UIImage?> private var image: UIImage?
     var body: some View {
-        ZStack {
-            Palette.surface2
-            if let image { Image(uiImage: image).resizable().scaledToFill() }
-            else { Image(systemName: asset.type == .audio ? "waveform" : "film").foregroundStyle(Palette.dim).font(.title2) }
-        }.clipped()
-            .task(id: asset.id) {
-                let url = ProjectStore.mediaURL(asset.path)
-                if asset.type == .image {
-                    if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                       let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 320, kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary) {
-                        image = UIImage(cgImage: thumb)
-                    }
-                } else if asset.type == .video {
-                    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
-                    generator.appliesPreferredTrackTransform = true; generator.maximumSize = CGSize(width: 320, height: 220)
-                    if let result = try? await generator.image(at: .zero), !Task.isCancelled { image = UIImage(cgImage: result.image) }
-                }
-            }
+        GeometryReader {geometry in
+            ZStack {
+                Palette.surface2
+                if let image {Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height)}
+                else {Image(systemName:asset.type == .audio ? "waveform":"film").foregroundStyle(Palette.dim).font(.title2)}
+            }.frame(width:geometry.size.width,height:geometry.size.height).clipped()
+        }.task(id:MediaThumbnailStore.sourceKey(asset)) {image = await MediaThumbnailStore.shared.image(asset,at:0,size:.cover)}
     }
 }

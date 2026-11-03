@@ -82,8 +82,11 @@ import CoreImage
         defer {try? FileManager.default.removeItem(at:url)}
         let asset = MediaAsset(path:path,type:.video,name:"Video thumbnail",durationUs:10_000_000,width:160,height:90)
         let cache = TimelineThumbnails.shared
-        let image:UIImage? = await withCheckedContinuation {continuation in
-            if let image = cache.image(asset,at:1_000_000,ready:{continuation.resume(returning:cache.image(asset,at:1_000_000,ready:{}))}) {continuation.resume(returning:image)}
+        var image = cache.image(asset,at:1_000_000)
+        let deadline = Date().addingTimeInterval(10)
+        while image == nil && Date()<deadline {
+            try await Task.sleep(nanoseconds:20_000_000)
+            image = cache.image(asset,at:1_000_000)
         }
         let frame = try #require(image)
         #expect(frame.size.width>0 && frame.size.width<=180)
@@ -102,12 +105,89 @@ import CoreImage
         tag("RIFF");number(UInt32(36+count*2));tag("WAVEfmt ");number(UInt32(16));number(UInt16(1));number(UInt16(1));number(UInt32(sampleRate));number(UInt32(sampleRate*2));number(UInt16(2));number(UInt16(16));tag("data");number(UInt32(count*2))
         for index in 0..<count {number(Int16(sin(Double(index)*2 * .pi*440/Double(sampleRate))*16_000))}
         try data.write(to:url);defer {try? FileManager.default.removeItem(at:url)}
-        let asset = MediaAsset(path:path,type:.audio,name:"Waveform",durationUs:1_000_000,hasAudio:true),cache = AudioWaveforms.shared
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        defer {try? FileManager.default.removeItem(at:folder)}
+        let asset = MediaAsset(path:path,type:.audio,name:"Waveform",durationUs:1_000_000,hasAudio:true),cache = AudioWaveforms(directory:folder)
         let result:[Float]? = await withCheckedContinuation {continuation in
             if let value = cache.peaks(asset,ready:{continuation.resume(returning:cache.peaks(asset,ready:{}))}) {continuation.resume(returning:value)}
         }
         let peaks = try #require(result)
         #expect(peaks.count>=20)
         #expect((peaks.max() ?? 0) > 0.4 && (peaks.max() ?? 1) < 0.6)
+        try FileManager.default.removeItem(at:url)
+        let reopened = AudioWaveforms(directory:folder)
+        let restored:[Float]? = await withCheckedContinuation {continuation in
+            if let value = reopened.peaks(asset,ready:{continuation.resume(returning:reopened.peaks(asset,ready:{}))}) {continuation.resume(returning:value)}
+        }
+        #expect(restored == peaks)
+    }
+}
+
+private actor DecodeCalls {
+    private(set) var count = 0
+    func increment() {count += 1}
+}
+
+@Suite(.serialized) @MainActor struct PersistentThumbnailTests {
+    private func image()->UIImage {UIGraphicsImageRenderer(size:CGSize(width:32,height:18)).image {context in UIColor.red.setFill();context.fill(CGRect(x:0,y:0,width:32,height:18))}}
+    @Test func concurrentRequestsDecodeOnceAndReopeningReadsDisk() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),calls = DecodeCalls(),frame = image()
+        defer {try? FileManager.default.removeItem(at:folder)}
+        let asset = MediaAsset(path:"source.mov",type:.video,name:"Cache test",durationUs:10_000_000)
+        let cache = MediaThumbnailStore(directory:folder,decoder:{_,_,_ in await calls.increment();try? await Task.sleep(nanoseconds:20_000_000);return frame})
+        async let first = cache.image(asset,at:1_000_000,size:.timeline)
+        async let second = cache.image(asset,at:1_000_000,size:.timeline)
+        let images = await (first,second)
+        #expect(images.0 != nil && images.1 != nil);#expect(await calls.count == 1)
+        let reopened = MediaThumbnailStore(directory:folder,decoder:{_,_,_ in await calls.increment();return nil})
+        let restored = await reopened.image(asset,at:1_000_000,size:.timeline)
+        #expect(restored?.cgImage?.width == frame.cgImage?.width)
+        #expect(restored?.cgImage?.height == frame.cgImage?.height)
+        #expect(await calls.count == 1)
+    }
+    @Test func corruptFilesRecoverAndChangedSourcesInvalidateCache() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),calls = DecodeCalls(),frame = image()
+        defer {try? FileManager.default.removeItem(at:folder)}
+        var asset = MediaAsset(path:"first.mov",type:.video,name:"Cache recovery",durationUs:10_000_000)
+        let original = MediaThumbnailStore(directory:folder,decoder:{_,_,_ in return frame})
+        #expect(await original.image(asset,at:0,size:.cover) != nil)
+        let file = try #require(try FileManager.default.contentsOfDirectory(at:folder,includingPropertiesForKeys:nil).first)
+        try Data([0,1,2]).write(to:file)
+        let reopened = MediaThumbnailStore(directory:folder,decoder:{_,_,_ in await calls.increment();return frame})
+        #expect(await reopened.image(asset,at:0,size:.cover) != nil)
+        asset.path = "replacement.mov"
+        #expect(await reopened.image(asset,at:0,size:.cover) != nil)
+        #expect(await calls.count == 2)
+    }
+    @Test func projectCoverSurvivesRelaunchWithoutSourceAndIsDeletedWithProject() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),path = newID()+".png",source = ProjectStore.mediaURL(path)
+        try FileManager.default.createDirectory(at:source.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try #require(image().pngData()).write(to:source)
+        defer {try? FileManager.default.removeItem(at:folder);try? FileManager.default.removeItem(at:source)}
+        let store = ProjectStore(directory:folder)
+        let asset = MediaAsset(path:path,type:.image,name:"Persisted cover",durationUs:3_000_000,width:32,height:18)
+        var project = Project(name:"Cover");project.add([asset],kind:.main,at:0)
+        try store.save(project)
+        #expect(await store.cover(project) != nil)
+        let file = store.coverURL(project)
+        #expect(FileManager.default.fileExists(atPath:file.path))
+        try FileManager.default.removeItem(at:source)
+        let reopened = ProjectStore(directory:folder)
+        #expect(await reopened.cover(project) != nil)
+        try reopened.delete(project)
+        #expect(!FileManager.default.fileExists(atPath:file.path))
+    }
+    @Test func coverUsesTrimmedMainClipInsteadOfFirstImportedAsset() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),store = ProjectStore(directory:folder)
+        defer {try? FileManager.default.removeItem(at:folder)}
+        let unused = MediaAsset(path:"unused.mov",type:.video,name:"Unused",durationUs:10_000_000)
+        let used = MediaAsset(path:"used.mov",type:.video,name:"Used",durationUs:10_000_000)
+        var project = Project(name:"Cover source");project.assets = [unused,used]
+        project.tracks[0].clips = [Clip(assetID:used.id,srcInUs:3_000_000,srcOutUs:8_000_000)]
+        #expect(store.coverSource(project)?.asset.id == used.id)
+        #expect(store.coverSource(project)?.time == 3_000_000)
+        let firstKey = store.coverKey(project)
+        project.tracks[0].clips[0].srcInUs = 4_000_000
+        #expect(store.coverKey(project) != firstKey)
     }
 }

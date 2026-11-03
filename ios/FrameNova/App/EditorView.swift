@@ -14,6 +14,7 @@ struct EditorView: View {
     @Environment(\.dismiss) var dismiss
     @ViewState<String> private var panel = "Ratio"
     @ViewState<Bool> private var showInspector = false
+    @ViewState<Int> private var inspectorRequest = 0
     @ViewState<Bool> private var fullscreen = false
     @ViewState<Bool> private var export = false
     @ViewState<Bool> private var picker = false
@@ -31,7 +32,7 @@ struct EditorView: View {
             DesktopWorkspace(model:model, timeline:timelineDisplay, panel:$panel,
                              onImport:importLibrary, onReplace:replaceMedia, onSubtitles:importSubtitles, onExport:{export = true}, onClose:{dismiss()},
                              onRename:{name = model.project.name; rename = true},
-                             preview:{preview}, transport:{transport})
+                             inspectorRequest:inspectorRequest, preview:{preview}, transport:{transport}, tools:{toolButtons})
             #else
             let landscape = geo.size.width>geo.size.height
             let textFocus = showInspector && ["Text","Font","Style","Animation","Stickers"].contains(panel)
@@ -89,35 +90,43 @@ struct EditorView: View {
         model.change {p in if let index = p.tracks.firstIndex(where:{$0.id == track.id}) {p.tracks[index][keyPath:key].toggle()}}
     }
     private var topBar: some View {
-        HStack(spacing:12) {
+        HStack(spacing:8) {
             Button {dismiss()} label:{Image(systemName:"chevron.left").padding(8)}.accessibilityLabel("Close editor")
-            Button {name = model.project.name; rename = true} label: {
-                VStack(alignment:.leading,spacing:3) {Text(model.project.name).font(.headline).lineLimit(1).foregroundStyle(.white); Text("\(model.project.canvas.aspect.rawValue) · \(model.project.canvas.tier.label) · \(model.project.canvas.fps) fps").font(.caption2)}
-            }.buttonStyle(.plain)
+            ProjectHeading(project:model.project,expanded:showInspector && panel == "Ratio",onRename:{name = model.project.name;rename = true},onFormat:{
+                let close = showInspector && panel == "Ratio"
+                model.selected = nil;model.selectedGap = nil;panel = "Ratio";showInspector = !close
+            })
             Spacer()
             Button {model.undo()} label:{Image(systemName:"arrow.uturn.backward")}.disabled(!model.canUndo).accessibilityLabel("Undo")
             Button {model.redo()} label:{Image(systemName:"arrow.uturn.forward")}.disabled(!model.canRedo).accessibilityLabel("Redo")
-            Button {showInspector.toggle()} label:{Image(systemName:"sidebar.right")}.accessibilityLabel("Inspector")
             Button("Export") {export = true}.buttonStyle(.borderedProminent).disabled(model.project.durationUs == 0)
-        }.padding(.horizontal,12).padding(.vertical,8).background(Palette.surface)
+        }.padding(.horizontal,8).frame(height:52).background(Palette.surface)
     }
-    private var preview: some View {PreviewPane(model:model)}
+    private var preview: some View {PreviewPane(model:model,onText:{_ in open("Text")})}
     private var transport: some View {
         HStack(spacing:18) {
             Text("\(formatTime(model.playhead)) / \(formatTime(model.project.durationUs))").font(.caption.monospacedDigit()).foregroundStyle(Palette.dim)
             Spacer()
             Button {model.seek(0)} label:{Image(systemName:"backward.end.fill")}.accessibilityLabel("Start")
-            Button {model.play()} label:{Image(systemName:model.playing ? "pause.fill":"play.fill").font(.title3)}.accessibilityLabel(model.playing ? "Pause":"Play")
+            Button {model.play()} label:{Image(systemName:model.playing ? "pause.fill":"play.fill").font(.title3)}.disabled(model.project.durationUs == 0).accessibilityLabel(model.playing ? "Pause":"Play")
             Button {model.seek(model.project.durationUs)} label:{Image(systemName:"forward.end.fill")}.accessibilityLabel("End")
             Spacer()
             Button {fullscreen.toggle()} label:{Image(systemName:fullscreen ? "arrow.down.right.and.arrow.up.left":"arrow.up.left.and.arrow.down.right")}.accessibilityLabel(fullscreen ? "Exit fullscreen":"Fullscreen")
+            #if targetEnvironment(macCatalyst)
             Button {model.selected = nil;model.selectedGap = nil; showInspector = false} label:{Image(systemName:"xmark")}.accessibilityLabel("Deselect")
+            #endif
         }.padding(.horizontal,16).padding(.vertical,10)
     }
     private func tool(_ title:String,_ icon:String,action:@escaping ()->Void) -> some View {
-        Button(action:action) {VStack(spacing:6) {Image(systemName:icon).font(.system(size:20)); Text(title).font(.system(size:10)).lineLimit(1)}.frame(minWidth:56,minHeight:54)}.buttonStyle(.plain).help(title).accessibilityLabel(title)
+        Button(action:action) {
+            #if targetEnvironment(macCatalyst)
+            Label(title,systemImage:icon).font(.system(size:11)).fixedSize().padding(.horizontal,6).frame(minHeight:30)
+            #else
+            VStack(spacing:6) {Image(systemName:icon).font(.system(size:20)); Text(title).font(.system(size:10)).lineLimit(1)}.frame(minWidth:56,minHeight:54)
+            #endif
+        }.buttonStyle(.plain).help(title).accessibilityLabel(title)
     }
-    private func open(_ title:String) {panel = title; showInspector = true}
+    private func open(_ title:String) {panel = title;showInspector = true;inspectorRequest += 1}
     private func replaceMedia() {
         libraryOnly = false; subtitleFiles = false; replace = true
         importKind = model.selected.flatMap {model.project.track($0)?.kind} == .audio ? .audio:.main
@@ -174,7 +183,6 @@ struct EditorView: View {
                     tool("Stickers","face.smiling") {open("Stickers")}; tool("Audio","music.note") {pick(.audio)}
                     tool("Voiceover","mic") {open("Voiceover")}; tool("Layout","square.grid.2x2") {open("Layout")}; tool("Ratio","aspectratio") {open("Ratio")}
                     tool("Split","scissors") {model.split()}; tool("Freeze","snowflake") {model.freeze()}
-                    tool("Delete gap","trash") {model.change {$0.deleteGap(at:model.playhead)}}
                 }
     }
     private var keyboardCommands: some View {
@@ -186,5 +194,25 @@ struct EditorView: View {
             Button("Delete") {model.delete()}.keyboardShortcut(.delete,modifiers:[])
             Button("Export") {export = true}.keyboardShortcut("e",modifiers:.command)
         }.hidden()
+    }
+}
+
+struct ProjectHeading:View {
+    let project:Project
+    let expanded:Bool
+    let onRename:()->Void
+    let onFormat:()->Void
+    var body:some View {
+        VStack(alignment:.leading,spacing:1) {
+            Button(action:onRename) {Text(project.name).font(.headline).lineLimit(1).foregroundStyle(.white)}
+                .accessibilityLabel("Rename project").accessibilityIdentifier("editor.projectName")
+            Button(action:onFormat) {
+                HStack(spacing:4) {
+                    Text(project.canvas.formatSummary).font(.system(size:11)).lineLimit(1).minimumScaleFactor(0.8)
+                    Image(systemName:"arrowtriangle.down.fill").font(.system(size:8)).rotationEffect(.degrees(expanded ? 180:0))
+                }.foregroundStyle(Palette.accent).padding(.vertical,3).contentShape(Rectangle())
+            }.accessibilityLabel(expanded ? "Hide project format":"Show project format")
+                .accessibilityValue(project.canvas.formatSummary).accessibilityIdentifier("editor.projectFormat")
+        }.buttonStyle(.plain)
     }
 }

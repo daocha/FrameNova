@@ -52,8 +52,9 @@ struct HomeView: View {
     @ViewState<String> private var name = ""
     var body: some View {
         NavigationStack {
+            GeometryReader { viewport in
             ScrollView {
-                LazyVGrid(columns:[GridItem(.adaptive(minimum:170,maximum:320),spacing:12)],spacing:12) {
+                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:12),count:EditorPresentation.projectColumns(width:viewport.size.width)),spacing:12) {
                     Section {
                         ForEach(store.projects) { project in
                             VStack(spacing:0) {
@@ -82,9 +83,10 @@ struct HomeView: View {
                         }.padding(.bottom,12)
                     }
                 }.padding(16).frame(maxWidth:1400).frame(maxWidth:.infinity)
-            }.background(Palette.bg).navigationTitle("FrameNova")
+            }.background(Palette.bg).navigationTitle("FrameNova").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape") }.accessibilityLabel("Settings") } }
                 .navigationDestination(isPresented:Binding(get:{selected != nil},set:{if !$0 {selected = nil}})) { if let project = selected { EditorView(project:project,store:store) } }
+        }
         }
         .sheet(isPresented:$picker) { MediaPicker { media,error in picker = false; receive(media); if let error { store.error = error } } }
         .fileImporter(isPresented:$files,allowedContentTypes:[.movie,.image],allowsMultipleSelection:true) { result in
@@ -97,7 +99,7 @@ struct HomeView: View {
         .sheet(isPresented:Binding(get:{ !pending.isEmpty },set:{ if !$0 { pending = [] } })) {
             NavigationStack { CanvasControls(canvas:$canvas).navigationTitle("New project").toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("Cancel") { pending = [] } }
-                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:"Project "+Date().formatted(date:.abbreviated,time:.omitted),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p); pending = []; selected = p } catch { store.error = error.localizedDescription } } }
+                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:"Project "+Date().formatted(date:.abbreviated,time:.omitted),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
             } }.presentationDetents([.medium,.large])
         }
         .sheet(isPresented:$settings) { SettingsView() }
@@ -118,15 +120,17 @@ struct HomeView: View {
     }
 }
 struct ProjectCover: View {
-    let project: Project
-    @ViewState<UIImage?> private var image: UIImage?
-    var body: some View {
-        ZStack { Palette.surface2; if let image { Image(uiImage:image).resizable().scaledToFill() } else { Image(systemName:"film").foregroundStyle(Palette.dim) } }.clipped()
-            .task(id:project.modifiedAt) {
-                guard let a = project.assets.first(where:{$0.type != .audio}) else { return }
-                if a.type == .image { image = UIImage(contentsOfFile:ProjectStore.mediaURL(a.path).path) }
-                else { let g = AVAssetImageGenerator(asset:AVURLAsset(url:ProjectStore.mediaURL(a.path))); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width:600,height:400); if let result = try? await g.image(at:.zero) { image = UIImage(cgImage:result.image) } }
-            }
+    let project:Project
+    @EnvironmentObject private var store:ProjectStore
+    @ViewState<UIImage?> private var image:UIImage?
+    var body:some View {
+        GeometryReader {geometry in
+            ZStack {
+                Palette.surface2
+                if let image {Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height)}
+                else {Image(systemName:"film").foregroundStyle(Palette.dim)}
+            }.frame(width:geometry.size.width,height:geometry.size.height).clipped()
+        }.task(id:store.coverKey(project)) {image = await store.cover(project)}
     }
 }
 struct SettingsView: View {

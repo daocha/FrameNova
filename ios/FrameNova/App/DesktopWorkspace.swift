@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct DesktopWorkspace<Preview: View, Transport: View>: View {
+struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @ObservedObject var model: EditorModel
     @ObservedObject var timeline: TimelineDisplay
     @Binding var panel: String
@@ -10,8 +10,10 @@ struct DesktopWorkspace<Preview: View, Transport: View>: View {
     var onExport: () -> Void
     var onClose: () -> Void
     var onRename: () -> Void
+    var inspectorRequest:Int
     @ViewBuilder var preview: () -> Preview
     @ViewBuilder var transport: () -> Transport
+    @ViewBuilder var tools:()->Tools
     @AppStorage("desktop.showBrowser") private var showBrowser = true
     @AppStorage("desktop.showInspector") private var showInspector = true
     @AppStorage("desktop.browserWidth") private var browserWidth = 240.0
@@ -63,6 +65,8 @@ struct DesktopWorkspace<Preview: View, Transport: View>: View {
         }
         .background(Palette.bg)
         .focusedSceneValue(\.desktopEditor, commandActions)
+        .onChange(of:inspectorRequest) {_,_ in showInspector = true}
+        .onChange(of:panel) {_,value in if value == "Text" {showInspector = true}}
         .onChange(of: model.selected) { _, _ in
             if !panels.contains(panel) || model.clip != nil { panel = panels[0] }
         }
@@ -72,40 +76,12 @@ struct DesktopWorkspace<Preview: View, Transport: View>: View {
     private var toolbar: some View {
         HStack(spacing: 12) {
             Button(action: onClose) { Image(systemName: "chevron.left") }.help("Back to projects")
-            Button(action: onRename) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.project.name).font(.headline).lineLimit(1)
-                    Text("\(model.project.canvas.aspect.rawValue) · \(model.project.canvas.fps) fps").font(.caption2).foregroundStyle(Palette.dim)
-                }
-            }.buttonStyle(.plain).help("Rename project")
+            ProjectHeading(project:model.project,expanded:showInspector && panel == "Ratio",onRename:onRename,onFormat:{
+                let close = showInspector && panel == "Ratio"
+                model.selected = nil;model.selectedGap = nil;panel = "Ratio";showInspector = !close
+            })
             Spacer()
             Button(action: onImport) { Label("Import", systemImage: "square.and.arrow.down") }.disabled(model.busy).help("Import media (⌘I)")
-            Divider().frame(height: 20)
-            Button { model.undo() } label: { Image(systemName: "arrow.uturn.backward") }.disabled(!model.canUndo).help("Undo (⌘Z)")
-            Button { model.redo() } label: { Image(systemName: "arrow.uturn.forward") }.disabled(!model.canRedo).help("Redo (⇧⌘Z)")
-            Divider().frame(height: 20)
-            Button { model.split() } label: { Label("Split", systemImage: "scissors") }.disabled(!model.canEditSelection).help("Split at playhead (⌘B)")
-            Button { model.moveSelectionToLayer() } label: { Label("To new layer", systemImage: "square.3.layers.3d") }
-                .disabled(!model.canEditSelection || model.clip.map { model.project.track($0.id)?.kind != .main } != false)
-            Menu {
-                Button("Duplicate") {model.duplicateSelected()}.disabled(!model.canEditSelection)
-                Button("Delete",role:.destructive) {model.delete()}.disabled(!model.canEditSelection)
-                Button("Replace media…",action:onReplace).disabled(!model.canEditSelection || model.clip?.assetID == nil)
-                Divider()
-                Button("Keyframe") {if let id = model.selected {model.change {$0.toggleKeyframe(id,at:model.playhead)}}}.disabled(!model.canEditSelection)
-                Button("Freeze frame") {model.freeze()}.disabled(model.project.asset(model.clip?.assetID)?.type != .video)
-                Button("Extract audio") {model.extractAudio()}.disabled(model.project.asset(model.clip?.assetID)?.hasAudio != true)
-                Button("Save audio…") {model.saveAudio()}.disabled(model.project.asset(model.clip?.assetID)?.hasAudio != true)
-                Button("To main track") {if let id = model.selected {model.change {$0.move(id,to:"main",at:model.playhead)}}}
-                    .disabled(!model.canEditSelection || model.selected.flatMap {model.project.track($0)?.kind} != .overlay)
-            } label: {Image(systemName:"ellipsis.circle")}.help("Clip actions")
-            Menu {
-                Button("Add text") { model.addText("Title"); panel = "Text"; showInspector = true }
-                Button("Add subtitle") { model.addText("Subtitle"); panel = "Text"; showInspector = true }
-                Button("Import SRT/LRC…", action: onSubtitles)
-                Button("Stickers") { model.selected = nil; panel = "Stickers"; showInspector = true }
-                Button("Voiceover") { panel = "Voiceover"; showInspector = true }
-            } label: { Image(systemName: "plus") }.help("Add text, stickers or voiceover")
             Button { showBrowser.toggle() } label: { Image(systemName: "sidebar.left") }.help("Toggle media browser")
             Button { showInspector.toggle() } label: { Image(systemName: "sidebar.right") }.help("Toggle inspector")
             Button("Export", action: onExport).buttonStyle(.borderedProminent).disabled(model.project.durationUs == 0)
@@ -128,21 +104,29 @@ struct DesktopWorkspace<Preview: View, Transport: View>: View {
     }
 
     private var timelineToolbar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing:8) {
             Text("Timeline").font(.caption.bold())
-            Text("\(model.project.tracks.count) tracks").font(.caption2).foregroundStyle(Palette.dim)
-            Divider().frame(height: 16)
-            Button { model.selected = nil; model.seek(model.project.adjacentCut(to: model.playhead, forward: false)) } label: { Image(systemName: "backward.end") }.help("Previous cut")
-            Button { model.selected = nil; model.seek(model.project.adjacentCut(to: model.playhead, forward: true)) } label: { Image(systemName: "forward.end") }.help("Next cut")
-            Toggle(isOn: $timeline.snapping) { Label("Snap", systemImage: "align.horizontal.left") }.toggleStyle(.button).controlSize(.small)
-            Spacer()
-            Text("Track height").font(.caption2).foregroundStyle(Palette.dim)
-            Slider(value: $timeline.rowHeight, in: 44...120).frame(width: 70).accessibilityLabel("Track height")
-            Button { timeline.zoom(1/1.3) } label: { Image(systemName: "minus.magnifyingglass") }.help("Zoom out (⌘−)")
-            Slider(value: Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}), in: log2(0.1)...log2(600)).frame(width: 100).accessibilityLabel("Timeline zoom")
-            Button { timeline.zoom(1.3) } label: { Image(systemName: "plus.magnifyingglass") }.help("Zoom in (⌘+)")
-            Button("Fit") { timeline.fit(duration: model.project.durationUs, width: availableWidth) }.help("Fit project to timeline (⇧Z)")
-        }.buttonStyle(.borderless).padding(.horizontal, 12).frame(height: 38).background(Palette.surface)
+            Button {model.undo()} label:{Image(systemName:"arrow.uturn.backward")}.disabled(!model.canUndo).help("Undo (⌘Z)").accessibilityLabel("Undo")
+            Button {model.redo()} label:{Image(systemName:"arrow.uturn.forward")}.disabled(!model.canRedo).help("Redo (⇧⌘Z)").accessibilityLabel("Redo")
+            Divider().frame(height:18)
+            ScrollView(.horizontal) {
+                HStack(spacing:4) {tools()}.padding(.vertical,4)
+                    .disabled(model.selected.map {model.project.track($0)?.locked == true} == true)
+            }.accessibilityIdentifier("desktop.timelineTools")
+            Divider().frame(height:18)
+            Button {model.selected = nil;model.seek(model.project.adjacentCut(to:model.playhead,forward:false))} label:{Image(systemName:"backward.end")}.help("Previous cut")
+            Button {model.selected = nil;model.seek(model.project.adjacentCut(to:model.playhead,forward:true))} label:{Image(systemName:"forward.end")}.help("Next cut")
+            Toggle(isOn:$timeline.snapping) {Label("Snap",systemImage:"align.horizontal.left")}.toggleStyle(.button).controlSize(.small)
+            Menu {
+                Button("Compact tracks") {timeline.rowHeight = 44}
+                Button("Standard tracks") {timeline.rowHeight = 68}
+                Button("Large tracks") {timeline.rowHeight = 96}
+            } label:{Image(systemName:"line.3.horizontal")}.help("Track height").accessibilityLabel("Track height")
+            Button {timeline.zoom(1/1.3)} label:{Image(systemName:"minus.magnifyingglass")}.help("Zoom out (⌘−)")
+            Slider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),in:log2(0.1)...log2(600)).frame(width:70).accessibilityLabel("Timeline zoom")
+            Button {timeline.zoom(1.3)} label:{Image(systemName:"plus.magnifyingglass")}.help("Zoom in (⌘+)")
+            Button("Fit") {timeline.fit(duration:model.project.durationUs,width:availableWidth)}.help("Fit project to timeline (⇧Z)")
+        }.buttonStyle(.borderless).padding(.horizontal,12).frame(height:44).background(Palette.surface)
     }
 
     private var commandActions: DesktopEditorActions {

@@ -5,13 +5,18 @@ struct PreviewLayer:Identifiable {
     let rect:CGRect
     let rotation:Double
     var id:String {clip.id}
-    func contains(_ point:CGPoint)->Bool {
+    var corners:[CGPoint] {EditorPresentation.corners(of:rect,rotation:rotation)}
+    func contains(_ point:CGPoint,slop:Double = 0)->Bool {
         let x = point.x-rect.midX,y = point.y-rect.midY,r = -rotation * .pi/180
-        return abs(x*cos(r)-y*sin(r))<=rect.width/2 && abs(x*sin(r)+y*cos(r))<=rect.height/2
+        return abs(x*cos(r)-y*sin(r))<=rect.width/2+slop && abs(x*sin(r)+y*cos(r))<=rect.height/2+slop
+    }
+    func outside(_ canvas:CGRect,tolerance:Double)->Bool {
+        corners.contains {!canvas.insetBy(dx:-tolerance,dy:-tolerance).contains($0)}
     }
 }
 struct PreviewPane:View {
     @ObservedObject var model:EditorModel
+    var onText:((String)->Void)? = nil
     @ViewState<Transform?> private var base:Transform?
     @ViewState<CGSize> private var translation = .zero
     @ViewState<Double> private var magnification = 1
@@ -19,36 +24,77 @@ struct PreviewPane:View {
     @ViewState<Set<String>> private var gestures = []
     @ViewState<Bool> private var snapX = false
     @ViewState<Bool> private var snapY = false
+    @ViewState<CGPoint?> private var dragStart = nil
+    @ViewState<String?> private var dragTarget = nil
+    @ViewState<CGPoint?> private var resizeCenter = nil
+    @ViewState<Double> private var resizeDistance = 1
+    @ViewState<Bool> private var moved = false
+    @ViewState<String?> private var lastTapID = nil
+    @ViewState<Double> private var lastTapTime = 0
+    private let outsideColor = Color(argb:0xFFFFA726)
     var body:some View {
         GeometryReader {geometry in
-            let available = geometry.size,ratio = model.project.canvas.aspect.ratio
-            let width = min(available.width,available.height*ratio),height = width/ratio
-            let canvas = CGRect(x:(available.width-width)/2,y:(available.height-height)/2,width:width,height:height)
+            let canvas = EditorPresentation.canvasRect(in:geometry.size,aspect:model.project.canvas.aspect.ratio)
             let layers = layers(in:canvas)
+            let selected = layers.first {$0.id == model.selected}
+            let outside = selected?.outside(canvas,tolerance:canvas.width/Double(model.project.canvas.size.width)) == true
             ZStack(alignment:.topLeading) {
-                Color.black
-                PlayerSurface(player:model.player).frame(width:width,height:height).position(x:canvas.midX,y:canvas.midY)
-                ForEach(layers.filter {$0.id == model.selected}) {layer in
-                    Rectangle().stroke(Palette.accent,lineWidth:1.5).frame(width:layer.rect.width,height:layer.rect.height)
-                        .rotationEffect(.degrees(layer.rotation)).position(x:layer.rect.midX,y:layer.rect.midY)
-                        .allowsHitTesting(false)
+                Color(argb:0xFF2A2A33)
+                PlayerSurface(player:model.player).frame(width:canvas.width,height:canvas.height).background(.black).clipped().position(x:canvas.midX,y:canvas.midY)
+                Rectangle().stroke(.white.opacity(0.55),lineWidth:1.5)
+                    .frame(width:canvas.width+1.5,height:canvas.height+1.5).position(x:canvas.midX,y:canvas.midY)
+                    .allowsHitTesting(false).accessibilityIdentifier("editor.canvasBoundary")
+                Canvas {context,size in
+                    if let selected {
+                        let color:Color = outside ? outsideColor:.white
+                        var path = Path();path.addLines(selected.corners);path.closeSubpath()
+                        context.stroke(path,with:.color(color),style:StrokeStyle(lineWidth:1.5,dash:outside ? [7,4]:[]))
+                        for point in selected.corners {
+                            context.fill(Path(ellipseIn:CGRect(x:point.x-4.5,y:point.y-4.5,width:9,height:9)),with:.color(color))
+                            context.fill(Path(ellipseIn:CGRect(x:point.x-3,y:point.y-3,width:6,height:6)),with:.color(Palette.accent))
+                        }
+                    }
+                    if snapX {var path = Path();path.move(to:CGPoint(x:canvas.midX,y:canvas.minY));path.addLine(to:CGPoint(x:canvas.midX,y:canvas.maxY));context.stroke(path,with:.color(Palette.teal),style:StrokeStyle(lineWidth:1,dash:[6,5]))}
+                    if snapY {var path = Path();path.move(to:CGPoint(x:canvas.minX,y:canvas.midY));path.addLine(to:CGPoint(x:canvas.maxX,y:canvas.midY));context.stroke(path,with:.color(Palette.teal),style:StrokeStyle(lineWidth:1,dash:[6,5]))}
+                }.allowsHitTesting(false)
+                if outside {
+                    Text("Partly outside the canvas: only the part inside is in the video")
+                        .font(.system(size:11)).foregroundStyle(.black).padding(.horizontal,8).padding(.vertical,3)
+                        .background(outsideColor,in:RoundedRectangle(cornerRadius:6)).frame(maxWidth:.infinity).padding(.top,6)
+                        .allowsHitTesting(false).accessibilityIdentifier("editor.outsideCanvas")
                 }
-                if snapX {Rectangle().fill(Palette.teal).frame(width:1,height:height).position(x:canvas.midX,y:canvas.midY).allowsHitTesting(false)}
-                if snapY {Rectangle().fill(Palette.teal).frame(width:width,height:1).position(x:canvas.midX,y:canvas.midY).allowsHitTesting(false)}
-                if model.project.durationUs == 0 {Text("Add videos and photos to start").foregroundStyle(Palette.dim).frame(width:available.width,height:available.height)}
+                if model.project.durationUs == 0 {Text("Add videos and photos to start").foregroundStyle(Palette.dim).frame(width:geometry.size.width,height:geometry.size.height).allowsHitTesting(false)}
             }
             .clipped().contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance:0).onChanged {value in
-                if !gestures.contains("drag") {
-                    let hit = layers.reversed().first {$0.contains(value.startLocation)}
-                    model.selected = hit?.id
-                    begin("drag")
+                if dragStart == nil {
+                    dragStart = value.startLocation;moved = false
+                    let corner = selected?.corners.contains {hypot($0.x-value.startLocation.x,$0.y-value.startLocation.y)<28} == true
+                    let current = selected.flatMap {$0.contains(value.startLocation,slop:$0.clip.text == nil ? 0:20) || corner ? $0:nil}
+                    dragTarget = current?.id ?? hit(value.startLocation,layers:layers)?.id
+                    if corner,let selected {resizeCenter = CGPoint(x:selected.rect.midX,y:selected.rect.midY);resizeDistance = max(1,hypot(value.startLocation.x-selected.rect.midX,value.startLocation.y-selected.rect.midY))}
                 }
-                translation = value.translation;apply(canvas:canvas)
-            }.onEnded {_ in end("drag")})
+                guard let target = dragTarget,hypot(value.translation.width,value.translation.height)>=10 || moved else {return}
+                if !moved {model.selected = target;model.selectedGap = nil;moved = true;begin("drag")}
+                if let center = resizeCenter {
+                    magnification = hypot(value.location.x-center.x,value.location.y-center.y)/resizeDistance
+                } else {translation = value.translation}
+                apply(canvas:canvas)
+            }.onEnded {value in
+                if !moved && gestures.isEmpty {
+                    let target = hit(value.startLocation,layers:layers),now = CACurrentMediaTime()
+                    model.selected = target?.id;model.selectedGap = nil
+                    if let target,target.clip.text != nil,lastTapID == target.id,now-lastTapTime<0.32 {onText?(target.id);lastTapID = nil}
+                    else {lastTapID = target?.id;lastTapTime = now}
+                }
+                end("drag");dragStart = nil;dragTarget = nil;resizeCenter = nil;moved = false
+            })
             .simultaneousGesture(MagnificationGesture().onChanged {value in begin("scale");magnification = value;apply(canvas:canvas)}.onEnded {_ in end("scale")})
             .simultaneousGesture(RotationGesture().onChanged {value in begin("rotation");rotation = value.degrees;apply(canvas:canvas)}.onEnded {_ in end("rotation")})
-        }.padding(12).accessibilityIdentifier("editor.preview")
+        }.accessibilityIdentifier("editor.preview")
+    }
+    private func hit(_ point:CGPoint,layers:[PreviewLayer])->PreviewLayer? {
+        layers.reversed().first {$0.clip.text != nil && $0.contains(point,slop:20)} ?? layers.reversed().first {$0.contains(point)}
     }
     private func begin(_ gesture:String) {
         guard model.canEditSelection else {return}
@@ -62,9 +108,11 @@ struct PreviewPane:View {
     private func apply(canvas:CGRect) {
         guard var t = base,canvas.width>0,canvas.height>0 else {return}
         t.cx += translation.width/canvas.width;t.cy += translation.height/canvas.height
-        snapX = abs(t.cx-0.5)<0.015;snapY = abs(t.cy-0.5)<0.015
+        if resizeCenter == nil {
+            snapX = abs(t.cx-0.5)*canvas.width<(snapX ? 20:8);snapY = abs(t.cy-0.5)*canvas.height<(snapY ? 20:8)
+        }
         if snapX {t.cx = 0.5};if snapY {t.cy = 0.5}
-        t.scale = clamp(t.scale*magnification,0.05,8);t.rotation += rotation
+        t.scale = clamp(t.scale*magnification,0.05,20);t.rotation += rotation
         let rightAngle = (t.rotation/90).rounded()*90;if abs(t.rotation-rightAngle)<3 {t.rotation = rightAngle}
         let time = model.playhead,fps = model.project.canvas.fps
         model.liveVisualEdit {$0.setTransform(t,at:time,fps:fps)}

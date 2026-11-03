@@ -12,7 +12,7 @@ struct ValueSlider: View {
 struct CanvasControls: View {
     @Binding var canvas:CanvasSettings
     var body:some View {ScrollView {VStack(alignment:.leading,spacing:12) {
-        Text("Ratio").font(.caption).foregroundStyle(Palette.dim)
+        Text("Aspect ratio").font(.caption).foregroundStyle(Palette.dim)
         LazyVGrid(columns:[GridItem(.adaptive(minimum:64))]) {ForEach(Aspect.allCases,id:\.self) {aspect in
             Button(aspect.rawValue) {canvas.aspect = aspect}.buttonStyle(.bordered).tint(canvas.aspect == aspect ? Palette.accent:Palette.dim)
         }}
@@ -28,7 +28,7 @@ struct CanvasControls: View {
         HStack {Button("Color") {canvas.blurred = false}.tint(canvas.blurred ? Palette.dim:Palette.accent);Button("Blur") {canvas.blurred = true}.tint(canvas.blurred ? Palette.accent:Palette.dim)}.buttonStyle(.bordered)
         if canvas.blurred {ValueSlider(title:"Blur",value:$canvas.blur)} else {ColorStrip(value:$canvas.background,allowNone:false)}
         Text("\(canvas.size.width) × \(canvas.size.height)").font(.caption).foregroundStyle(Palette.dim)
-    }.padding()}.background(Palette.surface)}
+    }.padding()}.background(Palette.surface).accessibilityIdentifier("editor.canvasSettings")}
 }
 struct ColorStrip: View {
     @Binding var value:UInt32
@@ -53,7 +53,7 @@ struct InspectorView: View {
     func text<T>(_ key:WritableKeyPath<TextStyle,T>,fallback:T) -> Binding<T> {Binding(get:{model.clip?.text?[keyPath:key] ?? fallback},set:{v in model.edit {$0.text?[keyPath:key] = v}})}
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
-            HStack {if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left")}.accessibilityLabel("Back")};Text(page).font(.headline);Spacer();if let onDone {Button("Done") {model.endGesture();onDone()}}}.padding()
+            HStack {if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left")}.accessibilityLabel("Back")};Text(page == "Ratio" ? "Project format":page).font(.headline);Spacer();if let onDone {Button("Done") {model.endGesture();onDone()}}}.padding()
             Divider()
             if page == "Ratio" {CanvasControls(canvas:Binding(get:{model.project.canvas},set:{v in model.change {$0.canvas = v}}))}
             else {ScrollView {VStack(alignment:.leading,spacing:18) {content}.padding()}}

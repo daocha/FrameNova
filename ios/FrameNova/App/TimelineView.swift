@@ -172,8 +172,8 @@ struct TimelineView: View {
         let selected = model.selected == clip.id
         let dragging = movingID == clip.id
         let trimming = trimID == clip.id
-        let delta = trimming ? trimDelta : 0
-        let clipWidth = max(24, x(clip.durationUs) + (trimStart ? -delta : delta))
+        let shown = displayedClip(clip)
+        let clipWidth = max(24,x(shown.durationUs))
         return HStack(spacing: 0) {
             if selected { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
@@ -185,7 +185,15 @@ struct TimelineView: View {
             if selected { handle(clip, start: false) }
         }
         .frame(width: clipWidth, height: rowHeight-6)
-        .background(Palette.track(track.kind))
+        .background {
+            ZStack {
+                Palette.track(track.kind)
+                if let asset = model.project.asset(clip.assetID) {
+                    TimelineMediaStrip(clip:shown,asset:asset,pointsPerSecond:display.pointsPerSecond)
+                    Color.black.opacity(clip.audioOnly || asset.type == .audio ? 0:0.3)
+                }
+            }.allowsHitTesting(false)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(selected ? Color.white : Color.clear, lineWidth: 2))
         .overlay(alignment: .bottomLeading) {
@@ -193,7 +201,7 @@ struct TimelineView: View {
                 Image(systemName: "diamond.fill").font(.system(size: 6)).offset(x: x(keyframe.offsetUs), y: -3)
             }
         }
-        .offset(x: max(0, x(clip.startUs) + (dragging ? movement.width : 0) + (trimming && trimStart ? delta : 0)),
+        .offset(x: max(0,x(shown.startUs)+(dragging ? movement.width:0)),
                 y: dragging ? movement.height : 0)
         .zIndex(dragging ? 10 : selected ? 1 : 0)
         .onTapGesture {
@@ -220,6 +228,14 @@ struct TimelineView: View {
             Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }
         }.disabled(track.locked)
         .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")
+    }
+
+    private func displayedClip(_ clip:Clip)->Clip {
+        guard trimID == clip.id else {return clip}
+        var preview = model.project
+        let amount = Int64(trimDelta/display.pointsPerSecond*1_000_000)
+        if trimStart {preview.trimStart(clip.id,delta:amount)} else {preview.trimEnd(clip.id,delta:amount)}
+        return preview.clip(clip.id) ?? clip
     }
 
     private func handle(_ clip: Clip, start: Bool) -> some View {

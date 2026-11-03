@@ -1,45 +1,103 @@
-import AVFoundation
 import UIKit
-import ImageIO
+import Combine
+import SwiftUI
 
-@MainActor final class TimelineThumbnails {
+@MainActor final class TimelineThumbnails:ObservableObject {
     static let shared = TimelineThumbnails()
-    private let cache = NSCache<NSString,UIImage>()
-    private var pending: [String:[() -> Void]] = [:]
-    private var queue: [(MediaAsset,Int64,String)] = []
+    @Published private(set) var revision = 0
+    private let memory = NSCache<NSString,UIImage>()
+    private let store:MediaThumbnailStore
+    private var pending:Set<String> = []
+    private var prepared:Set<String> = []
+    private var queue:[(MediaAsset,Int64,String)] = []
     private var active = 0
     private var failed:Set<String> = []
-    init() {cache.totalCostLimit = 32*1024*1024;cache.countLimit = 320}
-    func image(_ asset:MediaAsset,at time:Int64,ready:@escaping ()->Void) -> UIImage? {
-        let bucket = asset.type == .image ? 0 : max(0,time/500_000)*500_000
-        let key = asset.id+":"+String(bucket)
-        if let image = cache.object(forKey:key as NSString) {return image}
-        if failed.contains(key) {return nil}
-        if pending[key] != nil {return nil}
-        if queue.count>=64 {let old = queue.removeFirst();pending.removeValue(forKey:old.2)}
-        pending[key] = [ready];queue.append((asset,bucket,key));pump()
+    init(store:MediaThumbnailStore = .shared) {self.store = store;memory.totalCostLimit = 32*1024*1024;memory.countLimit = 500}
+    private func request(_ asset:MediaAsset,time:Int64) {
+        let key = MediaThumbnailStore.sourceKey(asset)+"-\(time)"
+        guard !pending.contains(key),!failed.contains(key),memory.object(forKey:key as NSString) == nil else {return}
+        pending.insert(key);queue.append((asset,time,key));pump()
+    }
+    func image(_ asset:MediaAsset,at time:Int64)->UIImage? {
+        let plan = FilmstripPlan(duration:asset.durationUs)
+        let time = asset.type == .image ? 0:plan.time(at:plan.index(at:time))
+        let prefix = MediaThumbnailStore.sourceKey(asset)+"-",key = prefix+"\(time)"
+        if let image = memory.object(forKey:key as NSString) {return image}
+        request(asset,time:time)
+        if asset.type == .video {
+            let nearest = plan.index(at:time)
+            for delta in 1..<plan.count {
+                for slot in [nearest-delta,nearest+delta] where slot>=0 && slot<plan.count {
+                    if let image = memory.object(forKey:(prefix+"\(plan.time(at:slot))") as NSString) {return image}
+                }
+            }
+        }
         return nil
     }
+    func prepare(_ assets:[MediaAsset]) {
+        let videos = assets.filter {$0.type == .video && $0.durationUs>0 && prepared.insert(MediaThumbnailStore.sourceKey($0)).inserted}.map {asset in (asset,FilmstripPlan(duration:asset.durationUs),FilmstripPlan(duration:asset.durationUs).order)}
+        // Interleave sources so the first frames of every clip appear before one long clip fills its strip.
+        for offset in 0..<120 {for (asset,plan,order) in videos {
+            if offset<order.count {request(asset,time:plan.time(at:order[offset]))}
+        }}
+    }
     private func pump() {
-        while active < 2 && !queue.isEmpty {
+        while active<2 && !queue.isEmpty {
             let (asset,time,key) = queue.removeFirst();active += 1
             Task {
-                let url = ProjectStore.mediaURL(asset.path)
-                var image:UIImage?
-                if asset.type == .image {
-                    if let source = CGImageSourceCreateWithURL(url as CFURL,nil),
-                       let frame = CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceThumbnailMaxPixelSize:180,kCGImageSourceCreateThumbnailWithTransform:true] as CFDictionary) {image = UIImage(cgImage:frame)}
-                } else if asset.type == .video {
-                    let generator = AVAssetImageGenerator(asset:AVURLAsset(url:url))
-                    generator.appliesPreferredTrackTransform = true;generator.maximumSize = CGSize(width:180,height:120)
-                    generator.requestedTimeToleranceBefore = CMTime(seconds:0.25,preferredTimescale:600)
-                    generator.requestedTimeToleranceAfter = generator.requestedTimeToleranceBefore
-                    if let frame = try? await generator.image(at:mediaTime(min(time,max(0,asset.durationUs-1)))) {image = UIImage(cgImage:frame.image)}
+                let image = await store.image(asset,at:time,size:.timeline)
+                if let image {memory.setObject(image,forKey:key as NSString,cost:Int(image.size.width*image.size.height*4))}
+                else {failed.insert(key)}
+                pending.remove(key);active -= 1;revision += 1;pump()
+            }
+        }
+    }
+}
+
+struct TimelineMediaStrip:View {
+    let clip:Clip
+    let asset:MediaAsset
+    let pointsPerSecond:Double
+    @ObservedObject private var waveforms = AudioWaveforms.shared
+    var body:some View {
+        GeometryReader {geometry in
+            if clip.audioOnly || asset.type == .audio {
+                let _ = waveforms.revision
+                let peaks = waveforms.peaks(asset,ready:{}) ?? []
+                Canvas {context,size in
+                    var path = Path()
+                    let step = max(3,size.width/2000)
+                    for position in stride(from:0.0,to:size.width,by:step) {
+                        let time = clip.sourceTime(at:clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000))
+                        let index = Int(time/AudioWaveforms.stepUs)
+                        let value = index>=0 && index<peaks.count ? Double(peaks[index]):0
+                        let amplitude = clamp(value*min(clip.volume,1.5),0.02,1)*size.height*0.42
+                        path.move(to:CGPoint(x:position,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position,y:size.height/2+amplitude))
+                    }
+                    context.stroke(path,with:.color(Palette.teal),lineWidth:2)
                 }
-                if let image {cache.setObject(image,forKey:key as NSString,cost:Int(image.size.width*image.size.height*4))}
-                if image == nil {failed.insert(key)}
-                let callbacks = pending.removeValue(forKey:key) ?? [];active -= 1
-                for callback in callbacks {callback()};pump()
+            } else if clip.text == nil {
+                let width = max(16,geometry.size.height*clamp(Double(asset.width)/Double(max(1,asset.height)),0.5,2))
+                LazyHStack(spacing:0) {
+                    ForEach(0..<max(1,Int(ceil(geometry.size.width/width))),id:\.self) {index in
+                        TimelineThumbnailTile(asset:asset,time:clip.sourceTime(at:clip.startUs+Int64(Double(index)*width/max(0.1,pointsPerSecond)*1_000_000)))
+                            .frame(width:width,height:geometry.size.height).clipped()
+                    }
+                }.frame(width:geometry.size.width,height:geometry.size.height,alignment:.leading)
+            }
+        }.clipped().accessibilityIdentifier("timeline.mediaStrip")
+    }
+}
+
+private struct TimelineThumbnailTile:View {
+    let asset:MediaAsset
+    let time:Int64
+    @ObservedObject private var thumbnails = TimelineThumbnails.shared
+    var body:some View {
+        let _ = thumbnails.revision
+        GeometryReader {geometry in
+            if let image = thumbnails.image(asset,at:time) {
+                Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped()
             }
         }
     }

@@ -23,8 +23,37 @@ final class ProjectStore: ObservableObject {
     }
     func delete(_ project: Project) throws {
         try FileManager.default.removeItem(at: directory.appendingPathComponent(project.id+".json")); refresh()
+        try? FileManager.default.removeItem(at:directory.appendingPathComponent("Covers").appendingPathComponent(project.id,isDirectory:true))
         let referenced = Set(projects.flatMap(\.assets).map(\.path))
         for asset in project.assets where !referenced.contains(asset.path) { try? FileManager.default.removeItem(at: directory.appendingPathComponent("Media").appendingPathComponent(asset.path)) }
+    }
+    func coverSource(_ project:Project)->(asset:MediaAsset,time:Int64)? {
+        let clips = project.tracks[project.mainIndex].clips+project.tracks.flatMap(\.clips)
+        guard let clip = clips.first(where:{project.asset($0.assetID).map {$0.type != .audio} == true}),let asset = project.asset(clip.assetID) else {return nil}
+        return (asset,clip.srcInUs)
+    }
+    func coverKey(_ project:Project)->String {
+        guard let source = coverSource(project) else {return "empty"}
+        return MediaThumbnailStore.sourceKey(source.asset)+"-\(source.time)"
+    }
+    func coverURL(_ project:Project)->URL {
+        directory.appendingPathComponent("Covers").appendingPathComponent(project.id,isDirectory:true).appendingPathComponent(coverKey(project)+".jpg")
+    }
+    @MainActor func cover(_ project:Project) async ->UIImage? {
+        guard let source = coverSource(project) else {return nil}
+        let file = coverURL(project)
+        if let image = await Task.detached(priority:.utility,operation:{UIImage(contentsOfFile:file.path)}).value {return image}
+        guard let image = await MediaThumbnailStore.shared.image(source.asset,at:source.time,size:.cover) else {return nil}
+        guard FileManager.default.fileExists(atPath:directory.appendingPathComponent(project.id+".json").path) else {return image}
+        await Task.detached(priority:.utility) {
+            let folder = file.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+            if let data = image.jpegData(compressionQuality:0.85) {try? data.write(to:file,options:.atomic)}
+            if let files = try? FileManager.default.contentsOfDirectory(at:folder,includingPropertiesForKeys:nil) {
+                for old in files where old != file {try? FileManager.default.removeItem(at:old)}
+            }
+        }.value
+        return image
     }
     static func ingest(_ url: URL) async throws -> MediaAsset {
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }

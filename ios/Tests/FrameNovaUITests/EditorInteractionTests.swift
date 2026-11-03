@@ -56,4 +56,24 @@ final class EditorInteractionTests:XCTestCase {
         XCTAssertTrue(filters.buttons["Photos"].exists)
         XCTAssertTrue(filters.buttons["Videos"].exists)
     }
+    func testFormatSummaryTogglesSettingsAndTitleStillRenames() {
+        let view = timeline()
+        point(view,x:view.frame.width/2+35,y:55).tap()
+        let toggle = app.buttons["editor.projectFormat"]
+        XCTAssertTrue(toggle.exists);XCTAssertEqual(toggle.label,"Show project format")
+        toggle.tap()
+        XCTAssertEqual(toggle.label,"Hide project format")
+        let settings = app.scrollViews["editor.canvasSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout:5))
+        XCTAssertFalse((view.value as? String ?? "").contains("Start"))
+        app.buttons["9:16"].tap()
+        let resolution = app.buttons["4K"]
+        for _ in 0..<4 {if resolution.isHittable {break};settings.swipeUp()}
+        XCTAssertTrue(resolution.isHittable);resolution.tap()
+        XCTAssertTrue((toggle.value as? String ?? "").contains("9:16 · 4K"))
+        toggle.tap()
+        XCTAssertEqual(toggle.label,"Show project format")
+        app.buttons["editor.projectName"].tap()
+        XCTAssertTrue(app.alerts["Rename project"].waitForExistence(timeout:5))
+    }
 }
