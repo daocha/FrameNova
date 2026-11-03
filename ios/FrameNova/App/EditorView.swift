@@ -136,6 +136,9 @@ struct EditorView: View {
                         tool("Edit","pencil") {open("Text")}; tool("Font","textformat") {open("Text")}; tool("Style","paintbrush") {open("Text")}; tool("Animation","sparkles") {open("Text")}
                     }
                     tool("Split","scissors") {model.split()}
+                    if c.text == nil && model.project.track(c.id)?.kind == .main {
+                        tool("To new layer","square.3.layers.3d") {model.change {p in p.delete(c.id); var moved = c; moved.transitionIn = nil; moved.transform.scale *= 0.6; p.place(moved,kind:.overlay)}}
+                    }
                     if model.project.asset(c.assetID)?.type != .image && c.text == nil {tool("Speed","speedometer") {open("Speed")}; tool("Volume","speaker.wave.2") {open("Volume")}}
                     tool("Position","arrow.up.and.down.and.arrow.left.and.right") {open("Position")}
                     tool("Keyframe","diamond") {model.change {$0.toggleKeyframe(c.id,at:model.playhead)}}
@@ -143,7 +146,6 @@ struct EditorView: View {
                         tool("Layout","square.grid.2x2") {open("Layout")}; tool("Adjust","slider.horizontal.3") {open("Adjust")}; tool("Filters","camera.filters") {open("Filters")}; tool("Crop","crop") {open("Crop")}
                         if model.project.track(c.id)?.kind == .main {
                             tool("Transition","square.on.square") {open("Transition")}
-                            tool("To new layer","square.3.layers.3d") {model.change {p in p.delete(c.id); var moved = c; moved.transitionIn = nil; moved.transform.scale *= 0.6; p.place(moved,kind:.overlay)}}
                         } else if model.project.track(c.id)?.kind == .overlay {tool("To main","arrow.down.to.line") {model.change {$0.move(c.id,to:$0.tracks[$0.mainIndex].id,at:c.startUs)}}}
                         tool("Freeze","snowflake") {model.freeze()}
                         if model.project.asset(c.assetID)?.hasAudio == true {tool("Extract audio","music.note") {model.extractAudio()}; tool("Save audio","square.and.arrow.up") {model.saveAudio()}}

@@ -164,6 +164,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 val isVideo = asset?.type == MediaType.VIDEO
                 buildList {
                     add(Tool("Split", Icons.Default.ContentCut) { vm.split() })
+                    if (track?.kind == TrackKind.MAIN) add(Tool("To new layer", Icons.Default.Layers) { vm.toOverlay() })
                     if (isVideo) add(Tool("Speed", Icons.Default.Speed) { vm.panel = Panel.SPEED })
                     if (isVideo) add(Tool("Volume", Icons.AutoMirrored.Filled.VolumeUp) { vm.panel = Panel.VOLUME })
                     add(Tool("Position", Icons.Default.OpenWith) { vm.panel = Panel.TRANSFORM })
@@ -172,7 +173,6 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                     add(Tool("Adjust", Icons.Default.Tune) { vm.panel = Panel.ADJUST })
                     add(Tool("Filters", Icons.Default.PhotoFilter) { vm.panel = Panel.FILTER })
                     add(Tool("Crop", Icons.Default.Crop) { vm.panel = Panel.CROP })
-                    if (track?.kind == TrackKind.MAIN) add(Tool("To new layer", Icons.Default.Layers) { vm.toOverlay() })
                     if (track?.kind == TrackKind.OVERLAY) add(Tool("To main", Icons.Default.VerticalAlignBottom) { vm.toMain() })
                     if (isVideo) add(Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() })
                     if (isVideo && asset?.hasAudio == true) add(Tool("Extract audio", Icons.Default.MusicNote) { vm.extractAudio() })
