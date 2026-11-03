@@ -105,6 +105,10 @@ import CoreImage
         tag("RIFF");number(UInt32(36+count*2));tag("WAVEfmt ");number(UInt32(16));number(UInt16(1));number(UInt16(1));number(UInt32(sampleRate));number(UInt32(sampleRate*2));number(UInt16(2));number(UInt16(16));tag("data");number(UInt32(count*2))
         for index in 0..<count {number(Int16(sin(Double(index)*2 * .pi*440/Double(sampleRate))*16_000))}
         try data.write(to:url);defer {try? FileManager.default.removeItem(at:url)}
+        let importedAudio = try await ProjectStore.ingest(url)
+        defer {try? FileManager.default.removeItem(at:ProjectStore.mediaURL(importedAudio.path))}
+        #expect(importedAudio.type == .audio && importedAudio.hasAudio)
+        #expect(abs(importedAudio.durationUs-1_000_000)<50_000)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
         defer {try? FileManager.default.removeItem(at:folder)}
         let asset = MediaAsset(path:path,type:.audio,name:"Waveform",durationUs:1_000_000,hasAudio:true),cache = AudioWaveforms(directory:folder)
@@ -148,6 +152,7 @@ private actor DecodeCalls {
         #expect(asset.type == .image);#expect(model.project.assets.count == 1)
         #expect(model.project.durationUs == 0)
         #expect(model.error?.contains("missing.wav") == true)
+        #expect(model.importStatus?.contains("Imported 1 of 2 files") == true)
         #expect(FileManager.default.fileExists(atPath:ProjectStore.mediaURL(asset.path).path))
         #expect(FileManager.default.fileExists(atPath:source.path))
         #expect(ProjectStore(directory:folder).projects.first?.assets.count == 1)

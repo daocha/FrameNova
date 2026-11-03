@@ -98,7 +98,7 @@ struct HomeView: View {
             Button("Cancel",role:.cancel) {}
         }
         .sheet(isPresented:$picker) { MediaPicker { media,error in picker = false; receive(media); if let error { store.error = error } } }
-        .fileImporter(isPresented:$files,allowedContentTypes:[.movie,.image],allowsMultipleSelection:true) { result in
+        .mediaFileImporter(isPresented:$files,allowedContentTypes:[.movie,.image],allowsMultipleSelection:true) { result in
             Task { @MainActor in
                 importing = true; defer { importing = false }
                 do { var media:[MediaAsset] = []; for url in try result.get() { media.append(try await ProjectStore.ingest(url)) }; receive(media) }

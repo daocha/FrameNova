@@ -29,6 +29,7 @@ struct DesktopMediaBrowser: View {
             TextField("Search media", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal, 10)
             Picker("Show", selection: $filter) { ForEach(["All", "Video", "Photos", "Audio"], id: \.self) { Text($0) } }
                 .pickerStyle(.menu).padding(.horizontal, 10).padding(.vertical, 8)
+            if let status = model.importStatus {Text(status).font(.caption2).foregroundStyle(Palette.dim).textSelection(.enabled).padding(.horizontal,10).padding(.bottom,8)}
             Divider()
             ScrollView {
                 if media.isEmpty {

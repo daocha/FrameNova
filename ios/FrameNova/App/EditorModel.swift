@@ -9,6 +9,7 @@ import SwiftUI
     @Published var playing = false
     @Published var error: String? {didSet {if let error {AppLog.record(error)}}}
     @Published var busy = false
+    @Published var importStatus:String?
     @Published var revision = 0
     @Published var recording = false
     @Published var recordingLevel = 0.0
@@ -136,7 +137,8 @@ import SwiftUI
     }
     func ingest(_ urls:[URL],kind:TrackKind,replace:Bool = false,subtitles:Bool = false,libraryOnly:Bool = false) {
         let scoped = urls.filter {$0.startAccessingSecurityScopedResource()}
-        busy = true
+        busy = true;importStatus = "Importing \(urls.count) files…"
+        AppLog.record("Import started: \(urls.count) files, library=\(libraryOnly)")
         Task {
             defer {busy = false;scoped.forEach {$0.stopAccessingSecurityScopedResource()}}
             do {
@@ -146,6 +148,7 @@ import SwiftUI
                         let cues = Subtitles.parse(try String(contentsOf:url,encoding:.utf8),filename:url.lastPathComponent)
                         guard !cues.isEmpty else { throw MediaError.invalid }; change { $0.addSubtitles(cues) }
                     }
+                    importStatus = "Imported subtitles"
                 } else {
                     var assets: [MediaAsset] = []
                     var failures:[String] = []
@@ -154,9 +157,11 @@ import SwiftUI
                         catch {failures.append("\(url.lastPathComponent): \(error.localizedDescription)")}
                     }
                     imported(assets,kind:kind,replace:replace,libraryOnly:libraryOnly)
+                    importStatus = failures.isEmpty ? "Imported \(assets.count) files":"Imported \(assets.count) of \(urls.count) files. \(failures.joined(separator:"; "))"
+                    AppLog.record("\(importStatus ?? ""); library now has \(project.assets.count) assets")
                     if !failures.isEmpty {error = failures.joined(separator:"\n")}
                 }
-            } catch { self.error = error.localizedDescription }
+            } catch {importStatus = "Import failed: \(error.localizedDescription)";AppLog.record(importStatus ?? "Import failed");self.error = error.localizedDescription}
         }
     }
     func imported(_ assets:[MediaAsset],kind:TrackKind,replace:Bool = false,libraryOnly:Bool = false) {

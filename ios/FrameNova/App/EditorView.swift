@@ -64,7 +64,7 @@ struct EditorView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden,for:.navigationBar)
         .sheet(isPresented:$picker) { MediaPicker(multiple:!replace) { assets,error in picker = false; model.imported(assets,kind:importKind,replace:replace,libraryOnly:libraryOnly); if let error {model.error = error} } }
-        .fileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace) { result in
+        .mediaFileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace) { result in
             do { model.ingest(try result.get(),kind:importKind,replace:replace,subtitles:subtitleFiles,libraryOnly:libraryOnly) } catch {model.error = error.localizedDescription}
         }
         .confirmationDialog("Choose media source",isPresented:$mediaSources,titleVisibility:.visible) {
