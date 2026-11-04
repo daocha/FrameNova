@@ -61,9 +61,13 @@ images and peaks, generating only missing entries; the operating system can recl
 Desktop New project, Media, Add layer, Replace and Import offer Files and Photos as media sources.
 Files opens the file selection interface; Photos opens the library browser. Audio uses file selection.
 Drag the desktop timeline ruler to seek. It stays pinned above the layers during vertical scrolling;
-hovering shows a bidirectional-arrow cue. Pressing a clip selects it without changing the playhead;
+the 64-point ruler includes extra blank drag space above the first layer. Hovering shows a bidirectional-arrow cue.
+Command plus mouse-wheel or trackpad scrolling zooms the timeline around the playhead, as does pinching.
+Pressing a clip selects it without changing the playhead;
 dragging moves it in stable timeline coordinates. Each track header has a separate lock button.
-Locked tracks remain selectable but reject clip edits, trims and moves.
+Locking a track clears its selection. Locked clips cannot be selected in the timeline or preview and reject edits,
+trims and moves. Their timeline colors, thumbnails and waveforms turn grey; unlock the track in its header to
+restore its colors and edit it again.
 The desktop browser supports searching, filtering by media type, thumbnail previews and file drops. Import adds
 files to the project's media bin without changing its timeline. Double-click an asset to insert it at the playhead,
 use its menu to add a layer or audio, or drag it onto a track at a chosen time. Empty drop lanes create layer and

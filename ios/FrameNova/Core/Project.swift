@@ -127,10 +127,10 @@ struct Project: Codable, Equatable, Identifiable {
     var canvas = CanvasSettings()
     var assets: [MediaAsset] = []
     var tracks = [Track(id: "main", kind: .main)]
-    var durationUs: Int64 { tracks.flatMap(\.clips).map(\.endUs).max() ?? 0 }
+    var durationUs: Int64 { tracks.reduce(0) {end,track in track.clips.reduce(end) {max($0,$1.endUs)}} }
     var mainIndex: Int { tracks.firstIndex { $0.kind == .main }! }
     func asset(_ id: String?) -> MediaAsset? { assets.first { $0.id == id } }
-    func clip(_ id: String?) -> Clip? { tracks.flatMap(\.clips).first { $0.id == id } }
+    func clip(_ id: String?) -> Clip? { tracks.lazy.flatMap(\.clips).first { $0.id == id } }
     func track(_ clipID: String) -> Track? { tracks.first { $0.clips.contains { $0.id == clipID } } }
 }
 func formatTime(_ us: Int64) -> String { let s = max(0, us)/1_000_000; return String(format: "%02lld:%02lld", s/60, s%60) }

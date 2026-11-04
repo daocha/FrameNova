@@ -126,6 +126,7 @@ fun PreviewPane(vm: EditorViewModel, modifier: Modifier = Modifier) {
                     fun cy(o: Offset) = (o.y - top) * scale
                     val t = vm.playheadUs
                     val layers = p0.visualGeometriesAt(t, cs.width, cs.height) { c -> textSize(c, t, cs.width, cs.height) }
+                        .filter { (clip, _) -> p0.trackOf(clip.id)?.locked == false }
                     // Text is small: it gets an extra margin to be easier to grab, and wins over the layers below it.
                     val textSlop = with(density) { 20.dp.toPx() } * scale
                     val px = cx(down.position); val py = cy(down.position)

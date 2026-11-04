@@ -3,7 +3,14 @@ import SwiftUI
 
 @MainActor final class EditorModel: ObservableObject {
     @Published var project: Project
-    @Published var selected: String? {didSet {if selected != oldValue {selectedGap = nil}}}
+    @Published private var selection: String?
+    var selected: String? {
+        get {selection}
+        set {
+            let next = newValue.flatMap {project.track($0)?.locked == false ? $0:nil}
+            if selection != next {selection = next;selectedGap = nil}
+        }
+    }
     @Published var selectedGap: Int64?
     @Published var playhead: Int64 = 0
     @Published var playing = false
@@ -25,6 +32,7 @@ import SwiftUI
     private var rebuild: Task<Void,Never>?
     private var seekInProgress = false
     private var pendingSeek:Int64?
+    private var pendingSeekPrecise = true
     private var seekGeneration = 0
     private var observer: Any?
     private var recorder: AVAudioRecorder?
@@ -51,7 +59,12 @@ import SwiftUI
         if gestureStart == nil {undoStack.append(old); if undoStack.count > 100 {undoStack.removeFirst()}}; redoStack = []
         reconcileSelection()
         revision += 1
-        if gestureStart != nil && old.usesSameComposition(as:project) {refreshVisualPreview()}
+        var lockUpdate = old
+        if old.tracks.map(\.id) == project.tracks.map(\.id) {
+            for i in lockUpdate.tracks.indices {lockUpdate.tracks[i].locked = project.tracks[i].locked}
+        }
+        if lockUpdate == project {persist()}
+        else if gestureStart != nil && old.usesSameComposition(as:project) {refreshVisualPreview()}
         else {persist();schedulePreview()}
     }
     func beginGesture() {if gestureStart == nil {gestureStart = project}}
@@ -76,8 +89,8 @@ import SwiftUI
     func undo() { guard let p = undoStack.popLast() else { return }; redoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
     func redo() { guard let p = redoStack.popLast() else { return }; undoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
     private func reconcileSelection() {
-        if let selected,project.clip(selected) == nil {self.selected = nil}
-        if let selectedGap,project.mainGap(at:selectedGap) == nil {self.selectedGap = nil}
+        if let selected,project.track(selected)?.locked != false {self.selected = nil}
+        if let selectedGap,project.tracks[project.mainIndex].locked || project.mainGap(at:selectedGap) == nil {self.selectedGap = nil}
         playhead = clamp(playhead,0,project.durationUs)
     }
     func persist() { do { try store.save(project) } catch { self.error = error.localizedDescription } }
@@ -95,17 +108,23 @@ import SwiftUI
             } catch is CancellationError {} catch { self.error = error.localizedDescription }
         }
     }
-    func seek(_ time:Int64) {
+    func seek(_ time:Int64,precise:Bool = true) {
         playhead = clamp(time,0,project.durationUs)
         pendingSeek = playhead
+        pendingSeekPrecise = precise
         flushSeek()
     }
-    func scrub(_ time:Int64) {player.pause();playing = false;seek(time)}
+    func scrub(_ time:Int64) {
+        if playing {player.pause();playing = false}
+        seek(time,precise:false)
+    }
+    func finishScrub() {seek(playhead)}
     private func flushSeek() {
         guard !seekInProgress,player.currentItem != nil,let time = pendingSeek else {return}
         pendingSeek = nil;seekInProgress = true
         let generation = seekGeneration
-        player.seek(to:mediaTime(time),toleranceBefore:.zero,toleranceAfter:.zero) {[weak self] _ in
+        let tolerance = pendingSeekPrecise ? CMTime.zero:CMTime(value:1,timescale:Int32(max(1,project.canvas.fps)))
+        player.seek(to:mediaTime(time),toleranceBefore:tolerance,toleranceAfter:tolerance) {[weak self] _ in
             Task {@MainActor in
                 guard let self,self.seekGeneration == generation else {return}
                 self.seekInProgress = false;self.flushSeek()

@@ -123,7 +123,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 Button("Large tracks") {timeline.rowHeight = 96}
             } label:{Image(systemName:"line.3.horizontal")}.help("Track height").accessibilityLabel("Track height")
             Button {timeline.zoom(1/1.3)} label:{Image(systemName:"minus.magnifyingglass")}.help("Zoom out (⌘−)")
-            Slider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),in:log2(0.1)...log2(600)).frame(width:70).accessibilityLabel("Timeline zoom")
+            Slider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),in:log2(0.1)...log2(1600)).frame(width:70).accessibilityLabel("Timeline zoom")
             Button {timeline.zoom(1.3)} label:{Image(systemName:"plus.magnifyingglass")}.help("Zoom in (⌘+)")
             Button("Fit") {timeline.fit(duration:model.project.durationUs,width:availableWidth)}.help("Fit project to timeline (⇧Z)")
         }.buttonStyle(.borderless).padding(.horizontal,12).frame(height:44).background(Palette.surface)

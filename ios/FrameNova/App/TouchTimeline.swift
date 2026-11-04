@@ -67,7 +67,11 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     override func accessibilityIncrement() {if let model {model.scrub(model.playhead+1_000_000)}}
     override func accessibilityDecrement() {if let model {model.scrub(model.playhead-1_000_000)}}
     override func layoutSubviews() {super.layoutSubviews();setNeedsDisplay()}
-    func stopFling() {fling?.invalidate();fling = nil;lastFrame = 0}
+    func stopFling() {
+        let wasFlinging = fling != nil
+        fling?.invalidate();fling = nil;lastFrame = 0
+        if wasFlinging {model?.finishScrub()}
+    }
     func gestureRecognizer(_ recognizer:UIGestureRecognizer,shouldReceive touch:UITouch) -> Bool {stopFling();return true}
     override func gestureRecognizerShouldBegin(_ recognizer:UIGestureRecognizer) -> Bool {
         if recognizer === hold {
@@ -77,7 +81,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         return true
     }
     private func transitions(_ row:Row) -> [(Clip,CGPoint)] {
-        guard row.track.kind == .main,row.track.clips.count>1 else {return []}
+        guard !row.track.locked,row.track.kind == .main,row.track.clips.count>1 else {return []}
         return (1..<row.track.clips.count).compactMap {index in
             let previous = row.track.clips[index-1],clip = row.track.clips[index]
             guard clip.startUs<=previous.endUs+2_000,clip.id != model?.selected,previous.id != model?.selected else {return nil}
@@ -88,6 +92,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         guard point.y>=24,let model else {return .empty}
         guard let row = rows.first(where:{$0.rect.contains(point)}) else {return .empty}
         if point.x<60 {return point.x>=30 ? .lock(row.track):.header(row.track)}
+        guard !row.track.locked else {return .empty}
         if let clip = row.track.clips.first(where:{$0.id == model.selected}),!row.track.locked {
             if abs(point.x-x(clip.startUs))<16 {return .handle(clip,true)}
             if abs(point.x-x(clip.endUs))<16 {return .handle(clip,false)}
@@ -132,9 +137,10 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             } else if case .scrub = mode {
                 velocity = recognizer.velocity(in:self).x
                 if abs(velocity)>400 {fling = CADisplayLink(target:self,selector:#selector(tick(_:)));fling?.add(to:.main,forMode:.common)}
+                else {model.finishScrub()}
             }
             mode = nil;snapTime = nil;setNeedsDisplay()
-        case .cancelled,.failed:mode = nil;snapTime = nil;setNeedsDisplay()
+        case .cancelled,.failed:model.finishScrub();mode = nil;snapTime = nil;setNeedsDisplay()
         default:break
         }
         _ = display
@@ -215,7 +221,9 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                 let rect = CGRect(x:x(gap.start),y:row.rect.minY,width:x(gap.end)-x(gap.start),height:row.rect.height)
                 UIColor.white.withAlphaComponent(0.15).setFill();context.fill(rect);UIColor.white.setStroke();context.stroke(rect,width:2)
             }
-            let clips = row.track.clips.sorted {($0.id == model.selected ? 1:0)<($1.id == model.selected ? 1:0)}
+            let visibleStart = viewport.time(at:-16),visibleEnd = viewport.time(at:bounds.width+16)
+            let clips = row.track.clips.filter {$0.endUs>=visibleStart && $0.startUs<=visibleEnd || $0.id == model.selected}
+                .sorted {($0.id == model.selected ? 1:0)<($1.id == model.selected ? 1:0)}
             for var clip in clips {
                 if case .move(let moving,_) = mode,moving.id == clip.id {continue}
                 if case .trim(let original,let start) = mode,original.id == clip.id {
@@ -231,7 +239,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                 text("=",in:box,color:clip.transitionIn == nil ? .black:.white,size:12)
             }
             do {
-                UIColor(argb:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:60,height:row.rect.height))
+                UIColor(argb:row.track.locked ? 0xFF33333B:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:60,height:row.rect.height))
                 let icon = row.track.kind == .text ? "textformat" : row.track.hidden ? "eye.slash" : row.track.muted ? "speaker.slash" : row.track.kind == .audio ? "waveform":"film"
                 UIImage(systemName:icon)?.withTintColor(.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:7,y:row.rect.midY-8,width:16,height:16))
                 UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? .systemYellow:.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:row.rect.midY-8,width:16,height:16))
@@ -268,7 +276,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         let selected = model.selected == clip.id
         context.saveGState();context.setAlpha(row.track.hidden ? 0.35:1)
         let path = UIBezierPath(roundedRect:box,cornerRadius:6)
-        let color:UInt32 = row.track.kind == .main ? 0xFF3A3A48 : row.track.kind == .overlay ? 0xFF4A3B7A : row.track.kind == .text ? 0xFFB0457E:0xFF1F6F6A
+        let color:UInt32 = row.track.locked ? 0xFF505058 : row.track.kind == .main ? 0xFF3A3A48 : row.track.kind == .overlay ? 0xFF4A3B7A : row.track.kind == .text ? 0xFFB0457E:0xFF1F6F6A
         UIColor(argb:color).setFill();path.fill();context.saveGState();path.addClip()
         if let asset = model.project.asset(clip.assetID),asset.type != .audio,!clip.audioOnly {
             let step:CGFloat = max(16,box.height*clamp(Double(asset.width)/Double(max(1,asset.height)),0.5,2))
@@ -281,7 +289,9 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                     let target = CGRect(x:tileX,y:box.minY,width:step,height:box.height)
                     let factor = max(target.width/image.size.width,target.height/image.size.height)
                     let size = CGSize(width:image.size.width*factor,height:image.size.height*factor)
-                    context.saveGState();context.clip(to:target);image.draw(in:CGRect(x:target.midX-size.width/2,y:target.midY-size.height/2,width:size.width,height:size.height));context.restoreGState()
+                    context.saveGState();context.clip(to:target)
+                    if row.track.locked {context.setBlendMode(.luminosity)}
+                    image.draw(in:CGRect(x:target.midX-size.width/2,y:target.midY-size.height/2,width:size.width,height:size.height));context.restoreGState()
                 }
                 tile += 1
             }
@@ -289,7 +299,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         }
         if let asset = model.project.asset(clip.assetID),asset.hasAudio,(clip.audioOnly || row.track.kind == .audio || asset.type == .audio),let peaks = AudioWaveforms.shared.peaks(asset,ready:{[weak self] in self?.setNeedsDisplay()}) {
             var position = max(0,box.minX)
-            UIColor(argb:0xFF2FD1C1).setStroke();context.setLineWidth(2)
+            (row.track.locked ? UIColor.lightGray:UIColor(argb:0xFF2FD1C1)).setStroke();context.setLineWidth(2)
             while position<min(box.maxX,bounds.width) {
                 let timeline = clip.startUs+Int64((position-box.minX)/(display?.pointsPerSecond ?? 70)*1_000_000)
                 let index = Int(clip.sourceTime(at:timeline)/AudioWaveforms.stepUs)
@@ -299,6 +309,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             }
             context.strokePath()
         }
+        if row.track.locked {UIColor(argb:0xFF505058).withAlphaComponent(0.35).setFill();context.fill(box)}
         var badges:[String] = []
         if clip.speed != 1 {badges.append("\(clip.speed.formatted())×")}
         if clip.text == nil && clip.volume == 0 {badges.append("muted")}

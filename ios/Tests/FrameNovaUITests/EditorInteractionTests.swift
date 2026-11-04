@@ -23,6 +23,21 @@ final class EditorInteractionTests:XCTestCase {
         let predicate = NSPredicate(format:"NOT (value BEGINSWITH %@)","Playhead 00:00")
         expectation(for:predicate,evaluatedWith:view);waitForExpectations(timeout:5)
     }
+    func testLockClearsSelectionAndPreventsTimelineAndPreviewSelection() {
+        let view = timeline(),clip = point(view,x:view.frame.width/2+35,y:55)
+        clip.tap()
+        waitForValue(view,contains:"Start")
+        let lock = point(view,x:45,y:55)
+        lock.tap()
+        let noSelection = NSPredicate(format:"NOT (value CONTAINS %@)","Start")
+        expectation(for:noSelection,evaluatedWith:view);waitForExpectations(timeout:5)
+        clip.tap()
+        XCTAssertFalse((view.value as? String ?? "").contains("Start"))
+        app.otherElements["editor.preview"].tap()
+        XCTAssertFalse((view.value as? String ?? "").contains("Start"))
+        lock.tap();clip.tap()
+        waitForValue(view,contains:"Start")
+    }
     func testLongPressMovesClipInsteadOfScrollingTimeline() {
         let view = timeline(),start = point(view,x:view.frame.width/2+35,y:55)
         start.tap()

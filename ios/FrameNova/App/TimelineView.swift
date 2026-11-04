@@ -5,7 +5,7 @@ import SwiftUI
     @Published var rowHeight: Double = 55
     @Published var snapping = true
     var geometry: TimelineGeometry { TimelineGeometry(pointsPerSecond: pointsPerSecond, snapping: snapping) }
-    func zoom(_ factor: Double) { pointsPerSecond = clamp(pointsPerSecond * factor, 0.1, 600) }
+    func zoom(_ factor: Double) { pointsPerSecond = clamp(pointsPerSecond * factor, 8, 1600) }
     func fit(duration: Int64, width: Double) {
         pointsPerSecond = clamp(max(1, width - 168) / max(1, Double(duration) / 1_000_000), 0.1, 600)
     }
@@ -25,6 +25,7 @@ struct TimelineView: View {
     @ViewState<Int64?> private var dropTime: Int64?
     @ViewState<String?> private var hoveredTrack: String?
     @ViewState<Double> private var horizontalOffset = 0
+    @ViewState<Double> private var viewportWidth = 1000
     @ViewState<CGPoint?> private var rulerHover = nil
 
     private var geometry: TimelineGeometry { display.geometry }
@@ -57,21 +58,27 @@ struct TimelineView: View {
                         .onChange(of: model.playhead) { _, time in
                             if model.playing { withAnimation(.linear(duration: 0.12)) { reader.scrollTo("playhead", anchor: .center) } }
                         }
+                        .onChange(of:display.pointsPerSecond) {_,_ in reader.scrollTo("playhead",anchor:.center)}
                         .simultaneousGesture(MagnificationGesture().onChanged { factor in
                             if initialScale == nil { initialScale = display.pointsPerSecond }
-                            display.pointsPerSecond = clamp((initialScale ?? 70) * factor, 0.1, 600)
+                            display.pointsPerSecond = clamp((initialScale ?? 70) * factor, 8, 1600)
                         }.onEnded { _ in initialScale = nil })
                     }
                    }
                   } header: {
                     HStack(spacing:0) {
-                        Text("Tracks").font(.caption.bold()).frame(width:headerWidth,height:28).background(Palette.surface)
+                        Text("Tracks").font(.caption.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
                         ruler(width:width).offset(x:-horizontalOffset)
                             .frame(width:max(0,viewport.size.width-headerWidth),alignment:.leading).clipped()
                     }.background(Palette.surface).zIndex(20)
                   }
                 }
             }
+            .onAppear {viewportWidth = max(0,viewport.size.width-headerWidth)}
+            .onChange(of:viewport.size.width) {_,width in viewportWidth = max(0,width-headerWidth)}
+            #if targetEnvironment(macCatalyst)
+            .background {TimelineScrollZoom(onZoom:{display.zoom($0)})}
+            #endif
         }
         .padding(.vertical, 5)
         .background(Palette.bg)
@@ -109,7 +116,7 @@ struct TimelineView: View {
                         trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: "Hide track")
                         trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: track.locked ? "Unlock track" : "Lock track")
                     }.font(.system(size: desktop ? 12 : 10))
-                }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(Palette.surface2)
+                }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(track.locked ? Color.gray.opacity(0.2):Palette.surface2)
             }
             if desktop {
                 Text("New layer").font(.caption2).frame(width: headerWidth, height: 36)
@@ -125,22 +132,28 @@ struct TimelineView: View {
     }
 
     private func ruler(width: Double) -> some View {
-        let step = [1,2,5,10,15,30,60,120,300,600,1800,3600].first {Double($0)*display.pointsPerSecond >= 55} ?? 3600
+        let major = [0.1,0.25,0.5,1,2,5,10,15,30,60,120,300,600,1800,3600].first {$0*display.pointsPerSecond >= 90} ?? 3600
+        let minor = major/5,spacing = minor*display.pointsPerSecond
+        let firstTick = max(0,Int(horizontalOffset/spacing)-1)
+        let lastTick = max(firstTick,Int(min(width,horizontalOffset+viewportWidth)/spacing)+1)
         return ZStack(alignment: .topLeading) {
             Palette.surface
-            ForEach(0..<(Int(width/display.pointsPerSecond)/step+1), id: \.self) { tick in
+            ForEach(firstTick...lastTick, id: \.self) { tick in
+                let seconds = Double(tick)*minor
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(formatTime(Int64(tick*step)*1_000_000)).font(.system(size: 9).monospacedDigit())
-                    Rectangle().frame(width: 1, height: 5)
-                }.foregroundStyle(Palette.dim).offset(x: Double(tick*step)*display.pointsPerSecond, y: 3)
+                    if tick%5 == 0 {
+                        Text(major < 1 ? String(format:"%.2fs",seconds):formatTime(Int64(seconds*1_000_000))).font(.system(size: 9).monospacedDigit())
+                    }
+                    Rectangle().frame(width: 1, height: tick%5 == 0 ? 5:3)
+                }.foregroundStyle(Palette.dim).offset(x: Double(tick)*spacing, y: tick%5 == 0 ? 3:20)
             }
-        }.frame(width: width, height: 28).contentShape(Rectangle())
+        }.frame(width: width, height: desktop ? 64 : 28).contentShape(Rectangle())
             .overlay(alignment:.topLeading) {
                 if let rulerHover {Image(systemName:"arrow.left.and.right").font(.system(size:13,weight:.bold)).padding(3).background(Palette.surface2,in:RoundedRectangle(cornerRadius:3)).offset(x:rulerHover.x+12,y:3).allowsHitTesting(false)}
             }
             .onContinuousHover {phase in switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}}
             .help("Drag left or right to seek")
-            .gesture(DragGesture(minimumDistance: 0).onChanged { if desktop {keyboardFocus = true}; model.scrub(geometry.time(at: $0.location.x)) })
+            .gesture(DragGesture(minimumDistance: 0).onChanged { if desktop {keyboardFocus = true}; model.scrub(geometry.time(at: $0.location.x)) }.onEnded {_ in model.finishScrub()})
     }
 
     private var playhead: some View {
@@ -158,7 +171,9 @@ struct TimelineView: View {
                     if desktop {keyboardFocus = true}
                     model.selected = nil;model.selectedGap = nil
                 }
-            ForEach(track.clips) { clip in clipView(clip, track: track) }
+            ForEach(track.clips.filter {clip in
+                clip.id == movingID || clip.id == trimID || (x(clip.endUs) >= horizontalOffset-32 && x(clip.startUs) <= horizontalOffset+viewportWidth+32)
+            }) { clip in clipView(clip, track: track) }
             if hoveredTrack == track.id, let dropTime { dropMarker(dropTime) }
         }
         .frame(width: width, height: rowHeight)
@@ -188,9 +203,9 @@ struct TimelineView: View {
     private func clipView(_ clip: Clip, track: Track) -> some View {
         let selected = model.selected == clip.id
         let dragging = movingID == clip.id
-        let trimming = trimID == clip.id
         let shown = displayedClip(clip)
         let clipWidth = max(24,x(shown.durationUs))
+        let clipLeft = max(0,x(shown.startUs)+(dragging ? movement.width:0))
         return HStack(spacing: 0) {
             if selected && !track.locked { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
@@ -205,9 +220,10 @@ struct TimelineView: View {
         .contentShape(Rectangle())
         .background {
             ZStack {
-                Palette.track(track.kind)
+                if track.locked {Color(argb:0xFF505058)} else {Palette.track(track.kind)}
                 if let asset = model.project.asset(clip.assetID) {
-                    TimelineMediaStrip(clip:shown,asset:asset,pointsPerSecond:display.pointsPerSecond)
+                    TimelineMediaStrip(clip:shown,asset:asset,pointsPerSecond:display.pointsPerSecond,
+                        visibleStart:max(0,horizontalOffset-clipLeft),visibleEnd:max(0,horizontalOffset+viewportWidth-clipLeft),locked:track.locked)
                     Color.black.opacity(clip.audioOnly || asset.type == .audio ? 0:0.3)
                 }
             }.allowsHitTesting(false)
@@ -219,10 +235,14 @@ struct TimelineView: View {
                 Image(systemName: "diamond.fill").font(.system(size: 6)).offset(x: x(keyframe.offsetUs), y: -3)
             }
         }
-        .offset(x: max(0,x(shown.startUs)+(dragging ? movement.width:0)),
+        .overlay {
+            if track.locked {RoundedRectangle(cornerRadius:5).fill(Color.gray.opacity(0.35)).allowsHitTesting(false)}
+        }
+        .offset(x: clipLeft,
                 y: dragging ? movement.height : 0)
         .zIndex(dragging ? 10 : selected ? 1 : 0)
         .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("editor.timelineDrag")).onChanged {value in
+            guard !track.locked else {return}
             if desktop {keyboardFocus = true}
             if model.selected != clip.id {model.selected = clip.id}
             model.selectedGap = nil
@@ -244,6 +264,7 @@ struct TimelineView: View {
             Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }.disabled(track.locked)
         }
         .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")
+        .allowsHitTesting(!track.locked)
     }
 
     private func displayedClip(_ clip:Clip)->Clip {

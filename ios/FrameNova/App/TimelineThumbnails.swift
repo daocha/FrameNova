@@ -12,16 +12,23 @@ import SwiftUI
     private var queue:[(MediaAsset,Int64,String)] = []
     private var active = 0
     private var failed:Set<String> = []
+    private var sourceKeys:[String:(MediaAsset,String)] = [:]
     init(store:MediaThumbnailStore = .shared) {self.store = store;memory.totalCostLimit = 32*1024*1024;memory.countLimit = 500}
+    private func sourceKey(_ asset:MediaAsset)->String {
+        if let cached = sourceKeys[asset.id],cached.0 == asset {return cached.1}
+        let key = MediaThumbnailStore.sourceKey(asset)
+        sourceKeys[asset.id] = (asset,key)
+        return key
+    }
     private func request(_ asset:MediaAsset,time:Int64) {
-        let key = MediaThumbnailStore.sourceKey(asset)+"-\(time)"
+        let key = sourceKey(asset)+"-\(time)"
         guard !pending.contains(key),!failed.contains(key),memory.object(forKey:key as NSString) == nil else {return}
         pending.insert(key);queue.append((asset,time,key));pump()
     }
     func image(_ asset:MediaAsset,at time:Int64)->UIImage? {
         let plan = FilmstripPlan(duration:asset.durationUs)
         let time = asset.type == .image ? 0:plan.time(at:plan.index(at:time))
-        let prefix = MediaThumbnailStore.sourceKey(asset)+"-",key = prefix+"\(time)"
+        let prefix = sourceKey(asset)+"-",key = prefix+"\(time)"
         if let image = memory.object(forKey:key as NSString) {return image}
         request(asset,time:time)
         if asset.type == .video {
@@ -58,47 +65,44 @@ struct TimelineMediaStrip:View {
     let clip:Clip
     let asset:MediaAsset
     let pointsPerSecond:Double
+    var visibleStart:Double = 0
+    var visibleEnd:Double = .greatestFiniteMagnitude
+    var locked = false
     @ObservedObject private var waveforms = AudioWaveforms.shared
+    @ObservedObject private var thumbnails = TimelineThumbnails.shared
     var body:some View {
+        let _ = waveforms.revision
+        let _ = thumbnails.revision
         GeometryReader {geometry in
-            if clip.audioOnly || asset.type == .audio {
-                let _ = waveforms.revision
-                let peaks = waveforms.peaks(asset,ready:{}) ?? []
-                Canvas {context,size in
+            let start = min(geometry.size.width,max(0,visibleStart)),end = max(start,min(geometry.size.width,visibleEnd))
+            Canvas {context,size in
+                guard end>start else {return}
+                if locked {context.addFilter(.saturation(0))}
+                if clip.audioOnly || asset.type == .audio {
+                    let peaks = waveforms.peaks(asset,ready:{}) ?? []
                     var path = Path()
-                    let step = max(3,size.width/2000)
-                    for position in stride(from:0.0,to:size.width,by:step) {
+                    for position in stride(from:start,to:end,by:3.0) {
                         let time = clip.sourceTime(at:clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000))
                         let index = Int(time/AudioWaveforms.stepUs)
                         let value = index>=0 && index<peaks.count ? Double(peaks[index]):0
                         let amplitude = clamp(value*min(clip.volume,1.5),0.02,1)*size.height*0.42
-                        path.move(to:CGPoint(x:position,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position,y:size.height/2+amplitude))
+                        path.move(to:CGPoint(x:position-start,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position-start,y:size.height/2+amplitude))
                     }
                     context.stroke(path,with:.color(Palette.teal),lineWidth:2)
-                }
-            } else if clip.text == nil {
-                let width = max(16,geometry.size.height*clamp(Double(asset.width)/Double(max(1,asset.height)),0.5,2))
-                LazyHStack(spacing:0) {
-                    ForEach(0..<max(1,Int(ceil(geometry.size.width/width))),id:\.self) {index in
-                        TimelineThumbnailTile(asset:asset,time:clip.sourceTime(at:clip.startUs+Int64(Double(index)*width/max(0.1,pointsPerSecond)*1_000_000)))
-                            .frame(width:width,height:geometry.size.height).clipped()
+                } else if clip.text == nil {
+                    let width = max(16,size.height*clamp(Double(asset.width)/Double(max(1,asset.height)),0.5,2))
+                    for index in Int(floor(start/width))..<Int(ceil(end/width)) {
+                        let time = clip.sourceTime(at:clip.startUs+Int64(Double(index)*width/max(0.1,pointsPerSecond)*1_000_000))
+                        guard let image = thumbnails.image(asset,at:time) else {continue}
+                        let tile = CGRect(x:Double(index)*width-start,y:0,width:width,height:size.height)
+                        let factor = max(tile.width/image.size.width,tile.height/image.size.height)
+                        let rect = CGRect(x:tile.midX-image.size.width*factor/2,y:tile.midY-image.size.height*factor/2,width:image.size.width*factor,height:image.size.height*factor)
+                        var drawing = context
+                        drawing.clip(to:Path(tile))
+                        drawing.draw(Image(uiImage:image),in:rect)
                     }
-                }.frame(width:geometry.size.width,height:geometry.size.height,alignment:.leading)
-            }
+                }
+            }.frame(width:max(0,end-start),height:geometry.size.height).clipped().offset(x:start)
         }.clipped().accessibilityIdentifier("timeline.mediaStrip")
-    }
-}
-
-private struct TimelineThumbnailTile:View {
-    let asset:MediaAsset
-    let time:Int64
-    @ObservedObject private var thumbnails = TimelineThumbnails.shared
-    var body:some View {
-        let _ = thumbnails.revision
-        GeometryReader {geometry in
-            if let image = thumbnails.image(asset,at:time) {
-                Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped()
-            }
-        }
     }
 }

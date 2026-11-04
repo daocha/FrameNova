@@ -53,7 +53,10 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     private val redoStack = ArrayDeque<Project>()
     var canUndo by mutableStateOf(false); private set
     var canRedo by mutableStateOf(false); private set
-    var selectedId by mutableStateOf<String?>(null)
+    private var selection by mutableStateOf<String?>(null)
+    var selectedId: String?
+        get() = selection
+        set(value) { selection = project.selectableClipId(value) }
     /** A time inside the selected main-track gap, or null. */
     var selectedGapUs by mutableStateOf<Long?>(null)
     var playheadUs by mutableLongStateOf(0L); private set
@@ -149,8 +152,14 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
 
     private fun apply(p: Project) {
         project = p.copy(modifiedAt = System.currentTimeMillis())
-        selectedId?.let { if (project.clip(it) == null) selectedId = null }
-        selectedGapUs?.let { if (project.mainGapAt(it) == null) selectedGapUs = null }
+        selectedId?.let { if (project.trackOf(it)?.locked != false) selectedId = null }
+        transitionTargetId?.let {
+            if (project.trackOf(it)?.locked != false) {
+                transitionTargetId = null
+                if (panel == Panel.TRANSITION) panel = Panel.NONE
+            }
+        }
+        selectedGapUs?.let { if (project.mainTrack.locked || project.mainGapAt(it) == null) selectedGapUs = null }
         playheadUs = playheadUs.coerceIn(0, max(0L, project.durationUs))
         canUndo = undoStack.isNotEmpty(); canRedo = redoStack.isNotEmpty()
         engine.update(project, playheadUs)

@@ -29,6 +29,7 @@ import Foundation
         let model = EditorModel(project: project, store: store)
         defer { model.close(); try? FileManager.default.removeItem(at: folder) }
         model.selected = project.tracks[0].clips[0].id; model.seek(2_000_000)
+        #expect(model.selected == nil)
         #expect(!model.canEditSelection)
         model.split(); model.duplicateSelected(); model.delete(); model.trimToPlayhead(start: true)
         #expect(model.project == project)
@@ -36,8 +37,31 @@ import Foundation
         #expect(model.project == project)
         #expect(!model.canUndo)
         model.change {$0.tracks[0].locked = false}
+        model.selected = project.tracks[0].clips[0].id
         model.delete()
         #expect(model.project.tracks[0].clips.isEmpty)
+    }
+
+    @Test func lockingSelectedTrackClearsSelectionAndUndoRestoresEditability() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        var project = Project(name:"Track selection")
+        project.tracks[0].clips = [Clip(id:"clip",srcOutUs:5_000_000,text:TextStyle())]
+        let model = EditorModel(project:project,store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.selected = "clip"
+        model.playing = true
+        model.change {$0.tracks[0].locked = true}
+        #expect(model.selected == nil)
+        #expect(model.playing)
+        model.selected = "clip"
+        #expect(model.selected == nil)
+        model.undo()
+        model.selected = "clip"
+        #expect(model.canEditSelection)
+        model.redo()
+        #expect(model.selected == nil)
+        #expect(model.project.tracks[0].clips == project.tracks[0].clips)
     }
 
     @Test func frameSteppingClampsToProjectBounds() {

@@ -85,7 +85,7 @@ fun Project.updateTrack(trackId: String, f: (Track) -> Track): Project = mapTrac
 // Track placement
 
 private fun Track.isFree(startUs: Long, endUs: Long, ignoreClipId: String? = null): Boolean =
-    clips.none { it.id != ignoreClipId && it.startUs < endUs && startUs < it.endUs }
+    !locked && clips.none { it.id != ignoreClipId && it.startUs < endUs && startUs < it.endUs }
 
 /** Inserts a new empty track of [kind] in its visual group and returns the project and the track id. */
 fun Project.withNewTrack(kind: TrackKind, nearTrackId: String? = null): Pair<Project, String> {

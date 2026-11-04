@@ -119,7 +119,7 @@ struct PreviewPane:View {
     }
     private func layers(in canvas:CGRect)->[PreviewLayer] {
         var layers:[PreviewLayer] = []
-        for track in model.project.tracks.reversed() where !track.hidden && track.kind != .audio {
+        for track in model.project.tracks.reversed() where !track.hidden && !track.locked && track.kind != .audio {
             var visible = track.clips.filter {$0.contains(model.playhead) && !$0.audioOnly}
             if track.kind == .main {visible.sort {a,b in
                 let i = track.clips.firstIndex(where:{$0.id == a.id}) ?? 0,j = track.clips.firstIndex(where:{$0.id == b.id}) ?? 0

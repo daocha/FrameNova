@@ -16,6 +16,29 @@ class TimelineOpsTest {
 
     private fun base() = Project("id", "Test", 0, 0).addToMainAt(listOf(video, photo, video2), 0)
 
+    @Test fun trackLockDisablesSelectionUntilUnlocked() {
+        val p = base()
+        val id = p.mainTrack.clips.first().id
+        assertEquals(id, p.selectableClipId(id))
+        val locked = p.updateTrack(p.mainTrack.id) { it.copy(locked = true) }
+        assertNull(locked.selectableClipId(id))
+        assertNull(locked.selectableClipId("missing"))
+        val unlocked = locked.updateTrack(p.mainTrack.id) { it.copy(locked = false) }
+        assertEquals(id, unlocked.selectableClipId(id))
+        assertEquals(p.mainTrack.clips, unlocked.mainTrack.clips)
+    }
+
+    @Test fun addingLayerSkipsLockedTrackEvenWhenItsTimeRangeIsFree() {
+        val existing = clipForAsset(photo, 0)
+        val layer = Track("locked-layer", TrackKind.OVERLAY, listOf(existing), locked = true)
+        val p = base().let { it.copy(tracks = listOf(layer) + it.tracks) }
+        val added = clipForAsset(photo, 5_000_000)
+        val next = p.placeOnFreeTrack(TrackKind.OVERLAY, added, preferTrackId = layer.id)
+        assertTrue(p.preservesLockedClips(next))
+        assertTrue(next.trackOf(added.id)?.id != layer.id)
+        assertNotNull(next.clip(added.id))
+    }
+
     @Test fun lockedTrackRejectsClipEditsButAllowsUnlockAndMute() {
         val p = base().let { it.copy(tracks = it.tracks.map { t -> t.copy(locked = true) }) }
         assertTrue(!p.preservesLockedClips(p.copy(tracks = emptyList())))
