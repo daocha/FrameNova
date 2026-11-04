@@ -18,21 +18,24 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @AppStorage("desktop.showInspector") private var showInspector = true
     @AppStorage("desktop.browserWidth") private var browserWidth = 240.0
     @AppStorage("desktop.inspectorWidth") private var inspectorWidth = 300.0
-    @AppStorage("desktop.timelineHeight") private var timelineHeight = 270.0
+    @AppStorage("desktop.timelineHeight") private var timelineHeight = 540.0
+    @AppStorage("desktop.timelineHeightDefaultVersion") private var timelineHeightDefaultVersion = 0
     @ViewState<Double> private var availableWidth = 1000
 
     private var panels: [String] {
         guard let clip = model.clip else { return ["Ratio", "Layout", "Stickers", "Voiceover"] }
         if clip.text != nil { return ["Text", "Font", "Style", "Animation", "Position", "Ratio"] }
-        if clip.audioOnly || model.project.asset(clip.assetID)?.type == .audio { return ["Volume", "Speed", "Ratio"] }
+        if clip.audioOnly || model.project.asset(clip.assetID)?.type == .audio { return ["Volume", "Fade", "Speed", "Ratio"] }
         var choices = ["Position", "Crop", "Adjust", "Filters", "Layout"]
         if model.project.asset(clip.assetID)?.type == .video { choices += ["Speed", "Volume"] }
+        if model.project.asset(clip.assetID)?.hasAudio == true {choices.append("Fade")}
         if model.project.track(clip.id)?.kind == .main { choices.append("Transition") }
         return choices + ["Ratio"]
     }
 
     var body: some View {
         GeometryReader { viewport in
+            let timelineLimit = max(160,Double(viewport.size.height)-300)
             VStack(spacing: 0) {
                 toolbar
                 HStack(spacing: 0) {
@@ -54,13 +57,19 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                         inspector.frame(width: clamp(inspectorWidth, 260, 360))
                     }
                 }.frame(maxHeight: .infinity)
-                WorkspaceDivider(value: $timelineHeight, range: 160...max(160, Double(viewport.size.height)*0.6), horizontal: true, reversed: true)
+                WorkspaceDivider(value: $timelineHeight, range: 160...timelineLimit, horizontal: true, reversed: true)
                 VStack(spacing: 0) {
                     timelineToolbar
                     TimelineView(model: model, display: timeline, desktop: true)
-                }.frame(height: clamp(timelineHeight, 160, max(160, Double(viewport.size.height)*0.6)))
+                }.frame(height: clamp(timelineHeight, 160, timelineLimit))
             }
-            .onAppear { availableWidth = viewport.size.width; timeline.rowHeight = 68; panel = model.clip == nil ? "Ratio" : panels[0] }
+            .onAppear {
+                if timelineHeightDefaultVersion == 0 {
+                    if timelineHeight == 270 {timelineHeight = 540}
+                    timelineHeightDefaultVersion = 1
+                }
+                availableWidth = viewport.size.width; timeline.rowHeight = 68; panel = model.clip == nil ? "Ratio" : panels[0]
+            }
             .onChange(of: viewport.size.width) { _, width in availableWidth = width }
         }
         .background(Palette.bg)
@@ -132,7 +141,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var commandActions: DesktopEditorActions {
         DesktopEditorActions(model: model, importMedia: onImport, replaceMedia: onReplace, importSubtitles: onSubtitles, export: onExport,
                              toggleBrowser: { showBrowser.toggle() }, toggleInspector: { showInspector.toggle() },
-                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 270; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
+                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 540; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
                              zoom: { timeline.zoom($0) }, fit: { timeline.fit(duration: model.project.durationUs, width: availableWidth) })
     }
 }

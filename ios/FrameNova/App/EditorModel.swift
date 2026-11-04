@@ -197,9 +197,8 @@ import SwiftUI
         change {selected = $0.duplicate(id)}
     }
     func moveSelectionToLayer() {
-        guard var clip = clip, canEditSelection, project.track(clip.id)?.kind == .main else {return}
-        clip.transitionIn = nil; clip.transform.scale *= 0.6
-        change {$0.delete(clip.id); $0.place(clip,kind:.overlay)}
+        guard let id = selected,canEditSelection else {return}
+        change {$0.moveToNewLayer(id)}
     }
     func insert(_ asset:MediaAsset,kind:TrackKind? = nil,trackID:String? = nil,at time:Int64? = nil) {
         let destination = kind ?? (asset.type == .audio ? .audio:.main)

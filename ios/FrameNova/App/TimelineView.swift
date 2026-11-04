@@ -149,7 +149,8 @@ struct TimelineView: View {
             }
         }.frame(width: width, height: desktop ? 64 : 28).contentShape(Rectangle())
             .overlay(alignment:.topLeading) {
-                if let rulerHover {Image(systemName:"arrow.left.and.right").font(.system(size:13,weight:.bold)).padding(3).background(Palette.surface2,in:RoundedRectangle(cornerRadius:3)).offset(x:rulerHover.x+12,y:3).allowsHitTesting(false)}
+                if let rulerHover {Image(systemName:"arrow.left.and.right").font(.system(size:13,weight:.bold)).padding(3).background(Palette.surface2,in:RoundedRectangle(cornerRadius:3))
+                    .offset(x:max(horizontalOffset,min(rulerHover.x+3,horizontalOffset+viewportWidth-20)),y:max(0,min(rulerHover.y+3,(desktop ? 64:28)-20))).allowsHitTesting(false)}
             }
             .onContinuousHover {phase in switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}}
             .help("Drag left or right to seek")
@@ -259,7 +260,7 @@ struct TimelineView: View {
         })
         .contextMenu {
             Button("Split") { model.selected = clip.id; model.split() }.disabled(track.locked)
-            if track.kind == .main { Button("To new layer") { model.selected = clip.id; model.moveSelectionToLayer() }.disabled(track.locked) }
+            Button("To new layer") { model.selected = clip.id; model.moveSelectionToLayer() }.disabled(track.locked)
             Button("Duplicate") { model.selected = clip.id; model.duplicateSelected() }.disabled(track.locked)
             Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }.disabled(track.locked)
         }

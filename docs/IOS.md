@@ -45,7 +45,9 @@ Regenerate after pulling changes that add or remove files, then reopen the proje
 Phone windows stack preview, transport, timeline and inline tools/panels. Landscape windows place tools beside
 the preview. Text editing gives the preview the space above its controls; fullscreen hides editing controls. The desktop build uses its own workspace with a persistent media browser on the left,
 a preview in the center, a contextual inspector on the right, and a timeline across the full window below them.
-Desktop windows have a minimum size of 1000 × 640 points.
+Desktop windows have a minimum size of 1000 × 640 points. The timeline defaults to 540 points high, twice the
+previous default, with a smaller preview above it. Smaller windows clamp the timeline height to keep the upper
+controls usable. Existing custom divider sizes are retained; Reset workspace restores the new default.
 
 Tap the project name to rename it. The separate format summary underneath shows ratio, resolution and frame
 rate; its triangle toggles the project format controls and clears clip selection. The preview has a gray surround,
@@ -64,7 +66,8 @@ Desktop signing grants read/write access to user-selected files so the picker ca
 Imports copy those files into project storage. After an entitlement change, rebuild and relaunch the desktop app;
 the running app's permissions come from its code signature. The desktop debug run signs with the same entitlement file.
 Drag the desktop timeline ruler to seek. It stays pinned above the layers during vertical scrolling;
-the 64-point ruler includes extra blank drag space above the first layer. Hovering shows a bidirectional-arrow cue.
+the 64-point ruler includes extra blank drag space above the first layer. Hovering shows a bidirectional-arrow cue
+beside the cursor, following its horizontal and vertical position.
 Command plus mouse-wheel or trackpad scrolling zooms the timeline around the playhead, as does pinching.
 Pressing a clip selects it without changing the playhead;
 dragging moves it in stable timeline coordinates. Each track header has a separate lock button.
@@ -83,6 +86,10 @@ the selected clip and reuses the same controls as the phone and tablet versions.
 followed immediately by To new layer, appear beside Undo, Redo and Snap in the desktop timeline toolbar.
 The same contextual tool list drives phone, tablet and desktop editing. Tools occupy one row and scroll horizontally
 when the window cannot fit them; navigation, snapping and zoom stay available beside them.
+To new layer is available for every unlocked clip, including clips already on layers, text and audio. It always creates
+a fresh compatible track; moving an existing layer clip keeps its source range, timing, transforms and audio fades.
+Audio clips and videos with sound have a dedicated Fade tool with separate fade-in and fade-out durations in seconds.
+These controls are also available under Volume and apply to preview playback and export.
 
 The phone/tablet timeline uses a fixed center playhead: swipe to scrub and fling, hold a clip before dragging,
 and drag its white handles to trim. It draws filmstrips, waveforms, keyframes and fades. Header taps mute

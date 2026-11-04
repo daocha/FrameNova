@@ -29,6 +29,8 @@ import com.framenova.app.model.addToMainAt
 import com.framenova.app.model.clipForAsset
 import com.framenova.app.model.newId
 import com.framenova.app.model.placeOnFreeTrack
+import com.framenova.app.model.withAssets
+import com.framenova.app.ui.editor.Panel
 import com.framenova.app.ui.editor.EditorViewModel
 import com.framenova.app.ui.editor.EditorScreen
 import com.framenova.app.ui.editor.TimelineView
@@ -155,6 +157,30 @@ class TimelineLockDeviceTest {
                 tap(Rect(afterUnlock.centerX() + 50, unlocked.top, afterUnlock.centerX() + 70, unlocked.bottom))
                 onMain { assertEquals("Unlocked layer must accept timeline selection", clip.id, vm.selectedId) }
             }
+            val before = onMain { vm.project.clip(clip.id)!! }
+            val previousTrack = onMain { vm.project.trackOf(clip.id)!!.id }
+            tap(bounds("To new layer"))
+            onMain {
+                assertNotEquals(previousTrack, vm.project.trackOf(clip.id)!!.id)
+                assertEquals(before, vm.project.clip(clip.id))
+                assertEquals(clip.id, vm.selectedId)
+            }
+            val samples = 16_000
+            val wave = java.nio.ByteBuffer.allocate(44 + samples * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            wave.put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray())
+                .putInt(16).putShort(1).putShort(1).putInt(samples).putInt(samples * 2).putShort(2).putShort(16)
+                .put("data".toByteArray()).putInt(samples * 2)
+            val audioFile = java.io.File(repo.dir(id), "fade-fixture.wav").apply { writeBytes(wave.array()) }
+            val audio = MediaAsset(newId(), audioFile.toURI().toString(), MediaType.AUDIO, "Audio fixture", 1_000_000, hasAudio = true)
+            val sound = clipForAsset(audio, 0)
+            onMain {
+                vm.commit(vm.project.withAssets(listOf(audio)).placeOnFreeTrack(TrackKind.AUDIO, sound))
+                vm.selectedId = sound.id
+            }
+            tap(bounds("Fade"))
+            onMain { assertEquals(Panel.FADE, vm.panel) }
+            bounds("Fade in")
+            bounds("Fade out")
         } finally {
             onMain { store.clear(); activity.finish() }
             repo.delete(id)
@@ -165,7 +191,7 @@ class TimelineLockDeviceTest {
         val deadline = SystemClock.uptimeMillis() + 5_000
         fun find(node: android.view.accessibility.AccessibilityNodeInfo?): Rect? {
             if (node == null) return null
-            if (node.contentDescription?.toString() == label && node.isVisibleToUser) {
+            if ((node.contentDescription?.toString() == label || node.text?.toString() == label) && node.isVisibleToUser) {
                 return Rect().also { node.getBoundsInScreen(it) }
             }
             for (index in 0 until node.childCount) find(node.getChild(index))?.let { return it }

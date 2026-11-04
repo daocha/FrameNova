@@ -8,7 +8,7 @@ single-surface timeline rather than nested scroll views competing for the same t
 | Project heading | Name renames; separate ratio/resolution/fps summary and triangle toggle project format and clear selection | Format toggle UI test; device checks pending |
 | Home cards | Compact 16:10 covers, two phone columns and adaptive larger grids; covers persist with projects | Grid sizing and cover persistence/invalidation tests |
 | Scrubbing | Fixed center playhead; swipe content in either direction, fling, clamp at project bounds, pinch zoom | Coordinate/scrub tests; swipe UI test |
-| Moving clips | Hold a clip to pick it up, drag across compatible tracks or into a new layer, keep gaps, snap either edge | Placement/snapping tests; long-press UI test |
+| Moving clips | Hold a clip to pick it up, drag across compatible tracks or into a new layer, keep gaps, snap either edge; To new layer creates a fresh compatible track for main, overlay, text and audio clips | Placement/snapping and fresh-track/source-preservation tests; long-press UI test |
 | Trimming | Selected white handles have separate hit targets; preserve source limits, opposite edge, gaps and transition overlap | Timeline tests; handle UI test |
 | Timeline visuals | Source-time video/photo filmstrips on touch and desktop timelines; persistent image/peak caches; clip labels, speed/mute/effect badges, keyframes and fade lines | Real-frame, disk reuse and corrupt-cache recovery app tests; device visual checks pending |
 | Gaps and track headers | Tap a gap to select/delete it; header taps mute main/audio tracks or hide layers | Gap/placement tests |
@@ -25,6 +25,7 @@ single-surface timeline rather than nested scroll views competing for the same t
 | Transitions | Alternating main layers, shared easing/slide/push/zoom math, dip color below overlays, apply to all | Transition core tests and compositing app tests |
 | Replacement | Preserve source-range length and speed, bound video range, reset crop | Replacement app test |
 | Voiceover | Play video with preview audio muted, record at the playhead, show elapsed time/level, insert recording on stop | Microphone/device checks pending |
+| Audio fades | Dedicated Fade action for audio and video with sound; independent fade-in/fade-out durations in seconds, also available under Volume; preview/export use the stored fade envelope | Android full-editor controls and model tests; Apple source checks, device execution pending |
 | Export | Shared renderer with export snapshots isolated from live preview state; codec/size/fps/quality and audio mix | Export/rendering app tests; full device matrix pending |
 
 Core regression tests run independently of the app. App tests and interaction tests require full Xcode and an

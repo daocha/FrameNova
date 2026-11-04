@@ -361,10 +361,24 @@ fun Project.moveClip(clipId: String, targetTrackId: String, startUs: Long, newTr
 }
 
 fun Project.moveToOverlay(clipId: String): Project {
-    val clip = clip(clipId) ?: return this
     if (trackOf(clipId)?.kind != TrackKind.MAIN) return this
-    val moved = clip.copy(id = clip.id, transitionIn = null, transform = clip.transform.copy(scale = clip.transform.scale * 0.6f))
-    return deleteClip(clipId).placeOnFreeTrack(TrackKind.OVERLAY, moved)
+    return moveToNewLayer(clipId)
+}
+
+/** Creates a fresh compatible track rather than reusing a free track. */
+fun Project.moveToNewLayer(clipId: String): Project {
+    val clip = clip(clipId) ?: return this
+    val source = trackOf(clipId)?.takeUnless { it.locked } ?: return this
+    val kind = when (categoryOf(clip)) {
+        ClipCategory.VISUAL -> TrackKind.OVERLAY
+        ClipCategory.TEXT -> TrackKind.TEXT
+        ClipCategory.AUDIO -> TrackKind.AUDIO
+    }
+    val moved = clip.copy(transitionIn = null, transform = if (source.kind == TrackKind.MAIN)
+        clip.transform.copy(scale = clip.transform.scale * 0.6f) else clip.transform)
+    val removed = copy(tracks = tracks.map { it.copy(clips = it.clips.filterNot { c -> c.id == clipId }) })
+    val (project, id) = removed.withNewTrack(kind, source.id)
+    return project.mapTrack(id) { it.copy(clips = listOf(moved)) }.normalized()
 }
 
 fun Project.moveToMain(clipId: String): Project {

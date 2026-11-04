@@ -36,6 +36,44 @@ import Testing
         #expect(project.track(clip.id)?.kind == .overlay)
         #expect(project.tracks[project.mainIndex].clips.isEmpty)
     }
+    @Test func toNewLayerKeepsNonMainClipPropertiesAndLeavesOtherTracksAlone() {
+        let video = MediaAsset(id:"video",path:"video.mp4",type:.video,name:"Video",durationUs:10_000_000)
+        let audio = MediaAsset(id:"audio",path:"audio.wav",type:.audio,name:"Audio",durationUs:10_000_000,hasAudio:true)
+        for kind in [TrackKind.overlay,.text,.audio] {
+            let clip = Clip(id:"moving",assetID:kind == .text ? nil:kind == .audio ? audio.id:video.id,
+                startUs:2_000_000,srcInUs:1_000_000,srcOutUs:5_000_000,speed:2,volume:0.4,
+                fadeInUs:200_000,fadeOutUs:300_000,transform:Transform(scale:0.7),text:kind == .text ? TextStyle():nil)
+            var sibling = clip;sibling.id = "sibling";sibling.startUs = 10_000_000
+            var other = clip;other.id = "other";other.startUs = 20_000_000
+            let source = Track(id:"source",kind:kind,clips:[clip,sibling]),free = Track(id:"free",kind:kind,clips:[other])
+            let main = Track(id:"main",kind:.main)
+            var project = Project(name:"New layer");project.assets = [video,audio]
+            project.tracks = kind == .audio ? [main,source,free]:[free,source,main]
+            var locked = project;locked.tracks[locked.tracks.firstIndex {$0.id == source.id}!].locked = true
+            let before = locked;locked.moveToNewLayer(clip.id);#expect(locked == before)
+            project.moveToNewLayer(clip.id)
+            #expect(project.clip(clip.id) == clip)
+            #expect(project.track(clip.id)?.kind == kind)
+            #expect(![source.id,free.id].contains(project.track(clip.id)!.id))
+            #expect(project.tracks.first {$0.id == source.id}?.clips == [sibling])
+            #expect(project.tracks.first {$0.id == free.id} == free)
+            let sourceIndex = project.tracks.firstIndex {$0.id == source.id}!
+            let newIndex = project.tracks.firstIndex {$0.id == project.track(clip.id)?.id}!
+            #expect(newIndex == sourceIndex + (kind == .audio ? 1:-1))
+        }
+    }
+    @Test func mainToNewLayerCreatesFreshOverlayAndPreservesTiming() {
+        let main = Clip(id:"main-clip",startUs:2_000_000,srcInUs:1_000_000,srcOutUs:5_000_000)
+        var project = Project(name:"Main move");project.tracks[0].clips = [main]
+        let free = Track(id:"free",kind:.overlay,clips:[Clip(startUs:20_000_000)])
+        project.tracks.insert(free,at:0);project.moveToNewLayer(main.id)
+        #expect(project.track(main.id)?.kind == .overlay)
+        #expect(project.track(main.id)?.id != free.id)
+        #expect(project.clip(main.id)?.startUs == main.startUs)
+        #expect(project.clip(main.id)?.srcInUs == main.srcInUs)
+        #expect(project.clip(main.id)?.transform.scale == main.transform.scale*0.6)
+        #expect(project.tracks.first {$0.id == free.id} == free)
+    }
     @Test func selectionOrderAndLimitSurviveFilterChanges() {
         var selection = OrderedMediaSelection(limit:2)
         selection.toggle("video");selection.toggle("photo");selection.toggle("extra")

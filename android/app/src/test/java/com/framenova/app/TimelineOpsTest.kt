@@ -218,6 +218,41 @@ class TimelineOpsTest {
         assertTrue(p.tracks.none { it.kind == TrackKind.OVERLAY })
     }
 
+    @Test fun toNewLayerPreservesNonMainClipAndNeverReusesAFreeTrack() {
+        for (kind in listOf(TrackKind.OVERLAY, TrackKind.TEXT, TrackKind.AUDIO)) {
+            val clip = Clip("moving", assetId = if (kind == TrackKind.TEXT) null else if (kind == TrackKind.AUDIO) song.id else video.id,
+                startUs = 2_000_000, srcInUs = 1_000_000, srcOutUs = 5_000_000, speed = 2f, volume = 0.4f,
+                fadeInUs = 200_000, fadeOutUs = 300_000, transform = Transform(scale = 0.7f),
+                text = if (kind == TrackKind.TEXT) TextStyle() else null)
+            val sibling = clip.copy(id = "sibling", startUs = 10_000_000)
+            val source = Track("source", kind, listOf(clip, sibling))
+            val free = Track("free", kind, listOf(clip.copy(id = "other", startUs = 20_000_000)))
+            val main = Track("main", TrackKind.MAIN)
+            val p = Project("id", "New layer", 0, 0, assets = listOf(video, song),
+                tracks = if (kind == TrackKind.AUDIO) listOf(main, source, free) else listOf(free, source, main))
+            val moved = p.moveToNewLayer(clip.id)
+            assertEquals(clip, moved.clip(clip.id))
+            assertEquals(kind, moved.trackOf(clip.id)!!.kind)
+            assertTrue(moved.trackOf(clip.id)!!.id !in listOf(source.id, free.id))
+            assertEquals(listOf(sibling), moved.track(source.id)!!.clips)
+            assertEquals(free, moved.track(free.id))
+            assertEquals(moved.tracks.indexOfFirst { it.id == source.id } + if (kind == TrackKind.AUDIO) 1 else -1,
+                moved.tracks.indexOfFirst { it.id == moved.trackOf(clip.id)!!.id })
+            val locked = p.updateTrack(source.id) { it.copy(locked = true) }
+            assertEquals(locked, locked.moveToNewLayer(clip.id))
+        }
+    }
+
+    @Test fun mainToNewLayerCreatesFreshOverlayEvenWhenAnotherOverlayIsFree() {
+        val p = base().addOverlayAt(photo, 40_000_000)
+        val id = p.mainTrack.clips.first().id
+        val existing = p.tracks.first { it.kind == TrackKind.OVERLAY }
+        val moved = p.moveToNewLayer(id)
+        assertTrue(moved.trackOf(id)!!.id != existing.id)
+        assertEquals(existing, moved.track(existing.id))
+        assertEquals(p.clip(id)!!.transform.scale * 0.6f, moved.clip(id)!!.transform.scale, 0.0001f)
+    }
+
     @Test fun moveRejectsIncompatibleTracks() {
         var p = base().addAudioAt(song, 0)
         val audioId = p.tracks.first { it.kind == TrackKind.AUDIO }.clips.first().id

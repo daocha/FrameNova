@@ -70,9 +70,10 @@ struct InspectorView: View {
             Text("Pitch is preserved.").font(.caption).foregroundStyle(Palette.dim)
         case "Volume":
             ValueSlider(title:"Volume",value:value(\.volume),range:0...2)
-            ValueSlider(title:"Fade in (seconds)",value:Binding(get:{Double(model.clip?.fadeInUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeInUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
-            ValueSlider(title:"Fade out (seconds)",value:Binding(get:{Double(model.clip?.fadeOutUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeOutUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
+            audioFades
             Button(model.clip?.volume == 0 ? "Unmute":"Mute") {model.edit {$0.volume = $0.volume == 0 ? 1:0}}
+        case "Fade":
+            audioFades
         case "Position":
             ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
             ValueSlider(title:"Scale",value:transform(\.scale),range:0.05...4); ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180); ValueSlider(title:"Opacity",value:transform(\.opacity))
@@ -147,6 +148,10 @@ struct InspectorView: View {
             ProgressView(value:model.recordingLevel).tint(Palette.teal)
         default: Text("Select a clip to edit it.").foregroundStyle(Palette.dim)
         }
+    }
+    @ViewBuilder private var audioFades:some View {
+        ValueSlider(title:"Fade in (seconds)",value:Binding(get:{Double(model.clip?.fadeInUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeInUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
+        ValueSlider(title:"Fade out (seconds)",value:Binding(get:{Double(model.clip?.fadeOutUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeOutUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
     }
     private var maxTransitionDuration:Double {
         let clips = model.project.tracks[model.project.mainIndex].clips

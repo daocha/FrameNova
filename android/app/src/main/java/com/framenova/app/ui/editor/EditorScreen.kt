@@ -148,13 +148,16 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Position", Icons.Default.OpenWith) { vm.panel = Panel.TRANSFORM },
                 Tool("Keyframe", Icons.Default.Diamond) { vm.toggleKeyframe() },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
+                Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() },
                 Tool("Duplicate", Icons.Default.ContentCopy) { vm.duplicateSelected() },
                 Tool("Delete", Icons.Default.Delete) { vm.deleteSelected() },
             )
             category == ClipCategory.AUDIO -> listOf(
                 Tool("Volume", Icons.AutoMirrored.Filled.VolumeUp) { vm.panel = Panel.VOLUME },
+                Tool("Fade", Icons.Default.GraphicEq) { vm.panel = Panel.FADE },
                 Tool("Speed", Icons.Default.Speed) { vm.panel = Panel.SPEED },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
+                Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() },
                 Tool("Duplicate", Icons.Default.ContentCopy) { vm.duplicateSelected() },
                 Tool("Save audio", Icons.Default.SaveAlt) { vm.saveAudio() },
                 Tool("Delete", Icons.Default.Delete) { vm.deleteSelected() },
@@ -164,9 +167,10 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 val isVideo = asset?.type == MediaType.VIDEO
                 buildList {
                     add(Tool("Split", Icons.Default.ContentCut) { vm.split() })
-                    if (track?.kind == TrackKind.MAIN) add(Tool("To new layer", Icons.Default.Layers) { vm.toOverlay() })
+                    add(Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() })
                     if (isVideo) add(Tool("Speed", Icons.Default.Speed) { vm.panel = Panel.SPEED })
                     if (isVideo) add(Tool("Volume", Icons.AutoMirrored.Filled.VolumeUp) { vm.panel = Panel.VOLUME })
+                    if (asset?.hasAudio == true) add(Tool("Fade", Icons.Default.GraphicEq) { vm.panel = Panel.FADE })
                     add(Tool("Position", Icons.Default.OpenWith) { vm.panel = Panel.TRANSFORM })
                     add(Tool("Layout", Icons.Default.GridView) { vm.panel = Panel.LAYOUT })
                     add(Tool("Keyframe", Icons.Default.Diamond) { vm.toggleKeyframe() })
@@ -189,6 +193,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
         when (vm.panel) {
             Panel.SPEED -> SpeedPanel(vm)
             Panel.VOLUME -> VolumePanel(vm)
+            Panel.FADE -> VolumePanel(vm, fadesOnly = true)
             Panel.ADJUST -> AdjustPanel(vm)
             Panel.FILTER -> FilterPanel(vm)
             Panel.CROP -> CropPanel(vm)
@@ -207,7 +212,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     }
     // A panel that needs a selection closes when the selection goes away.
     LaunchedEffect(vm.selectedId) {
-        val needsClip = vm.panel in setOf(Panel.SPEED, Panel.VOLUME, Panel.ADJUST, Panel.FILTER, Panel.CROP, Panel.TRANSFORM, Panel.TEXT_EDIT, Panel.TEXT_FONT, Panel.TEXT_STYLE, Panel.TEXT_ANIM)
+        val needsClip = vm.panel in setOf(Panel.SPEED, Panel.VOLUME, Panel.FADE, Panel.ADJUST, Panel.FILTER, Panel.CROP, Panel.TRANSFORM, Panel.TEXT_EDIT, Panel.TEXT_FONT, Panel.TEXT_STYLE, Panel.TEXT_ANIM)
         if (needsClip && vm.selectedClip == null) vm.panel = Panel.NONE
     }
     val showPanel = vm.panel != Panel.NONE && vm.panel != Panel.EXPORT

@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 enum class Panel {
-    NONE, SPEED, VOLUME, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
+    NONE, SPEED, VOLUME, FADE, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
     TEXT_EDIT, TEXT_FONT, TEXT_STYLE, TEXT_ANIM, STICKER, VOICEOVER, EXPORT,
 }
 
@@ -440,7 +440,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         selectedId = audio
     }
 
-    fun toOverlay() { selectedId?.let { commit(project.moveToOverlay(it)) } }
+    fun toNewLayer() { selectedId?.let { commit(project.moveToNewLayer(it)) } }
     fun toMain() { selectedId?.let { commit(project.moveToMain(it)) } }
 
     fun freezeFrame() {

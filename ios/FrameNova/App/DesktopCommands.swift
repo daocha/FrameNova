@@ -43,7 +43,7 @@ struct DesktopEditorCommands: Commands {
         CommandMenu("Clip") {
             Button("Split at playhead") { editor?.model.split() }.keyboardShortcut("b").disabled(!canEdit)
             Button("To new layer") { editor?.model.moveSelectionToLayer() }.keyboardShortcut("l", modifiers: [.command, .shift])
-                .disabled(!canEdit || editor?.model.clip.map { editor?.model.project.track($0.id)?.kind != .main } != false)
+                .disabled(!canEdit)
             Divider()
             Button("Duplicate") { editor?.model.duplicateSelected() }.keyboardShortcut("d").disabled(!canEdit)
             Button("Delete") { editor?.model.delete() }.disabled(!canEdit)

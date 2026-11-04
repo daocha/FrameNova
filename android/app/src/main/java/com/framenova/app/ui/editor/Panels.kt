@@ -161,17 +161,17 @@ private fun abs(f: Float) = kotlin.math.abs(f)
 
 @UnstableApi
 @Composable
-fun VolumePanel(vm: EditorViewModel) {
+fun VolumePanel(vm: EditorViewModel, fadesOnly: Boolean = false) {
     val clip = vm.selectedClip ?: return
-    var vol by remember(clip.id) { mutableFloatStateOf(clip.volume) }
-    var fin by remember(clip.id) { mutableFloatStateOf(clip.fadeInUs / 1_000_000f) }
-    var fout by remember(clip.id) { mutableFloatStateOf(clip.fadeOutUs / 1_000_000f) }
+    var vol by remember(clip.id, clip.volume) { mutableFloatStateOf(clip.volume) }
+    var fin by remember(clip.id, clip.fadeInUs) { mutableFloatStateOf(clip.fadeInUs / 1_000_000f) }
+    var fout by remember(clip.id, clip.fadeOutUs) { mutableFloatStateOf(clip.fadeOutUs / 1_000_000f) }
     val maxFade = (clip.durationUs / 2_000_000f).coerceIn(0.1f, 10f)
-    PanelScaffold("Volume & fades", { vm.panel = Panel.NONE }) {
-        LabeledSlider("Volume", vol, 0f..2f, ::pct, { vol = it }, { vm.updateSelected { c -> c.copy(volume = vol) } })
+    PanelScaffold(if (fadesOnly) "Audio fades" else "Volume & fades", { vm.panel = Panel.NONE }) {
+        if (!fadesOnly) LabeledSlider("Volume", vol, 0f..2f, ::pct, { vol = it }, { vm.updateSelected { c -> c.copy(volume = vol) } })
         LabeledSlider("Fade in", fin, 0f..maxFade, { "%.1fs".format(it) }, { fin = it }, { vm.updateSelected { c -> c.copy(fadeInUs = (fin * 1_000_000).toLong()) } })
         LabeledSlider("Fade out", fout, 0f..maxFade, { "%.1fs".format(it) }, { fout = it }, { vm.updateSelected { c -> c.copy(fadeOutUs = (fout * 1_000_000).toLong()) } })
-        ChipRow {
+        if (!fadesOnly) ChipRow {
             FilterChip(selected = clip.volume == 0f, onClick = { vol = if (clip.volume == 0f) 1f else 0f; vm.updateSelected { c -> c.copy(volume = vol) } }, label = { Text(if (clip.volume == 0f) "Unmute" else "Mute") })
         }
     }

@@ -56,6 +56,17 @@ extension Project {
         let index = kind == .text ? 0 : kind == .overlay ? tracks.firstIndex(where:{$0.kind == .overlay}) ?? mainIndex : tracks.count
         tracks.insert(Track(kind:kind,clips:[clip]),at:index);normalize()
     }
+    mutating func moveToNewLayer(_ id:String) {
+        guard var clip = clip(id),let source = track(id),!source.locked else {return}
+        let kind:TrackKind = clip.text != nil ? .text : clip.audioOnly || asset(clip.assetID)?.type == .audio ? .audio:.overlay
+        let index:Int
+        if source.kind == kind {index = tracks.firstIndex {$0.id == source.id}! + (kind == .audio ? 1:0)}
+        else {index = kind == .text ? 0 : kind == .overlay ? tracks.firstIndex {$0.kind == .overlay} ?? mainIndex:tracks.count}
+        clip.transitionIn = nil
+        if source.kind == .main {clip.transform.scale *= 0.6}
+        for i in tracks.indices {tracks[i].clips.removeAll {$0.id == id}}
+        tracks.insert(Track(kind:kind,clips:[clip]),at:index);normalize()
+    }
 }
 
 extension Project {
