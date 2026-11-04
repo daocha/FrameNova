@@ -60,6 +60,9 @@ images and peaks, generating only missing entries; the operating system can recl
 
 Desktop New project, Media, Add layer, Replace and Import offer Files and Photos as media sources.
 Files opens the file selection interface; Photos opens the library browser. Audio uses file selection.
+Desktop signing grants read/write access to user-selected files so the picker can deliver the selection.
+Imports copy those files into project storage. After an entitlement change, rebuild and relaunch the desktop app;
+the running app's permissions come from its code signature. The desktop debug run signs with the same entitlement file.
 Drag the desktop timeline ruler to seek. It stays pinned above the layers during vertical scrolling;
 the 64-point ruler includes extra blank drag space above the first layer. Hovering shows a bidirectional-arrow cue.
 Command plus mouse-wheel or trackpad scrolling zooms the timeline around the playhead, as does pinching.

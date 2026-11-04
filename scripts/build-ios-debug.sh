@@ -61,7 +61,7 @@ if [ -e "$output" ]; then mv "$output" "$output.previous.$(date +%s)"; fi
 cp -R "$app" "$output"
 if [ "$run" = 1 ]; then
   if [ "$platform" = mac ]; then
-    codesign --force --deep --sign - "$output"
+    codesign --force --deep --sign - --entitlements "$root/ios/FrameNova/Resources/Desktop.entitlements" "$output"
     open "$output"
   else
     xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true

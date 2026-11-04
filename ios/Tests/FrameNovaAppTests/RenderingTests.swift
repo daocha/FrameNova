@@ -134,6 +134,33 @@ private actor DecodeCalls {
 
 @Suite(.serialized) @MainActor struct PersistentThumbnailTests {
     private func image()->UIImage {UIGraphicsImageRenderer(size:CGSize(width:32,height:18)).image {context in UIColor.red.setFill();context.fill(CGRect(x:0,y:0,width:32,height:18))}}
+    @Test(arguments:[true,false]) func selectedMP4IsCopiedAndImported(libraryOnly:Bool) async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        let fixture = try #require(Bundle.main.url(forResource:"preview_filler",withExtension:"mp4"))
+        let original = try Data(contentsOf:fixture)
+        let source = folder.appendingPathComponent("Selected video.mp4")
+        try original.write(to:source)
+        let model = EditorModel(project:Project(name:"MP4 file import"),store:store)
+        defer {
+            model.close()
+            for asset in model.project.assets {try? FileManager.default.removeItem(at:ProjectStore.mediaURL(asset.path))}
+            try? FileManager.default.removeItem(at:folder)
+        }
+        model.ingest([source],kind:.main,libraryOnly:libraryOnly)
+        let deadline = Date().addingTimeInterval(10)
+        while model.busy && Date()<deadline {try await Task.sleep(nanoseconds:20_000_000)}
+        #expect(!model.busy)
+        #expect(model.error == nil)
+        let asset = try #require(model.project.assets.first)
+        #expect(asset.type == .video)
+        #expect(asset.name == "Selected video.mp4")
+        #expect(asset.durationUs>0 && asset.width>0 && asset.height>0)
+        #expect(try Data(contentsOf:source) == original)
+        #expect(try Data(contentsOf:ProjectStore.mediaURL(asset.path)) == original)
+        #expect(model.project.tracks[model.project.mainIndex].clips.count == (libraryOnly ? 0:1))
+        #expect(ProjectStore(directory:folder).projects.first?.assets.count == 1)
+    }
     @Test func fileImportKeepsSuccessfulFilesWhenAnotherFileFails() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID()),store = ProjectStore(directory:folder)
         let source = folder.appendingPathComponent("Selected image.png")
