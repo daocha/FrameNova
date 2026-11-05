@@ -77,3 +77,26 @@ extension Project {
         return clip.id
     }
 }
+
+/// Retains the requested position while playback callbacks and asynchronous seeks catch up.
+struct KeyboardSeekCursor {
+    private var acceleration = PlaybackKeyRepeat()
+    private var previousEventTime: Double?
+    private(set) var target: Int64?
+
+    mutating func step(from position: Int64, direction: Int, repeating: Bool? = nil, time: Double,
+                       fps: Int, playing: Bool, largerStep: Bool = false, duration: Int64) -> Int64 {
+        let repeated = repeating ?? previousEventTime.map {time-$0 < 0.3} ?? false
+        let frames = acceleration.frames(direction:direction,repeating:repeated,time:time)
+        let frame = max(1,1_000_000/Int64(max(1,fps)))
+        let interval = playing ? max(100_000,frame):frame
+        let next = clamp((target ?? position)+Int64(frames)*interval*(largerStep ? 10:1),0,max(0,duration))
+        target = next;previousEventTime = time
+        return next
+    }
+    @discardableResult mutating func finish() -> Int64? {
+        let position = target
+        target = nil;previousEventTime = nil
+        return position
+    }
+}

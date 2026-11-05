@@ -15,6 +15,42 @@ import Testing
         ]
         #expect(steps == [1,3,10,30,-1,-1])
     }
+    @Test func keyboardSeekKeepsItsTargetWhenPlaybackReportsOlderPositions() {
+        var cursor = KeyboardSeekCursor()
+        let first = cursor.step(from:5_000_000,direction:-1,repeating:false,time:10,fps:30,playing:true,duration:10_000_000)
+        let second = cursor.step(from:5_100_000,direction:-1,repeating:true,time:10.1,fps:30,playing:true,duration:10_000_000)
+        let third = cursor.step(from:5_200_000,direction:-1,repeating:true,time:10.2,fps:30,playing:true,duration:10_000_000)
+        #expect([first,second,third] == [4_900_000,4_800_000,4_700_000])
+        let final = cursor.finish()
+        #expect(final == third)
+        #expect(cursor.target == nil)
+        let restarted = cursor.step(from:6_000_000,direction:1,repeating:false,time:11,fps:30,playing:true,duration:10_000_000)
+        #expect(restarted == 6_100_000)
+    }
+    @Test func pausedKeyboardSeekUsesFramesAndClampsAtBothEnds() {
+        var cursor = KeyboardSeekCursor()
+        let first = cursor.step(from:2_000_000,direction:1,repeating:false,time:10,fps:25,playing:false,duration:10_000_000)
+        let second = cursor.step(from:2_000_000,direction:1,repeating:true,time:10.1,fps:25,playing:false,duration:10_000_000)
+        #expect([first,second] == [2_040_000,2_080_000])
+        cursor.finish()
+        let end = cursor.step(from:9_990_000,direction:1,repeating:false,time:11,fps:25,playing:false,duration:10_000_000)
+        #expect(end == 10_000_000)
+        cursor.finish()
+        let start = cursor.step(from:10_000,direction:-1,repeating:false,time:12,fps:25,playing:false,duration:10_000_000)
+        #expect(start == 0)
+    }
+    @Test func menuKeyRepeatsAccelerateAndShiftMultipliesTheStep() {
+        var cursor = KeyboardSeekCursor()
+        let first = cursor.step(from:0,direction:1,time:10,fps:25,playing:false,duration:10_000_000)
+        var target = first
+        for tick in 1...12 {
+            target = cursor.step(from:0,direction:1,time:10+Double(tick)/10,fps:25,playing:false,duration:10_000_000)
+        }
+        #expect(target > 13*first)
+        cursor.finish()
+        let shifted = cursor.step(from:0,direction:1,time:12,fps:25,playing:false,largerStep:true,duration:10_000_000)
+        #expect(shifted == 400_000)
+    }
     @Test func openingCoverShiftsEveryTrackWithoutChangingSourceTiming() throws {
         let image = MediaAsset(path:"cover.png",type:.image,name:"Cover",durationUs:3_000_000)
         var project = Project(name:"Cover")

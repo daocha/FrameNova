@@ -74,8 +74,6 @@ struct InspectorView: View {
             ValueSlider(title:"Volume",value:value(\.volume),range:0...2)
             audioFades
             Button(model.clip?.volume == 0 ? "Unmute":"Mute") {model.edit {$0.volume = $0.volume == 0 ? 1:0}}
-        case "Fade":
-            audioFades
         case "Position":
             ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
             ValueSlider(title:"Scale",value:transform(\.scale),range:0.05...4); ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180); ValueSlider(title:"Opacity",value:transform(\.opacity))

@@ -4,7 +4,6 @@ import UIKit
 struct EditorKeyboard: ViewModifier {
     @ObservedObject var model: EditorModel
     @EditorFocus<Bool> private var focused
-    @ViewState<PlaybackKeyRepeat> private var repeatSeek = PlaybackKeyRepeat()
 
     func body(content: Content) -> some View {
         content
@@ -25,14 +24,13 @@ struct EditorKeyboard: ViewModifier {
                 if press.modifiers.contains(.command) {model.seek(forward ? model.project.durationUs : 0)}
                 else if press.modifiers.contains(.option) {model.seek(model.project.adjacentCut(to:model.playhead,forward:forward))}
                 else {
-                    let frames = repeatSeek.frames(direction:forward ? 1 : -1,repeating:press.phase == .repeat,time:ProcessInfo.processInfo.systemUptime)
-                    model.seek(model.playhead+Int64(frames * (press.modifiers.contains(.shift) ? 10 : 1))*1_000_000/Int64(max(1,model.project.canvas.fps)),precise:false)
+                    model.seekWithKeyboard(forward ? 1:-1,repeating:press.phase == .repeat,largerStep:press.modifiers.contains(.shift))
                 }
                 return .handled
             }
             .onKeyPress(keys: [.leftArrow, .rightArrow], phases: .up) { _ in
                 guard EditorKeyboardFocus.textInput == nil else {return .ignored}
-                model.seek(model.playhead);return .handled
+                model.finishKeyboardSeek();return .handled
             }
             .onKeyPress(.escape) {
                 guard EditorKeyboardFocus.textInput == nil else {return .ignored}

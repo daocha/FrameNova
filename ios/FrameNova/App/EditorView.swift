@@ -176,7 +176,7 @@ struct EditorView: View {
                         tool("To new layer","square.3.layers.3d") {model.moveSelectionToLayer()}
                         tool("Duplicate","doc.on.doc") {model.duplicateSelected()};tool("Delete","trash") {model.delete()}
                     } else if audio {
-                        tool("Volume","speaker.wave.2") {open("Volume")};tool("Fade","waveform") {open("Fade")};tool("Speed","speedometer") {open("Speed")}
+                        tool("Volume","speaker.wave.2") {open("Volume")};tool("Speed","speedometer") {open("Speed")}
                         tool("Split","scissors") {model.split()}
                         tool("To new layer","square.3.layers.3d") {model.moveSelectionToLayer()}
                         tool("Duplicate","doc.on.doc") {model.duplicateSelected()}
@@ -185,7 +185,6 @@ struct EditorView: View {
                         tool("Split","scissors") {model.split()}
                         tool("To new layer","square.3.layers.3d") {model.moveSelectionToLayer()}
                         if video {tool("Speed","speedometer") {open("Speed")};tool("Volume","speaker.wave.2") {open("Volume")}}
-                        if model.project.asset(c.assetID)?.hasAudio == true {tool("Fade","waveform") {open("Fade")}}
                         tool("Position","arrow.up.and.down.and.arrow.left.and.right") {open("Position")};tool("Layout","square.grid.2x2") {open("Layout")}
                         tool("Keyframe","diamond") {model.change {$0.toggleKeyframe(c.id,at:model.playhead)}}
                         tool("Adjust","slider.horizontal.3") {open("Adjust")};tool("Filters","camera.filters") {open("Filters")};tool("Crop","crop") {open("Crop")}

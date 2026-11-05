@@ -177,8 +177,8 @@ class TimelineLockDeviceTest {
                 vm.commit(vm.project.withAssets(listOf(audio)).placeOnFreeTrack(TrackKind.AUDIO, sound))
                 vm.selectedId = sound.id
             }
-            tap(bounds("Fade"))
-            onMain { assertEquals(Panel.FADE, vm.panel) }
+            tap(bounds("Volume"))
+            onMain { assertEquals(Panel.VOLUME, vm.panel) }
             bounds("Fade in")
             bounds("Fade out")
             for (label in listOf("Fade in", "Fade out")) {

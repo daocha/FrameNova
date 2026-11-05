@@ -47,6 +47,8 @@ import SwiftUI
     let store: ProjectStore
     private var undoStack: [Project] = [], redoStack: [Project] = []
     private var rebuild: Task<Void,Never>?
+    private var keyboardSeek = KeyboardSeekCursor()
+    private var keyboardSeekIdle:Task<Void,Never>?
     private var seekInProgress = false
     private var pendingSeek:Int64?
     private var pendingSeekPrecise = true
@@ -57,8 +59,12 @@ import SwiftUI
     private var endObserver: NSObjectProtocol?
     init(project:Project,store:ProjectStore) {
         self.project = project; self.store = store
-        observer = player.addPeriodicTimeObserver(forInterval:CMTime(value:1,timescale:30),queue:.main) { [weak self] time in
-            Task { @MainActor in guard let self, self.playing else { return }; self.playhead = Int64(max(0,time.seconds)*1_000_000) }
+        observer = player.addPeriodicTimeObserver(forInterval:CMTime(value:1,timescale:30),queue:.main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self,self.playing,self.keyboardSeek.target == nil,!self.seekInProgress,self.pendingSeek == nil else {return}
+                let seconds = self.player.currentTime().seconds
+                if seconds.isFinite {self.playhead = clamp(Int64(max(0,seconds)*1_000_000),0,self.project.durationUs)}
+            }
         }
         endObserver = NotificationCenter.default.addObserver(forName:.AVPlayerItemDidPlayToEndTime,object:nil,queue:.main) { [weak self] notification in
             Task { @MainActor in guard let self, notification.object as? AVPlayerItem === self.player.currentItem else { return }; self.playing = false }
@@ -115,6 +121,7 @@ import SwiftUI
     }
     func persist() { do { try store.save(project) } catch { self.error = error.localizedDescription } }
     func schedulePreview() {
+        cancelKeyboardSeek()
         rebuild?.cancel(); player.pause(); playing = false; seekGeneration += 1; seekInProgress = false; pendingSeek = nil
         let snapshot = project
         let state = PreviewProjectState(snapshot);previewState = state
@@ -131,6 +138,28 @@ import SwiftUI
         }
     }
     func seek(_ time:Int64,precise:Bool = true) {
+        cancelKeyboardSeek()
+        requestSeek(time,precise:precise)
+    }
+    func seekWithKeyboard(_ direction:Int,repeating:Bool? = nil,largerStep:Bool = false) {
+        let target = keyboardSeek.step(from:playhead,direction:direction,repeating:repeating,
+            time:ProcessInfo.processInfo.systemUptime,fps:project.canvas.fps,playing:playing,
+            largerStep:largerStep,duration:project.durationUs)
+        requestSeek(target)
+        keyboardSeekIdle?.cancel()
+        keyboardSeekIdle = Task {[weak self] in
+            do {try await Task.sleep(nanoseconds:300_000_000)} catch {return}
+            self?.finishKeyboardSeek()
+        }
+    }
+    func finishKeyboardSeek() {
+        keyboardSeekIdle?.cancel();keyboardSeekIdle = nil
+        if let target = keyboardSeek.finish() {requestSeek(target)}
+    }
+    private func cancelKeyboardSeek() {
+        keyboardSeekIdle?.cancel();keyboardSeekIdle = nil;keyboardSeek.finish()
+    }
+    private func requestSeek(_ time:Int64,precise:Bool = true) {
         playhead = clamp(time,0,project.durationUs)
         pendingSeek = playhead
         pendingSeekPrecise = precise
@@ -159,6 +188,7 @@ import SwiftUI
         else { if playhead >= project.durationUs { seek(0) }; player.play(); playing = true }
     }
     func close() {
+        cancelKeyboardSeek()
         if recording {toggleRecording()}
         rebuild?.cancel();player.pause();persist()
         let snapshot = project
