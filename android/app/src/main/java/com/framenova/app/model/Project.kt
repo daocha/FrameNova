@@ -233,6 +233,17 @@ data class Clip(
             .coerceIn(srcInUs, srcOutUs)
 
     fun contains(timeUs: Long): Boolean = timeUs >= startUs && timeUs < endUs
+
+    /** Fade envelope in timeline time, including clips shortened after setting a fade. */
+    fun audioFadeGainAt(timelineUs: Long): Float {
+        val duration = durationUs.coerceAtLeast(1)
+        val offset = (timelineUs - startUs).coerceIn(0, duration)
+        val incoming = fadeInUs.coerceIn(0, duration)
+        val outgoing = fadeOutUs.coerceIn(0, duration)
+        val fadeIn = if (incoming > 0) offset.toDouble() / incoming else 1.0
+        val fadeOut = if (outgoing > 0) (duration - offset).toDouble() / outgoing else 1.0
+        return minOf(1.0, fadeIn, fadeOut).toFloat()
+    }
 }
 
 @Serializable

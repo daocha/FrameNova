@@ -1,6 +1,17 @@
 import Foundation
 
 extension Project {
+    @discardableResult mutating func extractAudio(_ id:String)->String? {
+        guard let source = clip(id),track(id)?.locked == false,!source.audioOnly,
+              asset(source.assetID)?.type == .video,asset(source.assetID)?.hasAudio == true else {return nil}
+        var audio = source
+        audio.id = newID();audio.audioOnly = true;audio.transitionIn = nil;audio.keyframes = []
+        audio.transform = Transform();audio.crop = CropRect();audio.adjust = Adjust();audio.filter = nil
+        update(id) {$0.volume = 0}
+        place(audio,kind:.audio)
+        return audio.id
+    }
+
     mutating func normalize() {
         var laid: [Clip] = []
         for var c in tracks[mainIndex].clips.sorted(by: { $0.startUs < $1.startUs }) {

@@ -10,6 +10,10 @@ struct TimelineGeometry {
 
     func position(_ time: Int64) -> Double { Double(time) / 1_000_000 * pointsPerSecond }
 
+    func viewportPosition(_ time: Int64, scrollOffset: Double) -> Double { position(time)-scrollOffset }
+
+    func time(atViewportX x: Double, scrollOffset: Double) -> Int64 { time(at:x+scrollOffset) }
+
     func snap(_ time: Int64, project: Project, playhead: Int64, excluding clipID: String? = nil) -> Int64 {
         let time = max(0, time)
         guard snapping else { return time }

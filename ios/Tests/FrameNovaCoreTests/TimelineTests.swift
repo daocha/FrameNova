@@ -2,6 +2,42 @@ import Testing
 import Foundation
 @testable import FrameNovaCore
 @Suite struct TimelineTests {
+    @Test func extractedAudioKeepsVideoTimingAfterSaveReopenAndTrim() throws {
+        for speed in [0.25,1.0,4.0] {
+            var project = Project(name:"Extracted audio")
+            let asset = MediaAsset(path:"video.mov",type:.video,name:"Video",durationUs:600_000_000,hasAudio:true)
+            project.assets = [asset]
+            let video = Clip(assetID:asset.id,startUs:2_000_000,srcInUs:10_000_000,srcOutUs:30_000_000,
+                             speed:speed,volume:0.7,fadeInUs:500_000,fadeOutUs:500_000)
+            project.tracks[0].clips = [video]
+            let duration = project.durationUs
+            let extracted = project.extractAudio(video.id)
+            let id = try #require(extracted)
+            var reopened = try JSONDecoder().decode(Project.self,from:JSONEncoder().encode(project))
+            let audio = try #require(reopened.clip(id))
+            #expect(audio.startUs == video.startUs && audio.endUs == video.endUs)
+            #expect(audio.srcInUs == video.srcInUs && audio.srcOutUs == video.srcOutUs && audio.speed == video.speed)
+            #expect(audio.volume == video.volume && audio.fadeInUs == video.fadeInUs && audio.fadeOutUs == video.fadeOutUs)
+            #expect(reopened.durationUs == duration)
+            reopened.trimEnd(id,delta:-1_000_000)
+            #expect(reopened.clip(id)?.durationUs == video.durationUs-1_000_000)
+            #expect(reopened.clip(video.id)?.srcOutUs == video.srcOutUs)
+            #expect(reopened.durationUs == duration)
+        }
+    }
+    @Test func audioWaveformFadeUsesTimelineTimeAfterTrimAndSpeedChange() {
+        let clip = Clip(startUs:5_000_000,srcInUs:2_000_000,srcOutUs:10_000_000,speed:2,fadeInUs:1_000_000,fadeOutUs:1_000_000)
+        for (offset,gain) in [(Int64(0),0.0),(500_000,0.5),(2_000_000,1.0),(3_500_000,0.5),(4_000_000,0.0)] {
+            expectEqual(clip.audioFadeGain(at:clip.startUs+offset),gain,accuracy:0.0001)
+        }
+        var shortened = clip
+        shortened.srcOutUs = 4_000_000
+        expectEqual(shortened.audioFadeGain(at:5_250_000),0.5,accuracy:0.0001)
+        expectEqual(shortened.audioFadeGain(at:5_500_000),1,accuracy:0.0001)
+        shortened.fadeInUs = 0;shortened.fadeOutUs = 0
+        expectEqual(shortened.audioFadeGain(at:5_000_000),1,accuracy:0.0001)
+        expectEqual(shortened.audioFadeGain(at:6_000_000),1,accuracy:0.0001)
+    }
     func project() -> Project {
         var p = Project(name: "Test")
         p.add([MediaAsset(path: "a.mov", type: .video, name: "A", durationUs: 10_000_000)], kind: .main, at: 0)

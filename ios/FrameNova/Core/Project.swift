@@ -101,6 +101,14 @@ struct Clip: Codable, Equatable, Identifiable {
     var audioOnly = false
     var durationUs: Int64 { Int64(Double(srcOutUs - srcInUs) / speed) }
     var endUs: Int64 { startUs + durationUs }
+    /// Fade envelope in timeline time, matching the audio mix's half-duration cap.
+    func audioFadeGain(at time: Int64) -> Double {
+        let duration = max(0,durationUs), offset = clamp(time-startUs,0,duration)
+        let incoming = clamp(fadeInUs,0,duration/2), outgoing = clamp(fadeOutUs,0,duration/2)
+        let fadeIn = incoming > 0 ? Double(offset)/Double(incoming):1
+        let fadeOut = outgoing > 0 ? Double(duration-offset)/Double(outgoing):1
+        return clamp(min(fadeIn,fadeOut),0,1)
+    }
     func contains(_ time: Int64) -> Bool { time >= startUs && time < endUs }
     func sourceTime(at time: Int64) -> Int64 { clamp(srcInUs + Int64(Double(clamp(time-startUs, 0, durationUs))*speed), srcInUs, srcOutUs) }
     func transform(at time: Int64) -> Transform {

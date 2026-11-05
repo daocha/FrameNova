@@ -533,7 +533,7 @@ private fun DrawScope.drawClip(
                         val tl = clip.startUs + ((x - x0) / max(1f, x1 - x0) * clip.durationUs).toLong()
                         val idx = (clip.sourceTimeAt(tl) / MediaCache.PEAK_US).toInt()
                         val v = peaks.getOrNull(idx) ?: 0f
-                        val amp = (v * clip.volume.coerceAtMost(1.5f)).coerceIn(0.02f, 1f) * (h * 0.42f)
+                        val amp = (v * clip.volume.coerceAtMost(1.5f) * clip.audioFadeGainAt(tl)).coerceIn(0f, 1f) * (h * 0.42f)
                         drawLine((if (row.track.locked) Color.LightGray else Palette.Teal).copy(alpha = 0.85f * alpha), Offset(x, mid - amp), Offset(x, mid + amp), strokeWidth = 2f)
                         x += 3f
                     }

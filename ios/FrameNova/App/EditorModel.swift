@@ -283,9 +283,10 @@ import SwiftUI
         change {if start {$0.trimStart(clip.id,delta:playhead-clip.startUs)} else {$0.trimEnd(clip.id,delta:playhead-clip.endUs)}}
     }
     func extractAudio() {
-        guard let c = clip, canEditSelection, project.asset(c.assetID)?.hasAudio == true else { return }
-        var audio = c; audio.id = newID(); audio.audioOnly = true; audio.transitionIn = nil; audio.keyframes = []
-        change { $0.update(c.id) { $0.volume = 0 }; $0.place(audio,kind:.audio) }; selected = audio.id
+        guard let id = clip?.id,canEditSelection else {return}
+        var extracted:String?
+        change {extracted = $0.extractAudio(id)}
+        if let extracted {selected = extracted}
     }
     func saveAudio() {
         guard let c = clip, let media = project.asset(c.assetID), media.hasAudio else {return}
