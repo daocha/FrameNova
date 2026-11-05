@@ -2,6 +2,19 @@ import Testing
 import Foundation
 @testable import FrameNovaCore
 @Suite struct TimelineTests {
+    @Test func audioWaveformFadeUsesTimelineTimeAfterTrimAndSpeedChange() {
+        let clip = Clip(startUs:5_000_000,srcInUs:2_000_000,srcOutUs:10_000_000,speed:2,fadeInUs:1_000_000,fadeOutUs:1_000_000)
+        for (offset,gain) in [(Int64(0),0.0),(500_000,0.5),(2_000_000,1.0),(3_500_000,0.5),(4_000_000,0.0)] {
+            expectEqual(clip.audioFadeGain(at:clip.startUs+offset),gain,accuracy:0.0001)
+        }
+        var shortened = clip
+        shortened.srcOutUs = 4_000_000
+        expectEqual(shortened.audioFadeGain(at:5_250_000),0.5,accuracy:0.0001)
+        expectEqual(shortened.audioFadeGain(at:5_500_000),1,accuracy:0.0001)
+        shortened.fadeInUs = 0;shortened.fadeOutUs = 0
+        expectEqual(shortened.audioFadeGain(at:5_000_000),1,accuracy:0.0001)
+        expectEqual(shortened.audioFadeGain(at:6_000_000),1,accuracy:0.0001)
+    }
     func project() -> Project {
         var p = Project(name: "Test")
         p.add([MediaAsset(path: "a.mov", type: .video, name: "A", durationUs: 10_000_000)], kind: .main, at: 0)

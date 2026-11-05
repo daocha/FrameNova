@@ -303,8 +303,8 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             while position<min(box.maxX,bounds.width) {
                 let timeline = clip.startUs+Int64((position-box.minX)/(display?.pointsPerSecond ?? 70)*1_000_000)
                 let index = Int(clip.sourceTime(at:timeline)/AudioWaveforms.stepUs)
-                let value = index<peaks.count ? peaks[index]:0
-                let amplitude = CGFloat(clamp(Double(value)*min(clip.volume,1.5),0.02,1))*box.height*0.42
+                let value = index>=0 && index<peaks.count ? peaks[index]:0
+                let amplitude = CGFloat(clamp(Double(value)*min(clip.volume,1.5)*clip.audioFadeGain(at:timeline),0,1))*box.height*0.42
                 context.move(to:CGPoint(x:position,y:box.midY-amplitude));context.addLine(to:CGPoint(x:position,y:box.midY+amplitude));position += 3
             }
             context.strokePath()

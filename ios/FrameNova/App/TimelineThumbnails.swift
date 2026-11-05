@@ -82,10 +82,11 @@ struct TimelineMediaStrip:View {
                     let peaks = waveforms.peaks(asset,ready:{}) ?? []
                     var path = Path()
                     for position in stride(from:floor(start/3)*3,to:end,by:3.0) {
-                        let time = clip.sourceTime(at:clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000))
+                        let timeline = clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000)
+                        let time = clip.sourceTime(at:timeline)
                         let index = Int(time/AudioWaveforms.stepUs)
                         let value = index>=0 && index<peaks.count ? Double(peaks[index]):0
-                        let amplitude = clamp(value*min(clip.volume,1.5),0.02,1)*size.height*0.42
+                        let amplitude = clamp(value*min(clip.volume,1.5)*clip.audioFadeGain(at:timeline),0,1)*size.height*0.42
                         path.move(to:CGPoint(x:position-start,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position-start,y:size.height/2+amplitude))
                     }
                     context.stroke(path,with:.color(Palette.teal),lineWidth:2)

@@ -17,8 +17,8 @@ struct CanvasControls: View {
             Button(aspect.rawValue) {canvas.aspect = aspect}.buttonStyle(.bordered).tint(canvas.aspect == aspect ? Palette.accent:Palette.dim)
         }}
         Text("Resolution").font(.caption).foregroundStyle(Palette.dim)
-        LazyVGrid(columns:[GridItem(.adaptive(minimum:64))]) {ForEach(Resolution.allCases.reversed(),id:\.self) {tier in
-            Button(tier.label) {canvas.tier = tier}.buttonStyle(.bordered).tint(canvas.tier == tier ? Palette.accent:Palette.dim)
+        LazyVGrid(columns:[GridItem(.adaptive(minimum:80))]) {ForEach(Resolution.allCases.reversed(),id:\.self) {tier in
+            Button {canvas.tier = tier} label: {Text(tier.label).lineLimit(1).fixedSize(horizontal:true,vertical:false)}.buttonStyle(.bordered).tint(canvas.tier == tier ? Palette.accent:Palette.dim)
         }}
         Text("Frame rate").font(.caption).foregroundStyle(Palette.dim)
         LazyVGrid(columns:[GridItem(.adaptive(minimum:72))]) {ForEach([60,50,30,25,24],id:\.self) {fps in
