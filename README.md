@@ -11,6 +11,17 @@
     <a href="LICENSE">License</a>
   </p>
   <p><strong>Up to 4K</strong> &nbsp; / &nbsp; <strong>Multi-track editing</strong> &nbsp; / &nbsp; <strong>Local projects</strong></p>
+
+[![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict%201.0.0-blue)](LICENSE)
+[![Android CI](https://img.shields.io/github/actions/workflow/status/daocha/FrameNova/android.yml?branch=main&label=Android%20CI&logo=githubactions&logoColor=white)](https://github.com/daocha/FrameNova/actions/workflows/android.yml)
+[![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)](android)
+[![Swift](https://img.shields.io/badge/Swift-SwiftUI-F05138?logo=swift&logoColor=white)](ios)
+[![Android](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white)](android)
+[![iOS](https://img.shields.io/badge/iOS-16%2B-000000?logo=apple&logoColor=white)](docs/IOS.md)
+[![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white)](docs/IOS.md)
+[![Last commit](https://img.shields.io/github/last-commit/daocha/FrameNova/main)](https://github.com/daocha/FrameNova/commits/main)
+[![Repo size](https://img.shields.io/github/repo-size/daocha/FrameNova)](https://github.com/daocha/FrameNova)
+
 </div>
 
 ---
