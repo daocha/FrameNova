@@ -60,7 +60,9 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 WorkspaceDivider(value: $timelineHeight, range: 160...timelineLimit, horizontal: true, reversed: true)
                 VStack(spacing: 0) {
                     timelineToolbar
-                    TimelineView(model: model, display: timeline, desktop: true)
+                    TimelineView(model: model, display: timeline, desktop: true,onCover:{
+                        model.selected = nil;model.selectedGap = nil;panel = "Cover";showInspector = true
+                    })
                 }.frame(height: clamp(timelineHeight, 160, timelineLimit))
             }
             .onAppear {
@@ -72,6 +74,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
             }
             .onChange(of: viewport.size.width) { _, width in availableWidth = width }
         }
+        .overlayPreferenceValue(WorkspacePointerHintKey.self) {WorkspacePointerHintOverlay(hint:$0)}
         .background(Palette.bg)
         .focusedSceneValue(\.desktopEditor, commandActions)
         .onChange(of:inspectorRequest) {_,_ in showInspector = true}
@@ -90,7 +93,6 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 model.selected = nil;model.selectedGap = nil;panel = "Ratio";showInspector = !close
             })
             Spacer()
-            Button("Cover") {model.selected = nil;panel = "Cover";showInspector = true}
             Button(action: onImport) { Label("Import", systemImage: "square.and.arrow.down") }.disabled(model.busy).help("Import media (⌘I)")
             Button { showBrowser.toggle() } label: { Image(systemName: "sidebar.left") }.help("Toggle media browser")
             Button { showInspector.toggle() } label: { Image(systemName: "sidebar.right") }.help("Toggle inspector")
@@ -163,23 +165,19 @@ struct WorkspaceDivider: View {
         Rectangle().fill((pointerLocation != nil || start != nil) ? Palette.accent.opacity(0.6) : Palette.surface2)
             .frame(width: horizontal ? nil : 5, height: horizontal ? 5 : nil)
             .contentShape(Rectangle())
-            .onContinuousHover {phase in
-                switch phase {case .active(let point):pointerLocation = point;case .ended:if start == nil {pointerLocation = nil}}
+            .onContinuousHover(coordinateSpace:.global) {phase in
+                guard start == nil else {return}
+                switch phase {case .active(let point):pointerLocation = point;case .ended:pointerLocation = nil}
             }
-            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+            .gesture(DragGesture(minimumDistance: 0,coordinateSpace:.global).onChanged { drag in
                 if start == nil { start = value }
                 pointerLocation = drag.location
                 let delta = horizontal ? drag.translation.height : drag.translation.width
                 value = clamp((start ?? value) + delta * (reversed ? -1 : 1), range.lowerBound, range.upperBound)
             }.onEnded { _ in start = nil;pointerLocation = nil })
-            .overlay(alignment:.topLeading) {
-                if let point = pointerLocation {
-                    Image(systemName:horizontal ? "arrow.up.and.down":"arrow.left.and.right")
-                        .font(.system(size:12,weight:.bold)).foregroundStyle(.white)
-                        .padding(6).background(Palette.accent,in:Circle())
-                        .offset(x:point.x+16,y:point.y+12).allowsHitTesting(false)
-                }
-            }
+            .preference(key:WorkspacePointerHintKey.self,value:pointerLocation.map {
+                WorkspacePointerHint(location:$0,symbol:horizontal ? "arrow.up.and.down":"arrow.left.and.right")
+            })
             .zIndex(100)
             .accessibilityLabel(horizontal ? "Resize timeline" : "Resize panel")
             .accessibilityAdjustableAction { direction in value = clamp(value + (direction == .increment ? 20 : -20), range.lowerBound, range.upperBound) }

@@ -16,6 +16,7 @@ struct TimelineView: View {
     @ObservedObject var display: TimelineDisplay
     @StateObject private var pointer = DesktopPointerState()
     var desktop = false
+    var onCover:()->Void = {}
     @EditorFocus<Bool> private var keyboardFocus
     @ViewState<Double?> private var initialScale: Double?
     @ViewState<String?> private var movingID: String?
@@ -30,6 +31,7 @@ struct TimelineView: View {
     @ViewState<Double> private var horizontalOffset = 0
     @ViewState<Double> private var viewportWidth = 1000
     @ViewState<CGPoint?> private var rulerHover = nil
+    @ViewState<Bool> private var rulerDragging = false
 
     private var geometry: TimelineGeometry { display.geometry }
     private var headerWidth: Double { desktop ? 136 : 90 }
@@ -99,7 +101,16 @@ struct TimelineView: View {
         VStack(spacing: 5) {
             ForEach(model.project.tracks) { track in
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized).font(.caption2.bold())
+                    HStack(spacing:6) {
+                        Text(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized).font(.caption2.bold())
+                        if desktop && track.kind == .main {
+                            Spacer(minLength:0)
+                            Button(action:onCover) {Label("Cover",systemImage:"plus").font(.system(size:10,weight:.semibold))}
+                                .buttonStyle(.plain).foregroundStyle(Palette.accent)
+                                .accessibilityLabel("Add or edit cover").accessibilityIdentifier("desktop.mainCover")
+                                .help("Choose a cover image")
+                        }
+                    }
                     HStack(spacing: desktop ? 16 : 8) {
                         trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: "Mute track")
                         trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: "Hide track")
@@ -125,25 +136,35 @@ struct TimelineView: View {
         let minor = major/5,spacing = minor*display.pointsPerSecond
         let firstTick = max(0,Int(horizontalOffset/spacing)-1)
         let lastTick = max(firstTick,Int(min(width,horizontalOffset+viewportWidth)/spacing)+1)
-        return ZStack(alignment: .topLeading) {
-            Palette.surface
-            ForEach(firstTick...lastTick, id: \.self) { tick in
-                let seconds = Double(tick)*minor
-                VStack(alignment: .leading, spacing: 3) {
-                    if tick%5 == 0 {
-                        Text(major < 1 ? String(format:"%.2fs",seconds):formatTime(Int64(seconds*1_000_000))).font(.system(size: 9).monospacedDigit())
-                    }
-                    Rectangle().frame(width: 1, height: tick%5 == 0 ? 5:3)
-                }.foregroundStyle(Palette.dim).offset(x: Double(tick)*spacing, y: tick%5 == 0 ? 3:20)
-            }
-        }.frame(width: width, height: desktop ? 64 : 28).contentShape(Rectangle())
-            .overlay(alignment:.topLeading) {
-                if let rulerHover {Image(systemName:"arrow.left.and.right").font(.system(size:13,weight:.bold)).padding(3).background(Palette.surface2,in:RoundedRectangle(cornerRadius:3))
-                    .offset(x:max(horizontalOffset,min(rulerHover.x+3,horizontalOffset+viewportWidth-20)),y:max(0,min(rulerHover.y+3,(desktop ? 64:28)-20))).allowsHitTesting(false)}
-            }
-            .onContinuousHover {phase in switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}}
-            .help("Drag left or right to seek")
-            .gesture(DragGesture(minimumDistance: 0).onChanged { if desktop {keyboardFocus = true}; model.scrub(geometry.time(at: $0.location.x)) }.onEnded {_ in model.finishScrub()})
+        return GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                Palette.surface
+                ForEach(firstTick...lastTick, id: \.self) { tick in
+                    let seconds = Double(tick)*minor
+                    VStack(alignment: .leading, spacing: 3) {
+                        if tick%5 == 0 {
+                            Text(major < 1 ? String(format:"%.2fs",seconds):formatTime(Int64(seconds*1_000_000))).font(.system(size: 9).monospacedDigit())
+                        }
+                        Rectangle().frame(width: 1, height: tick%5 == 0 ? 5:3)
+                    }.foregroundStyle(Palette.dim).offset(x: Double(tick)*spacing, y: tick%5 == 0 ? 3:20)
+                }
+            }.contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace:.global) {phase in
+                    guard !rulerDragging else {return}
+                    switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}
+                }
+                .gesture(DragGesture(minimumDistance:0,coordinateSpace:.global).onChanged {drag in
+                    if desktop {keyboardFocus = true}
+                    rulerDragging = true;rulerHover = drag.location
+                    model.scrub(geometry.time(at:drag.location.x-proxy.frame(in:.global).minX))
+                }.onEnded {_ in
+                    rulerDragging = false;rulerHover = nil;model.finishScrub()
+                })
+                .preference(key:WorkspacePointerHintKey.self,value:rulerHover.map {
+                    WorkspacePointerHint(location:$0,symbol:"arrow.left.and.right")
+                })
+                .help("Drag left or right to seek")
+        }.frame(width:width,height:desktop ? 64:28)
     }
 
     private var playhead: some View {
