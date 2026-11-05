@@ -106,6 +106,20 @@ import Testing
         #expect(TimelineGeometry(snapping: false).snap(4_999_000, project: project, playhead: 0) == 4_999_000)
     }
 
+    @Test func zoomedRulerKeepsSeekingAndPlayheadAlignedNearClipEnd() {
+        let end:Int64 = 600_000_000, width = 720.0
+        for zoom in [70.0,600.0,1600.0] {
+            let geometry = TimelineGeometry(pointsPerSecond:zoom)
+            let offset = geometry.position(end)-width+40
+            for localX in [0.0,width/2,width-40] {
+                let time = geometry.time(atViewportX:localX,scrollOffset:offset)
+                #expect(abs(geometry.viewportPosition(time,scrollOffset:offset)-localX)<0.002)
+            }
+            #expect(geometry.time(atViewportX:width-40,scrollOffset:offset) == end)
+            #expect(abs(geometry.viewportPosition(end,scrollOffset:offset)-(width-40))<0.002)
+        }
+    }
+
     @Test func cutNavigationIncludesOtherTracksAndProjectBounds() {
         var project = Project(name: "Navigation")
         project.insertAsset(video, kind: .main, at: 0)

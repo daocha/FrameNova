@@ -61,7 +61,8 @@ struct TimelineView: View {
                         .coordinateSpace(name:"timeline.scrollViewport")
                         .onPreferenceChange(TimelineOffsetKey.self) {horizontalOffset = $0}
                         .onChange(of: model.playhead) { _, time in
-                            if model.playing && (x(time)<horizontalOffset || x(time)>horizontalOffset+viewportWidth-12) {
+                            let position = geometry.viewportPosition(time,scrollOffset:horizontalOffset)
+                            if !rulerDragging && (position<0 || position>viewportWidth-12) {
                                 reader.scrollTo("playhead",anchor:.center)
                             }
                         }
@@ -75,8 +76,7 @@ struct TimelineView: View {
                   } header: {
                     HStack(spacing:0) {
                         Text("Tracks").font(.caption.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
-                        ruler(width:width).offset(x:-horizontalOffset)
-                            .frame(width:max(0,viewport.size.width-headerWidth),alignment:.leading).clipped()
+                        ruler(width:max(0,viewport.size.width-headerWidth)).clipped()
                     }.background(Palette.surface).zIndex(20)
                   }
                 }
@@ -135,7 +135,7 @@ struct TimelineView: View {
         let major = [0.1,0.25,0.5,1,2,5,10,15,30,60,120,300,600,1800,3600].first {$0*display.pointsPerSecond >= 90} ?? 3600
         let minor = major/5,spacing = minor*display.pointsPerSecond
         let firstTick = max(0,Int(horizontalOffset/spacing)-1)
-        let lastTick = max(firstTick,Int(min(width,horizontalOffset+viewportWidth)/spacing)+1)
+        let lastTick = max(firstTick,Int((horizontalOffset+width)/spacing)+1)
         return GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 Palette.surface
@@ -146,7 +146,7 @@ struct TimelineView: View {
                             Text(major < 1 ? String(format:"%.2fs",seconds):formatTime(Int64(seconds*1_000_000))).font(.system(size: 9).monospacedDigit())
                         }
                         Rectangle().frame(width: 1, height: tick%5 == 0 ? 5:3)
-                    }.foregroundStyle(Palette.dim).offset(x: Double(tick)*spacing, y: tick%5 == 0 ? 3:20)
+                    }.foregroundStyle(Palette.dim).offset(x: Double(tick)*spacing-horizontalOffset, y: tick%5 == 0 ? 3:20)
                 }
             }.contentShape(Rectangle())
                 .onContinuousHover(coordinateSpace:.global) {phase in
@@ -156,7 +156,7 @@ struct TimelineView: View {
                 .gesture(DragGesture(minimumDistance:0,coordinateSpace:.global).onChanged {drag in
                     if desktop {keyboardFocus = true}
                     rulerDragging = true;rulerHover = drag.location
-                    model.scrub(geometry.time(at:drag.location.x-proxy.frame(in:.global).minX))
+                    model.scrub(geometry.time(atViewportX:drag.location.x-proxy.frame(in:.global).minX,scrollOffset:horizontalOffset))
                 }.onEnded {_ in
                     rulerDragging = false;rulerHover = nil;model.finishScrub()
                 })
@@ -168,10 +168,14 @@ struct TimelineView: View {
     }
 
     private var playhead: some View {
-        VStack(spacing: 0) {
-            Image(systemName: "arrowtriangle.down.fill").font(.system(size: 10))
-            Rectangle().frame(width: 1.5)
-        }.foregroundStyle(.white).frame(width: 10).offset(x: x(model.playhead)-5).id("playhead").allowsHitTesting(false)
+        HStack(spacing:0) {
+            Color.clear.frame(width:x(model.playhead))
+            VStack(spacing: 0) {
+                Image(systemName: "arrowtriangle.down.fill").font(.system(size: 10))
+                Rectangle().frame(width: 1.5)
+            }.foregroundStyle(.white).frame(width:10).id("playhead")
+            Spacer(minLength:0)
+        }.padding(.leading,-5).allowsHitTesting(false)
     }
 
     private func trackRow(_ track: Track, width: Double) -> some View {
