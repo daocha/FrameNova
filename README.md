@@ -53,9 +53,17 @@ Debug builds can update themselves from your computer:
    ```
 2. Build the debug APK and install it once (USB / adb). Every debug build made with the host set writes
    `android/dist/dev-update/` (APK, `SHA256SUMS`, `latest.json`).
-3. Run `scripts/serve-dev-update.sh` and leave it running. It serves that folder on your LAN address only.
+3. Run `scripts/serve-dev-update.sh`. It starts in the background on your LAN address only, and running it again after
+   any build is safe: a running server picks up the new build by itself. `--status`, `--stop` and `--foreground` are also
+   there. The files are served only under a secret path that the build also puts in the app, so others on the network
+   cannot find the debug APK. The secret is made once, in `~/.android/framenova-dev-update-secret`, and stays the same
+   across builds and new clones. If that file is lost, install the debug build once by hand.
 4. After each new build, the app shows **Update** (home screen banner, or Settings > Check for updates). Downloads are
    verified against the checksum and the package, and Android installs them only if the signing key matches.
+
+A debug build installed before the secret existed still asks at the old address. Once, after building, run
+`scripts/serve-dev-update.sh --migrate`, let the phone update, then run the plain command again. No reinstall is needed.
+The plain command also stops any older server that has no secret path, on any port.
 
 ## Reporting a problem
 

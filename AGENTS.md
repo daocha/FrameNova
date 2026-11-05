@@ -12,7 +12,8 @@ merging to the maintainer. Commit or push only when the user asks for it.
 
 - Do not mention other apps or products by name anywhere in this repository: code, comments, docs, commit messages
   and pull requests.
-- Never write the LAN update address from `.env` into a committed file, commit message or pull request.
+- Never write the LAN update address from `.env`, or the secret in `~/.android/framenova-dev-update-secret`, into a
+  committed file, commit message or pull request.
 - Logs the user shares from the developer tools go in `debug/` (gitignored); never commit them.
 
 ## Building and testing
@@ -55,8 +56,9 @@ Do not set `ANDROID_USER_HOME`: the APK must be signed with `~/.android/debug.ke
 installed debug build has. The debug package is `com.framenova.app.debug`.
 
 After a successful build, copy the APK to `android/dist/FrameNova-debug.apk`. When the gitignored `.env` sets
-`FRAMENOVA_DEV_UPDATE_HOST` (see `.env.example`), the build has already written `android/dist/dev-update/`, and the
-phone updates from it while `scripts/serve-dev-update.sh` runs.
+`FRAMENOVA_DEV_UPDATE_HOST` (see `.env.example`), the build has already written `android/dist/dev-update/`. Run
+`scripts/serve-dev-update.sh`: it starts the server in the background and returns, and does nothing if one is already
+running, because a running server picks up the new build by itself.
 
 ## Releases
 
