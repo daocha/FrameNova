@@ -35,6 +35,7 @@ jobs:
       - name: Install compile SDK
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
       - name: LAN update server tests
+        working-directory: .
         run: python3 -m unittest discover -s scripts/tests -p 'test_dev_update_server.py'
       - name: Run unit tests, build debug APK and lint
         run: ./gradlew --no-daemon --console=plain :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
