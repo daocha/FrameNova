@@ -16,18 +16,32 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row as HeaderRow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -38,6 +52,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -63,14 +79,16 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 private data class Row(val track: Track, val top: Float, val height: Float)
+private val LockedLayerColor = Color(0xFF505058)
+private val LockedThumbnailFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
 
 private sealed interface Hit {
     data class Body(val clip: Clip, val track: Track) : Hit
     data class Handle(val clip: Clip, val track: Track, val start: Boolean) : Hit
     data class TransitionButton(val clipId: String) : Hit
-    data class TrackHeader(val track: Track) : Hit
     data class Gap(val timeUs: Long) : Hit
     data object Empty : Hit
 }
@@ -102,6 +120,7 @@ fun TimelineView(
     onTransitionTap: (clipId: String) -> Unit,
     onClipDoubleTap: (clipId: String) -> Unit,
     onTrackHeaderTap: (Track) -> Unit,
+    onTrackLockTap: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -123,11 +142,11 @@ fun TimelineView(
     val rulerH = with(density) { 24.dp.toPx() }
     val gap = with(density) { 5.dp.toPx() }
     val handleW = with(density) { 14.dp.toPx() }
-    val headerW = with(density) { 30.dp.toPx() }
+    val headerW = with(density) { 96.dp.toPx() }
     val snapPx = with(density) { 10.dp.toPx() }
     val corner = with(density) { 6.dp.toPx() }
     fun rowHeight(kind: TrackKind) = with(density) {
-        when (kind) { TrackKind.TEXT -> 30.dp; TrackKind.OVERLAY -> 46.dp; TrackKind.MAIN -> 58.dp; TrackKind.AUDIO -> 38.dp }.toPx()
+        when (kind) { TrackKind.MAIN -> 58.dp; else -> 48.dp }.toPx()
     }
 
     // Read in gesture callbacks through these holders so the pointer handler sees fresh values.
@@ -151,16 +170,17 @@ fun TimelineView(
             val p = latest.project
             val rs = rows(p)
             val row = rs.firstOrNull { pos.y >= it.top && pos.y < it.top + it.height }
-            if (row != null && pos.x < headerW && row.track.kind != TrackKind.TEXT) return Hit.TrackHeader(row.track)
+            if (row != null && pos.x < headerW) return Hit.Empty
+            if (row?.track?.locked == true) return Hit.Empty
             // The selected clip's trim handles come first, so they can always be grabbed.
-            if (row != null) row.track.clips.firstOrNull { it.id == latest.selected }?.let { clip ->
+            if (row != null && !row.track.locked) row.track.clips.firstOrNull { it.id == latest.selected }?.let { clip ->
                 val x0 = xOf(clip.startUs, latest.playhead, latest.pps)
                 val x1 = xOf(clip.endUs, latest.playhead, latest.pps)
                 if (pos.x in (x0 - handleW)..(x0 + handleW * 0.4f)) return Hit.Handle(clip, row.track, true)
                 if (pos.x in (x1 - handleW * 0.4f)..(x1 + handleW)) return Hit.Handle(clip, row.track, false)
             }
             // Transition buttons sit where two main-track clips touch.
-            rs.firstOrNull { it.track.kind == TrackKind.MAIN }?.let { mainRow ->
+            rs.firstOrNull { it.track.kind == TrackKind.MAIN && !it.track.locked }?.let { mainRow ->
                 transitionPoints(mainRow.track, latest.selected).forEach { (id, t) ->
                     val bx = xOf(t, latest.playhead, latest.pps)
                     val cy = mainRow.top + mainRow.height / 2
@@ -243,6 +263,7 @@ fun TimelineView(
         Canvas(
             Modifier
                 .fillMaxSize()
+                .semantics { contentDescription = "Timeline" }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -260,7 +281,7 @@ fun TimelineView(
                         if (hit is Hit.Handle) { mode = 3; trim = TrimState(hit.clip, hit.start, 0f) }
                         while (true) {
                             val remaining = viewConfig.longPressTimeoutMillis - (System.currentTimeMillis() - downAt)
-                            val event: PointerEvent? = if (mode == 0 && hit is Hit.Body) withTimeoutOrNull(max(1L, remaining)) { awaitPointerEvent() } else awaitPointerEvent()
+                            val event: PointerEvent? = if (mode == 0 && hit is Hit.Body && !hit.track.locked) withTimeoutOrNull(max(1L, remaining)) { awaitPointerEvent() } else awaitPointerEvent()
                             if (event == null) {
                                 // Long press without movement: pick the clip up.
                                 mode = 2
@@ -314,7 +335,6 @@ fun TimelineView(
                                     }
                                 }
                                 is Hit.Handle -> onSelect(hit.clip.id)
-                                is Hit.TrackHeader -> onTrackHeaderTap(hit.track)
                                 is Hit.Gap -> onGapTap(hit.timeUs)
                                 Hit.Empty -> { onSelect(null); onGapTap(null) }
                             }
@@ -383,7 +403,6 @@ fun TimelineView(
                         drawClip(p, row, clip, x0, x1, corner, media, measurer, clip.id == selectedId, handleW, alpha = if (row.track.hidden) 0.35f else 1f)
                     }
                     if (row.track.kind == TrackKind.MAIN) drawTransitionButtons(row, transitionPoints(row.track, selectedId), ph, pps, centerX, handleW)
-                    if (row.track.kind != TrackKind.TEXT) drawTrackHeader(row, headerW, measurer)
                 }
             }
             drag?.let { d ->
@@ -397,6 +416,44 @@ fun TimelineView(
             // Playhead
             drawLine(Color.White, Offset(centerX, 0f), Offset(centerX, size.height), strokeWidth = 3f)
             drawCircle(Color.White, radius = 6f, center = Offset(centerX, rulerH - 4f))
+        }
+        // Real buttons receive their own clicks, independently of canvas scrubbing and clip dragging.
+        Box(Modifier.fillMaxSize().padding(top = 24.dp).clipToBounds()) {
+            for (row in rows(project)) {
+                if (row.top >= heightPx || row.top + row.height <= rulerH) continue
+                key(row.track.id) {
+                    val track = row.track
+                    val label = when (track.kind) {
+                        TrackKind.TEXT -> "text layer"
+                        TrackKind.OVERLAY -> "layer"
+                        TrackKind.MAIN -> "main track"
+                        TrackKind.AUDIO -> "audio track"
+                    }
+                    HeaderRow(Modifier.offset { IntOffset(0, (row.top - rulerH).roundToInt()) }
+                        .width(96.dp).height(with(density) { row.height.toDp() }).background(if (track.locked) Palette.Surface3 else Palette.Bg)) {
+                        val visual = track.kind == TrackKind.OVERLAY
+                        IconButton(onClick = { onTrackHeaderTap(track) }, enabled = track.kind != TrackKind.TEXT,
+                            modifier = Modifier.width(48.dp).height(with(density) { row.height.toDp() })) {
+                            Icon(when {
+                                track.kind == TrackKind.TEXT -> Icons.Default.TextFields
+                                visual -> if (track.hidden) Icons.Default.VisibilityOff else Icons.Default.Visibility
+                                else -> if (track.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp
+                            }, contentDescription = when {
+                                track.kind == TrackKind.TEXT -> "Text layer"
+                                visual -> if (track.hidden) "Show $label" else "Hide $label"
+                                else -> if (track.muted) "Unmute $label" else "Mute $label"
+                            }, modifier = Modifier.size(20.dp), tint = Palette.TextDim)
+                        }
+                        IconButton(onClick = { onTrackLockTap(track) },
+                            modifier = Modifier.width(48.dp).height(with(density) { row.height.toDp() })
+                                .background(if (track.locked) Palette.AccentSoft else Color.Transparent)) {
+                            Icon(if (track.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = if (track.locked) "Unlock $label" else "Lock $label",
+                                modifier = Modifier.size(20.dp), tint = if (track.locked) Palette.Accent else Palette.TextDim)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -436,6 +493,7 @@ private fun DrawScope.drawClip(
     val w = max(2f, x1 - x0)
     val asset = p.asset(clip.assetId)
     val base = when {
+        row.track.locked -> LockedLayerColor
         clip.isText -> Palette.TextClip
         row.track.kind == TrackKind.AUDIO -> Palette.Audio
         row.track.kind == TrackKind.OVERLAY -> Palette.Overlay
@@ -458,7 +516,8 @@ private fun DrawScope.drawClip(
                             else media.thumbnail(asset, clip.sourceTimeAt(tl), step, heightPx)
                         if (img != null) {
                             val dstW = tileW.toInt().coerceAtLeast(1)
-                            drawImage(img, srcOffset = IntOffset.Zero, srcSize = IntSize(img.width, img.height), dstOffset = IntOffset(tx.toInt(), top.toInt()), dstSize = IntSize(dstW, h.toInt()), alpha = alpha)
+                            drawImage(img, srcOffset = IntOffset.Zero, srcSize = IntSize(img.width, img.height), dstOffset = IntOffset(tx.toInt(), top.toInt()), dstSize = IntSize(dstW, h.toInt()), alpha = alpha,
+                                colorFilter = if (row.track.locked) LockedThumbnailFilter else null)
                         }
                     }
                     tx += tileW
@@ -468,19 +527,20 @@ private fun DrawScope.drawClip(
                 val peaks = media.peaks(asset)
                 val mid = top + h / 2
                 if (peaks != null) {
-                    var x = max(0f, x0)
+                    var x = x0 + max(0f, floor(-x0 / 3f)) * 3f
                     val end = min(size.width, x1)
                     while (x < end) {
                         val tl = clip.startUs + ((x - x0) / max(1f, x1 - x0) * clip.durationUs).toLong()
                         val idx = (clip.sourceTimeAt(tl) / MediaCache.PEAK_US).toInt()
                         val v = peaks.getOrNull(idx) ?: 0f
                         val amp = (v * clip.volume.coerceAtMost(1.5f)).coerceIn(0.02f, 1f) * (h * 0.42f)
-                        drawLine(Palette.Teal.copy(alpha = 0.85f * alpha), Offset(x, mid - amp), Offset(x, mid + amp), strokeWidth = 2f)
+                        drawLine((if (row.track.locked) Color.LightGray else Palette.Teal).copy(alpha = 0.85f * alpha), Offset(x, mid - amp), Offset(x, mid + amp), strokeWidth = 2f)
                         x += 3f
                     }
                 }
             }
         }
+        if (row.track.locked) drawRect(LockedLayerColor.copy(alpha = 0.35f), Offset(x0, top), Size(w, h))
         val label = when {
             clip.isText -> clip.text!!.text.lineSequence().firstOrNull().orEmpty()
             else -> asset?.name.orEmpty()
@@ -494,14 +554,14 @@ private fun DrawScope.drawClip(
         if (text.isNotEmpty() && w > 30f) {
             val tx = max(x0, 0f) + 6f
             drawRect(Color.Black.copy(alpha = 0.35f), Offset(tx - 3f, top + 2f), Size(min(w - 6f, text.length * 13f + 6f), 26f))
-            drawText(measurer, text, Offset(tx, top + 3f), TextStyle(color = Color.White, fontSize = 10.sp), overflow = TextOverflow.Ellipsis, maxLines = 1, size = Size(max(1f, min(w - 12f, 600f)), 30f))
+            drawText(measurer, text, Offset(tx, top + 3f), TextStyle(color = if (row.track.locked) Color.LightGray else Color.White, fontSize = 10.sp), overflow = TextOverflow.Ellipsis, maxLines = 1, size = Size(max(1f, min(w - 12f, 600f)), 30f))
         }
         // Keyframes
         clip.keyframes.forEach { k ->
             val kx = x0 + k.offsetUs / max(1f, clip.durationUs.toFloat()) * (x1 - x0)
             val cy = top + h - 9f
             val path = Path().apply { moveTo(kx, cy - 6f); lineTo(kx + 6f, cy); lineTo(kx, cy + 6f); lineTo(kx - 6f, cy); close() }
-            drawPath(path, Color(0xFFFFD54F))
+            drawPath(path, if (row.track.locked) Color.LightGray else Color(0xFFFFD54F))
         }
         // Fades
         if (clip.fadeInUs > 0) {
@@ -530,6 +590,7 @@ private fun DrawScope.drawClip(
  * selected clip are left out so its trim handles stay free.
  */
 private fun transitionPoints(main: Track, selectedId: String?): List<Pair<String, Long>> {
+    if (main.locked) return emptyList()
     val clips = main.clips
     return (1 until clips.size).mapNotNull { i ->
         val prev = clips[i - 1]
@@ -552,14 +613,4 @@ private fun DrawScope.drawTransitionButtons(row: Row, points: List<Pair<String, 
         drawLine(ink, Offset(bx - s * 0.25f, cy - s * 0.15f), Offset(bx + s * 0.25f, cy - s * 0.15f), strokeWidth = 2.5f)
         drawLine(ink, Offset(bx - s * 0.25f, cy + s * 0.15f), Offset(bx + s * 0.25f, cy + s * 0.15f), strokeWidth = 2.5f)
     }
-}
-
-private fun DrawScope.drawTrackHeader(row: Row, headerW: Float, measurer: androidx.compose.ui.text.TextMeasurer) {
-    val t = row.track
-    drawRect(Palette.Bg.copy(alpha = 0.75f), Offset(0f, row.top), Size(headerW, row.height))
-    val icon = when {
-        t.kind == TrackKind.AUDIO || t.kind == TrackKind.MAIN -> if (t.muted) "🔇" else "🔊"
-        else -> if (t.hidden) "🚫" else "👁"
-    }
-    drawText(measurer, icon, Offset(5f, row.top + row.height / 2 - 18f), TextStyle(fontSize = 13.sp))
 }

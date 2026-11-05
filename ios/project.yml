@@ -1,0 +1,125 @@
+name: FrameNova
+options:
+  bundleIdPrefix: com.framenova
+  createIntermediateGroups: true
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  preGenCommand: python3 ../scripts/sync-ios-version.py
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Version.xcconfig
+  Release: Config/Version.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    SUPPORTS_MACCATALYST: YES
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG"
+      ENABLE_TESTABILITY: YES
+      DEBUG_INFORMATION_FORMAT: dwarf
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+targets:
+  FrameNova:
+    type: application
+    platform: iOS
+    supportedDestinations: [iOS, macCatalyst]
+    sources:
+      - path: FrameNova/App
+      - path: FrameNova/Core
+      - path: FrameNova/Resources
+        excludes: [Info.plist, Desktop.entitlements]
+        buildPhase: resources
+      - path: ../android/app/src/main/assets/preview_filler.mp4
+        buildPhase: resources
+      - path: ../android/app/src/main/res/font
+        buildPhase: resources
+      - path: ../third_party/fonts
+        buildPhase: resources
+      - path: ../LICENSE
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: FrameNova
+        PRODUCT_MODULE_NAME: FrameNova
+        PRODUCT_BUNDLE_IDENTIFIER: com.framenova.app
+        INFOPLIST_FILE: FrameNova/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": FrameNova/Resources/Desktop.entitlements
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.framenova.app.debug
+  FrameNovaTests:
+    type: bundle.unit-test
+    platform: iOS
+    supportedDestinations: [iOS, macCatalyst]
+    sources:
+      - path: Tests/FrameNovaAppTests
+    dependencies:
+      - target: FrameNova
+    settings:
+      base:
+        PRODUCT_NAME: FrameNovaTests
+        PRODUCT_MODULE_NAME: FrameNovaTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.framenova.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FrameNova.app/FrameNova"
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/FrameNova.app/Contents/MacOS/FrameNova"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  FrameNovaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/FrameNovaUITests
+    dependencies:
+      - target: FrameNova
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.framenova.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SUPPORTS_MACCATALYST: NO
+
+schemes:
+  FrameNova:
+    build:
+      targets:
+        FrameNova: all
+        FrameNovaTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - FrameNovaTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  FrameNovaInteractions:
+    build:
+      targets:
+        FrameNova: all
+        FrameNovaUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - FrameNovaUITests

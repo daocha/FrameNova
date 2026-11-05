@@ -10,7 +10,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.VideoCompositorSettings
 import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.audio.GainProcessor
 import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.common.util.Size
@@ -229,7 +228,9 @@ object CompositionFactory {
         val plan = RenderPlan(out.width, out.height, fps, layers, textTracks, key)
         holder = PlanHolder(plan, hot)
         val composition = Composition.Builder(sequences)
-            .setVideoCompositorSettings(PlanCompositorSettings(holder))
+            // A clock-only video input already has the output size. The single-input graph used
+            // for audio-only exports rejects custom compositor settings.
+            .apply { if (layers.size > 1) setVideoCompositorSettings(PlanCompositorSettings(holder)) }
             .setHdrMode(if (anyHdr) Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL else Composition.HDR_MODE_KEEP_HDR)
             .build()
         return composition to holder
@@ -381,11 +382,7 @@ object CompositionFactory {
         val video = mutableListOf<Effect>()
         speedEffects(clip.speed)?.let { (a, v) -> audio += a; video += v }
         if (!removeAudio) {
-            val dur = clip.durationUs
-            val provider = DefaultGainProvider.Builder(gain.coerceIn(0f, 4f))
-            if (fadeInUs > 0) provider.addFadeAt(0, minOf(fadeInUs, dur), DefaultGainProvider.FADE_IN_LINEAR)
-            if (fadeOutUs > 0) provider.addFadeAt(max(0L, dur - fadeOutUs), minOf(fadeOutUs, dur), DefaultGainProvider.FADE_OUT_LINEAR)
-            audio += GainProcessor(provider.build())
+            audio += GainProcessor(ClipGainProvider(clip.durationUs, gain.coerceIn(0f, 4f), fadeInUs, fadeOutUs))
         }
         if (!removeVideo && project != null) video += videoEffects(project, clip, asset, mode, out)
         return EditedMediaItem.Builder(videoMediaItem(clip, asset))

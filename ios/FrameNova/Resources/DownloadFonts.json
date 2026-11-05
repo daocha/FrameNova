@@ -1,0 +1,62 @@
+[
+  {
+    "id": "noto_sans_tc",
+    "name": "思源黑體 Noto Sans TC",
+    "path": "notosanstc/NotoSansTC%5Bwght%5D.ttf",
+    "sizeMB": 12
+  },
+  {
+    "id": "noto_serif_tc",
+    "name": "思源宋體 Noto Serif TC",
+    "path": "notoseriftc/NotoSerifTC%5Bwght%5D.ttf",
+    "sizeMB": 17
+  },
+  {
+    "id": "chiron_hei_hk",
+    "name": "昭源黑體 Chiron Hei HK",
+    "path": "chironheihk/ChironHeiHK%5Bwght%5D.ttf",
+    "sizeMB": 31
+  },
+  {
+    "id": "chiron_sung_hk",
+    "name": "昭源宋體 Chiron Sung HK",
+    "path": "chironsunghk/ChironSungHK%5Bwght%5D.ttf",
+    "sizeMB": 51
+  },
+  {
+    "id": "lxgw_wenkai_tc",
+    "name": "霞鶩文楷 LXGW WenKai TC",
+    "path": "lxgwwenkaitc/LXGWWenKaiTC-Regular.ttf",
+    "sizeMB": 13
+  },
+  {
+    "id": "iansui",
+    "name": "芫荽 Iansui",
+    "path": "iansui/Iansui-Regular.ttf",
+    "sizeMB": 9
+  },
+  {
+    "id": "huninn",
+    "name": "粉圓 Huninn",
+    "path": "huninn/Huninn-Regular.ttf",
+    "sizeMB": 5
+  },
+  {
+    "id": "lxgw_marker_gothic",
+    "name": "霞鶩漫黑 LXGW Marker Gothic",
+    "path": "lxgwmarkergothic/LXGWMarkerGothic-Regular.ttf",
+    "sizeMB": 3
+  },
+  {
+    "id": "chiron_goround_tc",
+    "name": "昭源圓體 Chiron GoRound TC",
+    "path": "chirongoroundtc/ChironGoRoundTC%5Bwght%5D.ttf",
+    "sizeMB": 51
+  },
+  {
+    "id": "cactus_classical_serif",
+    "name": "仙人掌明體 Cactus Classical Serif",
+    "path": "cactusclassicalserif/CactusClassicalSerif-Regular.ttf",
+    "sizeMB": 29
+  }
+]

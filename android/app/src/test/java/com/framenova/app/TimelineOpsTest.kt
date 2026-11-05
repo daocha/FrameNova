@@ -16,6 +16,54 @@ class TimelineOpsTest {
 
     private fun base() = Project("id", "Test", 0, 0).addToMainAt(listOf(video, photo, video2), 0)
 
+    @Test fun openingCoverShiftsAllTracksAndRespectsLocks() {
+        val p = base().addAudioAt(song, 500_000).copy(coverAssetId = photo.id)
+        val covered = p.prependCover()
+        assertEquals(photo.id, covered.mainTrack.clips.first().assetId)
+        assertEquals(0L, covered.mainTrack.clips.first().startUs)
+        assertEquals(3_000_000L, covered.mainTrack.clips.first().durationUs)
+        for (track in p.tracks) for (clip in track.clips) {
+            val shifted = covered.clip(clip.id)!!
+            assertEquals(clip.startUs + 3_000_000L, shifted.startUs)
+            assertEquals(clip.srcInUs, shifted.srcInUs)
+            assertEquals(clip.srcOutUs, shifted.srcOutUs)
+        }
+        val locked = p.updateTrack(p.mainTrack.id) { it.copy(locked = true) }
+        assertEquals(locked, locked.prependCover())
+        assertEquals(p.copy(coverAssetId = song.id), p.copy(coverAssetId = song.id).prependCover())
+    }
+
+    @Test fun trackLockDisablesSelectionUntilUnlocked() {
+        val p = base()
+        val id = p.mainTrack.clips.first().id
+        assertEquals(id, p.selectableClipId(id))
+        val locked = p.updateTrack(p.mainTrack.id) { it.copy(locked = true) }
+        assertNull(locked.selectableClipId(id))
+        assertNull(locked.selectableClipId("missing"))
+        val unlocked = locked.updateTrack(p.mainTrack.id) { it.copy(locked = false) }
+        assertEquals(id, unlocked.selectableClipId(id))
+        assertEquals(p.mainTrack.clips, unlocked.mainTrack.clips)
+    }
+
+    @Test fun addingLayerSkipsLockedTrackEvenWhenItsTimeRangeIsFree() {
+        val existing = clipForAsset(photo, 0)
+        val layer = Track("locked-layer", TrackKind.OVERLAY, listOf(existing), locked = true)
+        val p = base().let { it.copy(tracks = listOf(layer) + it.tracks) }
+        val added = clipForAsset(photo, 5_000_000)
+        val next = p.placeOnFreeTrack(TrackKind.OVERLAY, added, preferTrackId = layer.id)
+        assertTrue(p.preservesLockedClips(next))
+        assertTrue(next.trackOf(added.id)?.id != layer.id)
+        assertNotNull(next.clip(added.id))
+    }
+
+    @Test fun lockedTrackRejectsClipEditsButAllowsUnlockAndMute() {
+        val p = base().let { it.copy(tracks = it.tracks.map { t -> t.copy(locked = true) }) }
+        assertTrue(!p.preservesLockedClips(p.copy(tracks = emptyList())))
+        assertTrue(!p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(clips = emptyList()) })))
+        assertTrue(p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(locked = false) })))
+        assertTrue(p.preservesLockedClips(p.copy(tracks = p.tracks.map { it.copy(muted = true) })))
+    }
+
     @Test fun mainTrackIsLaidEndToEnd() {
         val p = base()
         val clips = p.mainTrack.clips
@@ -185,6 +233,41 @@ class TimelineOpsTest {
         p = p.moveToMain(id)
         assertEquals(3, p.mainTrack.clips.size)
         assertTrue(p.tracks.none { it.kind == TrackKind.OVERLAY })
+    }
+
+    @Test fun toNewLayerPreservesNonMainClipAndNeverReusesAFreeTrack() {
+        for (kind in listOf(TrackKind.OVERLAY, TrackKind.TEXT, TrackKind.AUDIO)) {
+            val clip = Clip("moving", assetId = if (kind == TrackKind.TEXT) null else if (kind == TrackKind.AUDIO) song.id else video.id,
+                startUs = 2_000_000, srcInUs = 1_000_000, srcOutUs = 5_000_000, speed = 2f, volume = 0.4f,
+                fadeInUs = 200_000, fadeOutUs = 300_000, transform = Transform(scale = 0.7f),
+                text = if (kind == TrackKind.TEXT) TextStyle() else null)
+            val sibling = clip.copy(id = "sibling", startUs = 10_000_000)
+            val source = Track("source", kind, listOf(clip, sibling))
+            val free = Track("free", kind, listOf(clip.copy(id = "other", startUs = 20_000_000)))
+            val main = Track("main", TrackKind.MAIN)
+            val p = Project("id", "New layer", 0, 0, assets = listOf(video, song),
+                tracks = if (kind == TrackKind.AUDIO) listOf(main, source, free) else listOf(free, source, main))
+            val moved = p.moveToNewLayer(clip.id)
+            assertEquals(clip, moved.clip(clip.id))
+            assertEquals(kind, moved.trackOf(clip.id)!!.kind)
+            assertTrue(moved.trackOf(clip.id)!!.id !in listOf(source.id, free.id))
+            assertEquals(listOf(sibling), moved.track(source.id)!!.clips)
+            assertEquals(free, moved.track(free.id))
+            assertEquals(moved.tracks.indexOfFirst { it.id == source.id } + if (kind == TrackKind.AUDIO) 1 else -1,
+                moved.tracks.indexOfFirst { it.id == moved.trackOf(clip.id)!!.id })
+            val locked = p.updateTrack(source.id) { it.copy(locked = true) }
+            assertEquals(locked, locked.moveToNewLayer(clip.id))
+        }
+    }
+
+    @Test fun mainToNewLayerCreatesFreshOverlayEvenWhenAnotherOverlayIsFree() {
+        val p = base().addOverlayAt(photo, 40_000_000)
+        val id = p.mainTrack.clips.first().id
+        val existing = p.tracks.first { it.kind == TrackKind.OVERLAY }
+        val moved = p.moveToNewLayer(id)
+        assertTrue(moved.trackOf(id)!!.id != existing.id)
+        assertEquals(existing, moved.track(existing.id))
+        assertEquals(p.clip(id)!!.transform.scale * 0.6f, moved.clip(id)!!.transform.scale, 0.0001f)
     }
 
     @Test fun moveRejectsIncompatibleTracks() {

@@ -5,6 +5,10 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.media.MediaMetadataRetriever
+import android.media.MediaExtractor
+import android.media.MediaCodec
+import android.media.MediaFormat
+import android.os.SystemClock
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +38,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -100,6 +106,89 @@ class EngineDeviceTest {
             r.setDataSource(file.absolutePath)
             return r.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST)!!
         } finally { r.release() }
+    }
+
+    @Test fun audioFadesScaleClipVolumeAndMutedTracksStaySilent() {
+        val rate = 16_000
+        val samples = rate * 6
+        val wave = ByteBuffer.allocate(44 + samples * 2).order(ByteOrder.LITTLE_ENDIAN)
+        wave.put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray())
+            .putInt(16).putShort(1).putShort(1).putInt(rate).putInt(rate * 2).putShort(2).putShort(16)
+            .put("data".toByteArray()).putInt(samples * 2)
+        for (index in 0 until samples) wave.putShort((kotlin.math.sin(index * 2.0 * Math.PI * 440 / rate) * 16_000).toInt().toShort())
+        val source = File(context.cacheDir, "fade-tone.wav").apply { writeBytes(wave.array()) }
+        val asset = MediaProbe.probe(context, Uri.fromFile(source), "audio/wav")!!
+        val clip = Clip(newId(), asset.id, 500_000, 1_000_000, 5_000_000, volume = 0.25f, fadeInUs = 1_000_000, fadeOutUs = 1_000_000)
+        val audio = Track(newId(), TrackKind.AUDIO, listOf(clip))
+        val project = Project(newId(), "Audio fade regression", 0, 0, assets = listOf(asset), tracks = listOf(Track("main", TrackKind.MAIN), audio))
+        val windows = listOf(700_000L..800_000L, 1_250_000L..1_350_000L, 2_300_000L..2_500_000L, 4_200_000L..4_300_000L)
+        val output = export(project, 320).first
+        try {
+            val levels = audioLevels(output, windows)
+            val center = levels[2]
+            assertTrue("Audio center must be audible: ${levels.toList()}", center > 0.02)
+            assertTrue("Fade-in must start quietly: ${levels.toList()}", levels[0] < center * 0.45)
+            assertTrue("Fade-in must respect the clip volume: ${levels.toList()}", levels[1] in center * 0.6..center * 0.95)
+            assertTrue("Fade-out must end quietly: ${levels.toList()}", levels[3] < center * 0.45)
+        } finally { output.delete() }
+        val muted = export(project.updateTrack(audio.id) { it.copy(muted = true) }, 320).first
+        try {assertTrue("Muted fades must not leak sound", audioLevels(muted, windows).all { it < 0.001 })}
+        finally {muted.delete();source.delete()}
+    }
+
+    private fun audioLevels(file: File, windows: List<LongRange>): DoubleArray {
+        val extractor = MediaExtractor()
+        var codec: MediaCodec? = null
+        val sum = DoubleArray(windows.size)
+        val count = IntArray(windows.size)
+        try {
+            extractor.setDataSource(file.absolutePath)
+            val track = (0 until extractor.trackCount).first { extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)!!.startsWith("audio/") }
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val decoder = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+            codec = decoder;decoder.configure(format, null, null, 0);decoder.start()
+            val info = MediaCodec.BufferInfo()
+            var inputDone = false
+            var outputDone = false
+            var outputFormat = format
+            val deadline = SystemClock.elapsedRealtime() + 30_000
+            while (!outputDone && SystemClock.elapsedRealtime() < deadline) {
+                if (!inputDone) {
+                    val index = decoder.dequeueInputBuffer(5_000)
+                    if (index >= 0) {
+                        val size = extractor.readSampleData(decoder.getInputBuffer(index)!!, 0)
+                        if (size < 0) {decoder.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone = true}
+                        else {decoder.queueInputBuffer(index, 0, size, extractor.sampleTime, 0);extractor.advance()}
+                    }
+                }
+                val index = decoder.dequeueOutputBuffer(info, 5_000)
+                if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) outputFormat = decoder.outputFormat
+                if (index >= 0) {
+                    val buffer = decoder.getOutputBuffer(index)!!.order(ByteOrder.nativeOrder())
+                    buffer.position(info.offset);buffer.limit(info.offset + info.size)
+                    val channels = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                    val sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                    val floating = outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) && outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) == androidx.media3.common.C.ENCODING_PCM_FLOAT
+                    val bytes = if (floating) 4 else 2
+                    for (frame in 0 until info.size / (bytes * channels)) {
+                        val time = info.presentationTimeUs + frame * 1_000_000L / sampleRate
+                        val window = windows.indexOfFirst { time in it }
+                        var energy = 0.0
+                        repeat(channels) {
+                            val value = if (floating) buffer.float.toDouble() else buffer.short.toDouble() / 32768
+                            energy += value * value
+                        }
+                        if (window >= 0) {sum[window] += energy / channels;count[window]++}
+                    }
+                    outputDone = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                    decoder.releaseOutputBuffer(index, false)
+                }
+            }
+            assertTrue("Audio decode timed out", outputDone)
+            assertTrue("Expected decoded samples in each test window", count.all { it > 0 })
+            return DoubleArray(windows.size) { kotlin.math.sqrt(sum[it] / count[it]) }
+        } finally {codec?.stop();codec?.release();extractor.release()}
     }
 
     private fun assertColor(expected: Int, actual: Int, label: String) {

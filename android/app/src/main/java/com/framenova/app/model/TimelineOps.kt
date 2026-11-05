@@ -85,7 +85,7 @@ fun Project.updateTrack(trackId: String, f: (Track) -> Track): Project = mapTrac
 // Track placement
 
 private fun Track.isFree(startUs: Long, endUs: Long, ignoreClipId: String? = null): Boolean =
-    clips.none { it.id != ignoreClipId && it.startUs < endUs && startUs < it.endUs }
+    !locked && clips.none { it.id != ignoreClipId && it.startUs < endUs && startUs < it.endUs }
 
 /** Inserts a new empty track of [kind] in its visual group and returns the project and the track id. */
 fun Project.withNewTrack(kind: TrackKind, nearTrackId: String? = null): Pair<Project, String> {
@@ -361,10 +361,24 @@ fun Project.moveClip(clipId: String, targetTrackId: String, startUs: Long, newTr
 }
 
 fun Project.moveToOverlay(clipId: String): Project {
-    val clip = clip(clipId) ?: return this
     if (trackOf(clipId)?.kind != TrackKind.MAIN) return this
-    val moved = clip.copy(id = clip.id, transitionIn = null, transform = clip.transform.copy(scale = clip.transform.scale * 0.6f))
-    return deleteClip(clipId).placeOnFreeTrack(TrackKind.OVERLAY, moved)
+    return moveToNewLayer(clipId)
+}
+
+/** Creates a fresh compatible track rather than reusing a free track. */
+fun Project.moveToNewLayer(clipId: String): Project {
+    val clip = clip(clipId) ?: return this
+    val source = trackOf(clipId)?.takeUnless { it.locked } ?: return this
+    val kind = when (categoryOf(clip)) {
+        ClipCategory.VISUAL -> TrackKind.OVERLAY
+        ClipCategory.TEXT -> TrackKind.TEXT
+        ClipCategory.AUDIO -> TrackKind.AUDIO
+    }
+    val moved = clip.copy(transitionIn = null, transform = if (source.kind == TrackKind.MAIN)
+        clip.transform.copy(scale = clip.transform.scale * 0.6f) else clip.transform)
+    val removed = copy(tracks = tracks.map { it.copy(clips = it.clips.filterNot { c -> c.id == clipId }) })
+    val (project, id) = removed.withNewTrack(kind, source.id)
+    return project.mapTrack(id) { it.copy(clips = listOf(moved)) }.normalized()
 }
 
 fun Project.moveToMain(clipId: String): Project {
@@ -441,3 +455,15 @@ fun Clip.withTransformAt(atUs: Long, t: Transform, frameUs: Long): Clip {
 
 fun Project.clipsAt(timeUs: Long, kinds: Set<TrackKind>): List<Pair<Track, Clip>> =
     tracks.filter { it.kind in kinds }.mapNotNull { t -> t.clips.firstOrNull { it.contains(timeUs) }?.let { t to it } }
+
+/** Keeps existing tracks aligned when a cover becomes an opening clip. */
+fun Project.prependCover(): Project {
+    val cover = asset(coverAssetId)?.takeIf { it.type == MediaType.IMAGE } ?: return this
+    if (tracks.any { it.locked && (it.kind == TrackKind.MAIN || it.clips.isNotEmpty()) }) return this
+    val duration = 3_000_000L
+    val opening = Clip(id = newId(), assetId = cover.id, startUs = 0, srcOutUs = duration)
+    return copy(tracks = tracks.map { track ->
+        val shifted = track.clips.map { it.copy(startUs = it.startUs + duration) }
+        track.copy(clips = if (track.kind == TrackKind.MAIN) listOf(opening) + shifted else shifted)
+    })
+}

@@ -108,6 +108,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     var renaming by remember { mutableStateOf(false) }
     var micGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     var library by remember { mutableStateOf<LibraryRequest?>(null) }
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.import(listOf(uri), ImportTarget.COVER) }
     val pickSubs = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importSubtitles(uri) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { micGranted = it }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -136,6 +137,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Audio", Icons.Default.LibraryMusic) { pickMedia(ImportTarget.AUDIO) },
                 Tool("Voiceover", Icons.Default.Mic) { vm.panel = Panel.VOICEOVER },
                 Tool("Layout", Icons.Default.GridView) { vm.panel = Panel.LAYOUT },
+                Tool("Cover", Icons.Default.Image) { vm.panel = Panel.COVER },
                 Tool("Ratio", Icons.Default.AspectRatio) { vm.panel = Panel.CANVAS },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
                 Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() },
@@ -148,6 +150,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Position", Icons.Default.OpenWith) { vm.panel = Panel.TRANSFORM },
                 Tool("Keyframe", Icons.Default.Diamond) { vm.toggleKeyframe() },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
+                Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() },
                 Tool("Duplicate", Icons.Default.ContentCopy) { vm.duplicateSelected() },
                 Tool("Delete", Icons.Default.Delete) { vm.deleteSelected() },
             )
@@ -155,6 +158,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Volume", Icons.AutoMirrored.Filled.VolumeUp) { vm.panel = Panel.VOLUME },
                 Tool("Speed", Icons.Default.Speed) { vm.panel = Panel.SPEED },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
+                Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() },
                 Tool("Duplicate", Icons.Default.ContentCopy) { vm.duplicateSelected() },
                 Tool("Save audio", Icons.Default.SaveAlt) { vm.saveAudio() },
                 Tool("Delete", Icons.Default.Delete) { vm.deleteSelected() },
@@ -164,6 +168,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 val isVideo = asset?.type == MediaType.VIDEO
                 buildList {
                     add(Tool("Split", Icons.Default.ContentCut) { vm.split() })
+                    add(Tool("To new layer", Icons.Default.Layers) { vm.toNewLayer() })
                     if (isVideo) add(Tool("Speed", Icons.Default.Speed) { vm.panel = Panel.SPEED })
                     if (isVideo) add(Tool("Volume", Icons.AutoMirrored.Filled.VolumeUp) { vm.panel = Panel.VOLUME })
                     add(Tool("Position", Icons.Default.OpenWith) { vm.panel = Panel.TRANSFORM })
@@ -172,7 +177,6 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                     add(Tool("Adjust", Icons.Default.Tune) { vm.panel = Panel.ADJUST })
                     add(Tool("Filters", Icons.Default.PhotoFilter) { vm.panel = Panel.FILTER })
                     add(Tool("Crop", Icons.Default.Crop) { vm.panel = Panel.CROP })
-                    if (track?.kind == TrackKind.MAIN) add(Tool("To new layer", Icons.Default.Layers) { vm.toOverlay() })
                     if (track?.kind == TrackKind.OVERLAY) add(Tool("To main", Icons.Default.VerticalAlignBottom) { vm.toMain() })
                     if (isVideo) add(Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() })
                     if (isVideo && asset?.hasAudio == true) add(Tool("Extract audio", Icons.Default.MusicNote) { vm.extractAudio() })
@@ -187,6 +191,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
 
     val panelContent: @Composable () -> Unit = {
         when (vm.panel) {
+            Panel.COVER -> CoverPanel(vm) { pickCover.launch(arrayOf("image/*")) }
             Panel.SPEED -> SpeedPanel(vm)
             Panel.VOLUME -> VolumePanel(vm)
             Panel.ADJUST -> AdjustPanel(vm)
@@ -235,7 +240,8 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 onMove = vm::move, onTrim = vm::trim,
                 onTransitionTap = { id -> vm.transitionTargetId = id; vm.selectedId = null; vm.panel = Panel.TRANSITION },
                 onClipDoubleTap = { id -> vm.openTextEditor(id) },
-                onTrackHeaderTap = { t -> if (t.kind == TrackKind.OVERLAY) vm.toggleTrackHidden(t.id) else vm.toggleTrackMute(t.id) },
+                onTrackLockTap = { t -> vm.toggleTrackLock(t.id) },
+                onTrackHeaderTap = { t -> if (t.kind == TrackKind.TEXT) Unit else if (t.kind == TrackKind.OVERLAY) vm.toggleTrackHidden(t.id) else vm.toggleTrackMute(t.id) },
                 modifier = m,
             )
         }
@@ -329,8 +335,9 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 ImportTarget.OVERLAY -> "Add as a layer"
                 ImportTarget.AUDIO -> "Add audio"
                 ImportTarget.REPLACE -> "Replace clip"
+                ImportTarget.COVER -> "Choose cover image"
             },
-            multiple = req.target != ImportTarget.REPLACE,
+            multiple = req.target != ImportTarget.REPLACE && req.target != ImportTarget.COVER,
             onDismiss = { library = null },
         ) { uris -> library = null; vm.import(uris, req.target) }
     }

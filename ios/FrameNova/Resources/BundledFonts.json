@@ -1,0 +1,206 @@
+[
+  {
+    "id": "inter",
+    "name": "Inter",
+    "group": "English",
+    "file": "inter"
+  },
+  {
+    "id": "montserrat",
+    "name": "Montserrat",
+    "group": "English",
+    "file": "montserrat"
+  },
+  {
+    "id": "oswald",
+    "name": "Oswald",
+    "group": "English",
+    "file": "oswald"
+  },
+  {
+    "id": "bebas_neue",
+    "name": "Bebas Neue",
+    "group": "English",
+    "file": "bebas_neue"
+  },
+  {
+    "id": "playfair_display",
+    "name": "Playfair Display",
+    "group": "English",
+    "file": "playfair_display"
+  },
+  {
+    "id": "roboto_mono",
+    "name": "Roboto Mono",
+    "group": "English",
+    "file": "roboto_mono"
+  },
+  {
+    "id": "pacifico",
+    "name": "Pacifico",
+    "group": "English",
+    "file": "pacifico"
+  },
+  {
+    "id": "lobster",
+    "name": "Lobster",
+    "group": "English",
+    "file": "lobster"
+  },
+  {
+    "id": "dancing_script",
+    "name": "Dancing Script",
+    "group": "English",
+    "file": "dancing_script"
+  },
+  {
+    "id": "caveat",
+    "name": "Caveat",
+    "group": "English",
+    "file": "caveat"
+  },
+  {
+    "id": "bangers",
+    "name": "Bangers",
+    "group": "Art & display",
+    "file": "bangers"
+  },
+  {
+    "id": "lilita_one",
+    "name": "Lilita One",
+    "group": "Art & display",
+    "file": "lilita_one"
+  },
+  {
+    "id": "fredoka",
+    "name": "Fredoka",
+    "group": "Art & display",
+    "file": "fredoka"
+  },
+  {
+    "id": "righteous",
+    "name": "Righteous",
+    "group": "Art & display",
+    "file": "righteous"
+  },
+  {
+    "id": "bungee",
+    "name": "Bungee",
+    "group": "Art & display",
+    "file": "bungee"
+  },
+  {
+    "id": "rubik_mono_one",
+    "name": "Rubik Mono One",
+    "group": "Art & display",
+    "file": "rubik_mono_one"
+  },
+  {
+    "id": "shrikhand",
+    "name": "Shrikhand",
+    "group": "Art & display",
+    "file": "shrikhand"
+  },
+  {
+    "id": "abril_fatface",
+    "name": "Abril Fatface",
+    "group": "Art & display",
+    "file": "abril_fatface"
+  },
+  {
+    "id": "alfa_slab_one",
+    "name": "Alfa Slab One",
+    "group": "Art & display",
+    "file": "alfa_slab_one"
+  },
+  {
+    "id": "cinzel_decorative",
+    "name": "Cinzel Decorative",
+    "group": "Art & display",
+    "file": "cinzel_decorative"
+  },
+  {
+    "id": "rye",
+    "name": "Rye",
+    "group": "Art & display",
+    "file": "rye"
+  },
+  {
+    "id": "black_ops_one",
+    "name": "Black Ops One",
+    "group": "Art & display",
+    "file": "black_ops_one"
+  },
+  {
+    "id": "creepster",
+    "name": "Creepster",
+    "group": "Art & display",
+    "file": "creepster"
+  },
+  {
+    "id": "monoton",
+    "name": "Monoton",
+    "group": "Art & display",
+    "file": "monoton"
+  },
+  {
+    "id": "neonderthaw",
+    "name": "Neonderthaw",
+    "group": "Art & display",
+    "file": "neonderthaw"
+  },
+  {
+    "id": "audiowide",
+    "name": "Audiowide",
+    "group": "Art & display",
+    "file": "audiowide"
+  },
+  {
+    "id": "orbitron",
+    "name": "Orbitron",
+    "group": "Art & display",
+    "file": "orbitron"
+  },
+  {
+    "id": "press_start_2p",
+    "name": "Press Start 2P",
+    "group": "Art & display",
+    "file": "press_start_2p"
+  },
+  {
+    "id": "silkscreen",
+    "name": "Silkscreen",
+    "group": "Art & display",
+    "file": "silkscreen"
+  },
+  {
+    "id": "great_vibes",
+    "name": "Great Vibes",
+    "group": "Art & display",
+    "file": "great_vibes"
+  },
+  {
+    "id": "sacramento",
+    "name": "Sacramento",
+    "group": "Art & display",
+    "file": "sacramento"
+  },
+  {
+    "id": "kaushan_script",
+    "name": "Kaushan Script",
+    "group": "Art & display",
+    "file": "kaushan_script"
+  },
+  {
+    "id": "amatic_sc",
+    "name": "Amatic SC",
+    "group": "Art & display",
+    "file": "amatic_sc"
+  },
+  {
+    "id": "indie_flower",
+    "name": "Indie Flower",
+    "group": "Art & display",
+    "file": "indie_flower"
+  }
+]

@@ -34,11 +34,11 @@ import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 enum class Panel {
-    NONE, SPEED, VOLUME, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
+    NONE, COVER, SPEED, VOLUME, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
     TEXT_EDIT, TEXT_FONT, TEXT_STYLE, TEXT_ANIM, STICKER, VOICEOVER, EXPORT,
 }
 
-enum class ImportTarget { MAIN, OVERLAY, AUDIO, REPLACE }
+enum class ImportTarget { MAIN, OVERLAY, AUDIO, REPLACE, COVER }
 
 @UnstableApi
 class EditorViewModel(app: Application, val projectId: String) : AndroidViewModel(app) {
@@ -53,7 +53,10 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     private val redoStack = ArrayDeque<Project>()
     var canUndo by mutableStateOf(false); private set
     var canRedo by mutableStateOf(false); private set
-    var selectedId by mutableStateOf<String?>(null)
+    private var selection by mutableStateOf<String?>(null)
+    var selectedId: String?
+        get() = selection
+        set(value) { selection = project.selectableClipId(value) }
     /** A time inside the selected main-track gap, or null. */
     var selectedGapUs by mutableStateOf<Long?>(null)
     var playheadUs by mutableLongStateOf(0L); private set
@@ -140,7 +143,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     // History
 
     fun commit(p: Project) {
-        if (p == project) return
+        if (p == project || !project.preservesLockedClips(p)) return
         undoStack.addLast(project)
         if (undoStack.size > 120) undoStack.removeFirst()
         redoStack.clear()
@@ -149,8 +152,14 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
 
     private fun apply(p: Project) {
         project = p.copy(modifiedAt = System.currentTimeMillis())
-        selectedId?.let { if (project.clip(it) == null) selectedId = null }
-        selectedGapUs?.let { if (project.mainGapAt(it) == null) selectedGapUs = null }
+        selectedId?.let { if (project.trackOf(it)?.locked != false) selectedId = null }
+        transitionTargetId?.let {
+            if (project.trackOf(it)?.locked != false) {
+                transitionTargetId = null
+                if (panel == Panel.TRANSITION) panel = Panel.NONE
+            }
+        }
+        selectedGapUs?.let { if (project.mainTrack.locked || project.mainGapAt(it) == null) selectedGapUs = null }
         playheadUs = playheadUs.coerceIn(0, max(0L, project.durationUs))
         canUndo = undoStack.isNotEmpty(); canRedo = redoStack.isNotEmpty()
         engine.update(project, playheadUs)
@@ -174,6 +183,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun beginGesture() { if (gestureStart == null) gestureStart = project }
 
     fun live(p: Project) {
+        if (!project.preservesLockedClips(p)) return
         project = p
         // During a layer gesture the editor draws quick frames; the player is rebuilt once the gesture ends.
         engine.update(p, playheadUs, redraw = !layerGesture)
@@ -289,9 +299,26 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                     commit(p)
                 }
                 ImportTarget.REPLACE -> replaceSelected(assets.first())
+                ImportTarget.COVER -> {
+                    val image = assets.firstOrNull { it.type == MediaType.IMAGE }
+                    if (image == null) message = "Choose an image for the cover"
+                    else commit(project.withAssets(listOf(image)).copy(coverAssetId = image.id))
+                }
             }
             (allClipIds() - before).firstOrNull()?.let { selectedId = it }
         }
+    }
+
+    fun chooseCover(id: String?) {
+        if (id == null || project.asset(id)?.type == MediaType.IMAGE) commit(project.copy(coverAssetId = id))
+    }
+
+    fun prependCover() {
+        val next = project.prependCover()
+        if (next == project) return
+        commit(next)
+        selectedId = project.mainTrack.clips.firstOrNull()?.id
+        jumpTo(0)
     }
 
     private fun replaceSelected(asset: MediaAsset) {
@@ -430,7 +457,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         selectedId = audio
     }
 
-    fun toOverlay() { selectedId?.let { commit(project.moveToOverlay(it)) } }
+    fun toNewLayer() { selectedId?.let { commit(project.moveToNewLayer(it)) } }
     fun toMain() { selectedId?.let { commit(project.moveToMain(it)) } }
 
     fun freezeFrame() {
@@ -469,6 +496,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         commit(p)
     }
 
+    fun toggleTrackLock(trackId: String) = commit(project.updateTrack(trackId) { it.copy(locked = !it.locked) })
     fun toggleTrackMute(trackId: String) = commit(project.updateTrack(trackId) { it.copy(muted = !it.muted) })
     fun toggleTrackHidden(trackId: String) = commit(project.updateTrack(trackId) { it.copy(hidden = !it.hidden) })
 

@@ -17,3 +17,8 @@ android/dist/
 
 # Logs from the developer tools
 /debug/
+
+# Generated desktop and mobile project metadata
+/ios/FrameNova.xcodeproj/
+/ios/.build/
+/ios/.swiftpm/

@@ -66,9 +66,10 @@ class ProjectRepository(context: Context) {
     fun rename(id: String, name: String) { load(id)?.let { save(it.copy(name = name)) } }
 
     suspend fun writeCover(project: Project) = withContext(Dispatchers.IO) {
-        val clip = project.mainTrack.clips.firstOrNull() ?: project.tracks.flatMap { it.clips }.firstOrNull { it.assetId != null } ?: return@withContext
-        val asset = project.asset(clip.assetId) ?: return@withContext
-        val bmp = try { frame(asset, clip.srcInUs, 360) } catch (_: Exception) { null } ?: return@withContext
+        val cover = project.asset(project.coverAssetId)?.takeIf { it.type == MediaType.IMAGE }
+        val clip = project.mainTrack.clips.firstOrNull() ?: project.tracks.flatMap { it.clips }.firstOrNull { project.asset(it.assetId)?.type?.let { type -> type != MediaType.AUDIO } == true }
+        val asset = cover ?: project.asset(clip?.assetId) ?: return@withContext
+        val bmp = try { frame(asset, if (cover != null) 0 else clip?.srcInUs ?: 0, 360) } catch (_: Exception) { null } ?: return@withContext
         FileOutputStream(File(dir(project.id), "cover.jpg")).use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
     }
 

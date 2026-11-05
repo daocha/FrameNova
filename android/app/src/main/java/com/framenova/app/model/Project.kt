@@ -280,3 +280,11 @@ fun lerp(a: Transform, b: Transform, t: Float): Transform = Transform(
 )
 
 fun clamp01(v: Float): Float = min(1f, max(0f, v))
+
+/** Rejects changes to clips on tracks that were locked before an edit. */
+fun Project.preservesLockedClips(next: Project): Boolean = tracks.filter { it.locked }.all { locked ->
+    next.tracks.firstOrNull { it.id == locked.id }?.clips == locked.clips
+}
+
+/** Selection is shared by timeline, preview and inspector controls. */
+fun Project.selectableClipId(clipId: String?): String? = clipId?.takeIf { trackOf(it)?.locked == false }
