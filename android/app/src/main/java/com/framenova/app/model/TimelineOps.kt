@@ -278,7 +278,11 @@ fun Project.trimStart(clipId: String, deltaUs: Long): Project {
     val d = deltaUs.coerceIn(min(0L, minIn), max(0L, maxIn))
     if (d == 0L) return this
     val srcDelta = (d * clip.speed).toLong()
-    val keyframes = clip.keyframes.map { it.copy(offsetUs = it.offsetUs - d) }.filter { it.offsetUs >= 0 }
+    val shifted = clip.keyframes.map { it.copy(offsetUs = it.offsetUs - d) }.filter { it.offsetUs >= 0 }
+    // Keep the evaluated pose when trimming between keys or past the final key.
+    val keyframes = if (d > 0 && clip.keyframes.isNotEmpty() && shifted.none { it.offsetUs == 0L }) {
+        listOf(Keyframe(0, clip.transformAt(clip.startUs + d))) + shifted
+    } else shifted
     val start = clip.startUs + d
     val updated = if (stretch) clip.copy(srcInUs = 0, srcOutUs = clip.srcOutUs - clip.srcInUs - srcDelta, keyframes = keyframes)
     else clip.copy(srcInUs = clip.srcInUs + srcDelta, keyframes = keyframes)

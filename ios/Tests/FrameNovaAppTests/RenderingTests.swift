@@ -5,6 +5,19 @@ import CoreImage
 @testable import FrameNova
 
 @Suite(.serialized) @MainActor struct RenderingTests {
+    @Test func textRasterCacheReusesAppearanceAndInvalidatesEdits() {
+        let renderer = FrameRenderer(),canvas = CGSize(width:320,height:180)
+        let style = TextStyle(text:"FrameNova"),clip = Clip(text:TextStyle(text:"FrameNova"))
+        let first = renderer.textImage(style,clip:clip,time:0,canvas:canvas)
+        let later = renderer.textImage(style,clip:clip,time:1_000_000,canvas:canvas)
+        #expect(first === later)
+        var changed = style;changed.color = 0xFFFF0000
+        #expect(renderer.textImage(changed,clip:clip,time:0,canvas:canvas) !== first)
+        #expect(renderer.textImage(style,clip:clip,time:0,canvas:CGSize(width:640,height:360)) !== first)
+        changed = style;changed.animIn = .typewriter
+        let start = renderer.textImage(changed,clip:clip,time:0,canvas:canvas)
+        #expect(renderer.textImage(changed,clip:clip,time:200_000,canvas:canvas) !== start)
+    }
     @Test func backgroundAndTextProduceFramesWithoutVideoSources() throws {
         var p = Project(name:"Render test"); p.canvas.tier = .hd; p.canvas.background = 0xFFFF0000
         p.place(Clip(srcOutUs:1_000_000,text:TextStyle(text:"FrameNova")),kind:.text)

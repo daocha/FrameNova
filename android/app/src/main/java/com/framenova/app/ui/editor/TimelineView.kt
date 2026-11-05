@@ -507,8 +507,8 @@ private fun DrawScope.drawClip(
                 val tileW = max(16f, h * (asset.width.toFloat() / max(1, asset.height)).coerceIn(0.5f, 2f))
                 val tileUs = tileW / max(1f, (x1 - x0)) * clip.durationUs
                 val step = listOf(250_000L, 500_000L, 1_000_000L, 2_000_000L, 5_000_000L, 10_000_000L, 30_000_000L).firstOrNull { it >= tileUs * clip.speed } ?: 60_000_000L
-                var tx = x0
-                while (tx < x1) {
+                for (tile in visibleTimelineTiles(x0, x1, tileW, size.width)) {
+                    val tx = x0 + tile * tileW
                     if (tx + tileW >= 0 && tx <= size.width) {
                         val tl = clip.startUs + ((tx - x0) / max(1f, x1 - x0) * clip.durationUs).toLong()
                         // Videos: the cached filmstrip (whole clip, instant on reopening); photos: their thumbnail.
@@ -520,7 +520,6 @@ private fun DrawScope.drawClip(
                                 colorFilter = if (row.track.locked) LockedThumbnailFilter else null)
                         }
                     }
-                    tx += tileW
                 }
             }
             asset != null && asset.hasAudio -> {
