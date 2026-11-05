@@ -1,105 +1,167 @@
-# FrameNova
+<div align="center">
+  <img src="art/FrameNova-play-icon-512.png" width="112" height="112" alt="FrameNova app icon">
+  <h1>FrameNova</h1>
+  <p><strong>One timeline. Room for every layer.</strong></p>
+  <p>A multi-track video editor for Android, iPhone, iPad, and macOS.<br>Edit on your device, from the first cut to the final frame.</p>
+  <p>
+    <a href="#features">Features</a> ·
+    <a href="#build-and-run">Build &amp; run</a> ·
+    <a href="docs/IOS.md">iOS &amp; macOS guide</a> ·
+    <a href="#development">Development</a> ·
+    <a href="LICENSE">License</a>
+  </p>
+  <p><strong>Up to 4K</strong> &nbsp; / &nbsp; <strong>Multi-track editing</strong> &nbsp; / &nbsp; <strong>Local projects</strong></p>
+</div>
 
-A multi-track video editor for Android, built for editing 4K phone footage on the phone itself, in portrait or landscape.
-Projects and media stay on the device. Source-available under the [PolyForm Strict License 1.0.0](LICENSE).
+---
+
+Arrange video, photos, text, and sound on a flexible timeline. Edit directly on the preview, build layered compositions,
+and keep your projects and imported media on your device. Phone and tablet layouts adapt to portrait and landscape;
+the Apple silicon desktop workspace adds a media browser, inspector, and keyboard controls.
+
+FrameNova is source-available under the [PolyForm Strict License 1.0.0](LICENSE).
 
 ## Features
 
-- **Timeline:** main track, any number of layer (picture-in-picture) tracks, text tracks, audio tracks. Clips stay where you put
-  them: trimming or moving a clip leaves a gap instead of shifting the others (tap a gap to delete it), and adding
-  or extending a clip pushes later clips only as far as needed. Long-press to drag clips anywhere, also between
-  tracks; drag the white handles to trim; pinch to zoom; snapping to the playhead and clip edges.
-- **Media library:** a built-in picker for videos and photos (Recent or by album, sorting, multi-select in order by
-  tapping or by holding and dragging) and for audio (Recent or by folder). Files outside the media library can be
-  added with **Files**.
-- **Several clips in one frame:** drag, pinch and twist a layer directly on the preview (with centre and right-angle
-  snapping), or arrange the clips at the playhead with a layout: side by side, top/bottom, grids, picture-in-picture.
-- **Edits:** split, duplicate, delete, replace, freeze frame, speed (0.25–4×, pitch kept), volume and fades, crop,
-  flip, keyframes for position/scale/rotation/opacity.
-- **Look:** 16 colour filters with intensity, adjustments (brightness, contrast, saturation, warmth, tint, hue,
-  sharpen, vignette), canvas background colour or blur.
-- **Transitions:** fade, dip to black/white, push and slide in four directions, zoom in/out.
-- **Text:** styles (colour, outline, shadow, background box, spacing), in/out animations, emoji stickers, subtitles and
-  lyrics from SRT/LRC files. English and art/display fonts are bundled (comic, neon, retro pixel, scripts, slab, western,
-  stencil and more); Traditional Chinese fonts (Noto Sans/Serif TC, Chiron Hei/Sung HK, Chiron GoRound TC, LXGW WenKai TC,
-  LXGW Marker Gothic, Cactus Classical Serif, Iansui, Huninn) download once on demand. All are free (SIL Open Font
-  License 1.1).
-- **Audio:** music and sound from files, audio extracted from video clips, voiceover recording, saving a clip's audio
-  as an `.m4a` file.
-- **Export:** 720p to 4K, 24–60 fps, HEVC or H.264, three quality levels, in the background with a notification.
-  Saved to `Movies/FrameNova`.
+| | What you can do |
+| :--- | :--- |
+| **Timeline** | Combine a main track with video layers, text, and audio tracks. Split, trim, move, duplicate, replace, and freeze clips. Zoom and snap to the playhead or clip edges. |
+| **Layers & layouts** | Move, scale, and rotate layers on the preview. Arrange clips side by side, in grids, or as picture-in-picture. Animate position, scale, rotation, and opacity with keyframes. |
+| **Color & style** | Apply 16 filters with adjustable intensity. Tune brightness, contrast, saturation, warmth, tint, hue, sharpening, and vignette. Choose a solid or blurred canvas background. |
+| **Transitions** | Connect clips with fades, dips to black or white, directional pushes and slides, and zooms. |
+| **Text & subtitles** | Style titles with outlines, shadows, backgrounds, spacing, and in/out animations. Add emoji stickers or import subtitles and lyrics from SRT/LRC files. |
+| **Sound & speed** | Add music, extract audio from video, record voiceovers, and save a clip's audio as `.m4a`. Adjust volume and see fades in the waveform. Change speed from 0.25–4× while preserving pitch. |
+| **Media library** | Browse videos and photos by recent items or album, sort, and select multiple items in order. Import audio and other media through file selection. |
+| **Export** | Choose 720p to 4K, 24–60 fps, H.264 or HEVC, and three quality levels. |
 
-## Building
+**Your timeline stays under your control.** Trimming or moving a clip leaves a gap instead of shifting everything else.
+Delete a gap when you want to close it; inserting or extending a clip pushes later clips only as far as needed.
 
-Android project in `android/`: Kotlin, Jetpack Compose, AndroidX Media3. JDK 17 and the Android SDK (platform 36,
-build-tools 36) are needed; no Android Studio.
+<details>
+<summary><strong>Fonts and typography</strong></summary>
 
-```bash
-scripts/build-android-debug.sh            # debug APK in dist/, with unit tests and lint
-scripts/build-android-debug.sh --install  # and install it with adb
-```
+English and display fonts are bundled, with comic, neon, retro pixel, script, slab, western, and stencil styles.
+Traditional Chinese fonts download once on demand and are cached locally. Font licenses and notices are included
+in [`third_party/fonts/`](third_party/fonts/).
 
-Or directly: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` in `android/`. Engine tests that run
-on a device or emulator: `./gradlew :app:connectedDebugAndroidTest`.
+</details>
 
-## iOS and desktop
+## Build and run
 
-The iOS implementation is in `ios/`, with an adaptive tablet layout and an Apple silicon desktop target.
-Build and validation instructions, platform differences and current validation status are in [the iOS guide](docs/IOS.md).
+| Target | Requirements | Guide |
+| :--- | :--- | :--- |
+| Android | Android 10+ device; JDK 17 and Android SDK platform 36 / build-tools 36 to build | [Android source](android/) |
+| iPhone & iPad | iOS / iPadOS 17+; full Xcode, XcodeGen, Python 3, and Swift 6+ to build | [Build and validation guide](docs/IOS.md) |
+| macOS | Apple silicon, macOS 14+; the same Apple build tools | [Desktop workspace and shortcuts](docs/IOS.md#layout-and-controls) |
+
+### Android
+
+With `JAVA_HOME` and `ANDROID_HOME` pointing to your existing toolchain:
 
 ```bash
-scripts/build-ios-debug.sh --run
-scripts/build-ios-debug.sh --mac --run
+cd android
+./gradlew --console=plain :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 ```
 
-## Updating over the local network
+The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
+The implementation uses Kotlin, Jetpack Compose, and AndroidX Media3.
 
-Debug builds can update themselves from your computer:
+### iPhone, iPad & macOS
 
-1. Create `.env` at the repository root (it is gitignored):
-   ```
-   FRAMENOVA_DEV_UPDATE_HOST=192.168.1.20   # your computer's address on the Wi-Fi
-   FRAMENOVA_DEV_UPDATE_PORT=8767           # optional
-   ```
-2. Build the debug APK and install it once (USB / adb). Every debug build made with the host set writes
-   `android/dist/dev-update/` (APK, `SHA256SUMS`, `latest.json`).
-3. Run `scripts/serve-dev-update.sh`. It starts in the background on your LAN address only, and running it again after
-   any build is safe: a running server picks up the new build by itself. `--status`, `--stop` and `--foreground` are also
-   there. The files are served only under a secret path that the build also puts in the app, so others on the network
-   cannot find the debug APK. The secret is made once, in `~/.android/framenova-dev-update-secret`, and stays the same
-   across builds and new clones. If that file is lost, install the debug build once by hand.
-4. After each new build, the app shows **Update** (home screen banner, or Settings > Check for updates). Downloads are
-   verified against the checksum and the package, and Android installs them only if the signing key matches.
+```bash
+scripts/build-ios-debug.sh --run        # Build and launch in a simulator
+scripts/build-ios-debug.sh --mac --run  # Build and launch on Apple silicon
+```
 
-A debug build installed before the secret existed still asks at the old address. Once, after building, run
-`scripts/serve-dev-update.sh --migrate`, let the phone update, then run the plain command again. No reinstall is needed.
-The plain command also stops any older server that has no secret path, on any port.
+The build scripts install no tools. Set `DEVELOPER_DIR` if needed to select your existing full Xcode installation.
+See the [iOS and desktop guide](docs/IOS.md) for setup, platform differences, and validation status;
+full app builds and device validation remain pending on a machine with full Xcode.
 
-## Reporting a problem
+**Export destinations:** Android exports go to `Movies/FrameNova` and can run in the background with a notification.
+iOS and desktop exports can be shared or saved to the photo library; keep the app active for long exports.
 
-Tap the version in Settings ten times to unlock the developer tools. **Developer logs** shows FrameNova's recent log
-(its own lines, warnings and errors from the media libraries, and the last crash), with Copy, Share and Save; **Save
-logs** writes it to `Download/FrameNova/logs/`. Nothing leaves the phone unless you share it. The tools lock again after
-the next update, or with their switch.
+## Development
 
-## Releases and signing
+### Checks
+
+```bash
+# Android unit tests, debug build, and lint
+cd android
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+```
+
+Run engine tests on a device or emulator after preview, composition, or export changes:
+
+```bash
+# From android/ — uninstalls the app afterwards, deleting its projects
+./gradlew :app:connectedDebugAndroidTest
+```
+
+```bash
+# From the repository root — Swift core tests
+swift test --disable-xctest --package-path ios
+```
+
+Apple app and rendering tests run through the generated project's scheme or the debug build script.
+See the [platform alignment matrix](docs/IOS_PARITY.md) for coverage and remaining checks.
+
+<details>
+<summary><strong>Update Android debug builds over your local network</strong></summary>
+
+1. Copy [`.env.example`](.env.example) to `.env` at the repository root; `.env` is gitignored.
+   Set `FRAMENOVA_DEV_UPDATE_HOST` to your computer's local network address. The optional
+   `FRAMENOVA_DEV_UPDATE_PORT` defaults to `8767`.
+2. Build the debug APK and install it once over USB. Builds with the host set also write an APK,
+   `SHA256SUMS`, and `latest.json` to `android/dist/dev-update/`.
+3. Run `scripts/serve-dev-update.sh`. It starts in the background and binds to the configured local address.
+   A running server picks up new builds automatically. Use `--status`, `--stop`, or `--foreground` as needed.
+4. After a new build, use **Update** on the home screen or **Settings → Check for updates**.
+   Downloads are checked against the checksum and package; installation requires a matching signing key.
+
+Files are served under a secret path embedded in the debug build. The secret is created once at
+`~/.android/framenova-dev-update-secret` and persists across builds and clones. Keep it private;
+if it is lost, install a new debug build manually once.
+
+For a debug build installed before the secret existed, run `scripts/serve-dev-update.sh --migrate` once,
+let the phone update, then run the plain command again. No reinstall is needed. The plain command also stops
+older update servers for this repository that have no secret path.
+
+</details>
+
+<details>
+<summary><strong>Release builds and signing</strong></summary>
 
 | Script | Purpose |
-|---|---|
-| `scripts/generate-signing-key.sh` | Create the release key (`~/.framenova-signing/framenova-upload.jks`) and print its SHA-256 |
-| `scripts/build-android-release.sh` | Signed, verified sideload APK + `SHA256SUMS` in `dist/` |
-| `scripts/build-android-play.sh` | Signed Google Play bundle (no self-update permission) |
-| `scripts/release-github.sh` | Tag and publish the APK to GitHub Releases (`--dry-run` to only build) |
-| `scripts/print-signing-fingerprint.sh` | Show the key fingerprint (for Play App Signing) |
-| `scripts/rotate-signing-key.sh` | Let installs signed with an older key update in place |
+| :--- | :--- |
+| `scripts/generate-signing-key.sh` | Create the release key and print its SHA-256 fingerprint |
+| `scripts/build-android-release.sh` | Build a signed, verified sideload APK and checksums in `dist/` |
+| `scripts/build-android-play.sh` | Build a signed store bundle without self-update permission |
+| `scripts/release-github.sh` | Tag and publish the Android APK; use `--dry-run` to build without publishing |
+| `scripts/print-signing-fingerprint.sh` | Show the signing key fingerprint |
+| `scripts/rotate-signing-key.sh` | Allow installations signed with an older key to update in place |
+| `scripts/build-ios-app-store.sh` | Archive and export an Apple release build with environment-provided signing |
 
-Signing settings come only from the environment (`FRAMENOVA_KEYSTORE`, `FRAMENOVA_KEY_ALIAS`, `FRAMENOVA_KEYSTORE_PASSWORD`,
-`FRAMENOVA_KEY_PASSWORD`); passwords are asked for when unset. Release APKs update from GitHub Releases; Play builds
-update through Google Play.
+Android signing comes from `FRAMENOVA_KEYSTORE`, `FRAMENOVA_KEY_ALIAS`, `FRAMENOVA_KEYSTORE_PASSWORD`, and
+`FRAMENOVA_KEY_PASSWORD`. Passwords are prompted for when unset; the default key location is
+`~/.framenova-signing/framenova-upload.jks`. Never commit keys or credentials.
 
-## Licences
+Sideload release APKs update from repository releases; store builds update through their store.
+See the [iOS and desktop guide](docs/IOS.md) for Apple signing and archive instructions.
 
-FrameNova: PolyForm Strict License 1.0.0. AndroidX Media3, Jetpack Compose and Kotlin libraries: Apache License 2.0.
-`android/app/src/main/java/androidx/media3/effect/` holds two Media3 files modified for the preview, under the Apache
-License 2.0 (changes noted in each file).
-Fonts: SIL Open Font License 1.1, licence texts in `third_party/fonts/`.
+</details>
+
+### Report a problem
+
+Tap the version in **Settings** ten times to unlock the developer tools. **Developer logs** shows recent app logs,
+media-library warnings and errors, and the last crash, with options to copy, share, or save. On Android, saved logs
+are written to `Download/FrameNova/logs/`. Nothing leaves the device unless you share it.
+The tools lock again after the next update or when you turn them off.
+
+## License and acknowledgments
+
+FrameNova is source-available under the [PolyForm Strict License 1.0.0](LICENSE).
+
+- **Libraries:** AndroidX Media3, Jetpack Compose, and Kotlin libraries use Apache License 2.0.
+- **Preview patches:** two modified Media3 files in [`androidx/media3/effect/`](android/app/src/main/java/androidx/media3/effect/)
+  retain their Apache License 2.0 notices and document the changes.
+- **Fonts:** SIL Open Font License 1.1; license texts are included in [`third_party/fonts/`](third_party/fonts/).
