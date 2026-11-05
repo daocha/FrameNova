@@ -65,6 +65,7 @@ struct TimelineMediaStrip:View {
     let clip:Clip
     let asset:MediaAsset
     let pointsPerSecond:Double
+    var clipOffset:Double = 0
     var visibleStart:Double = 0
     var visibleEnd:Double = .greatestFiniteMagnitude
     var locked = false
@@ -81,21 +82,21 @@ struct TimelineMediaStrip:View {
                 if clip.audioOnly || asset.type == .audio {
                     let peaks = waveforms.peaks(asset,ready:{}) ?? []
                     var path = Path()
-                    for position in stride(from:floor(start/3)*3,to:end,by:3.0) {
+                    for position in stride(from:floor((clipOffset+start)/3)*3,to:clipOffset+end,by:3.0) {
                         let timeline = clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000)
                         let time = clip.sourceTime(at:timeline)
                         let index = Int(time/AudioWaveforms.stepUs)
                         let value = index>=0 && index<peaks.count ? Double(peaks[index]):0
                         let amplitude = clamp(value*min(clip.volume,1.5)*clip.audioFadeGain(at:timeline),0,1)*size.height*0.42
-                        path.move(to:CGPoint(x:position-start,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position-start,y:size.height/2+amplitude))
+                        path.move(to:CGPoint(x:position-clipOffset-start,y:size.height/2-amplitude));path.addLine(to:CGPoint(x:position-clipOffset-start,y:size.height/2+amplitude))
                     }
                     context.stroke(path,with:.color(Palette.teal),lineWidth:2)
                 } else if clip.text == nil {
                     let width = max(16,size.height*clamp(Double(asset.width)/Double(max(1,asset.height)),0.5,2))
-                    for index in Int(floor(start/width))..<Int(ceil(end/width)) {
+                    for index in Int(floor((clipOffset+start)/width))..<Int(ceil((clipOffset+end)/width)) {
                         let time = clip.sourceTime(at:clip.startUs+Int64(Double(index)*width/max(0.1,pointsPerSecond)*1_000_000))
                         guard let image = thumbnails.image(asset,at:time) else {continue}
-                        let tile = CGRect(x:Double(index)*width-start,y:0,width:width,height:size.height)
+                        let tile = CGRect(x:Double(index)*width-clipOffset-start,y:0,width:width,height:size.height)
                         let factor = max(tile.width/image.size.width,tile.height/image.size.height)
                         let rect = CGRect(x:tile.midX-image.size.width*factor/2,y:tile.midY-image.size.height*factor/2,width:image.size.width*factor,height:image.size.height*factor)
                         var drawing = context

@@ -7,6 +7,24 @@ struct TimelineViewport {
     func position(_ time: Int64) -> Double { width/2 + Double(time-playhead)/1_000_000*pointsPerSecond }
     func time(at x: Double) -> Int64 { playhead + Int64((x-width/2)/max(0.1,pointsPerSecond)*1_000_000) }
 }
+
+/// A bounded drawing surface for a clip, retaining positions within the complete clip.
+struct TimelineClipSlice {
+    let origin: Double
+    let width: Double
+    let clipOffset: Double
+    let showsStart: Bool
+    let showsEnd: Bool
+    init(clipStart:Double,clipWidth:Double,scrollOffset:Double,viewportWidth:Double) {
+        let end = clipStart+clipWidth
+        origin = clamp(scrollOffset-32,clipStart,end)
+        let right = clamp(scrollOffset+max(0,viewportWidth)+32,origin,end)
+        width = right-origin
+        clipOffset = origin-clipStart
+        showsStart = origin == clipStart
+        showsEnd = right == end
+    }
+}
 struct TimelineScrubPosition {
     var position: Int64
     mutating func move(delta: Double, pointsPerSecond: Double, duration: Int64) -> Int64 {

@@ -3,6 +3,25 @@ import Testing
 @testable import FrameNovaCore
 
 @Suite struct InteractionParityTests {
+    @Test func longClipDrawingAndTrimEdgesStayWithinViewportAtHighZoom() {
+        let geometry = TimelineGeometry(pointsPerSecond:1600)
+        let clipStart = geometry.position(2_000_000),clipWidth = geometry.position(600_000_000)
+        let end = clipStart+clipWidth,width = 720.0
+        let beginning = TimelineClipSlice(clipStart:clipStart,clipWidth:clipWidth,scrollOffset:clipStart,viewportWidth:width)
+        #expect(beginning.showsStart && !beginning.showsEnd)
+        for offset in stride(from:clipStart,through:end-width,by:20_000.0) {
+            let slice = TimelineClipSlice(clipStart:clipStart,clipWidth:clipWidth,scrollOffset:offset,viewportWidth:width)
+            #expect(slice.width>0 && slice.width<=width+64)
+            #expect(slice.origin-slice.clipOffset == clipStart)
+            #expect(slice.origin+slice.width<=end)
+        }
+        let ending = TimelineClipSlice(clipStart:clipStart,clipWidth:clipWidth,scrollOffset:end-width+40,viewportWidth:width)
+        #expect(!ending.showsStart && ending.showsEnd)
+        #expect(ending.origin+ending.width == end)
+        #expect(ending.clipOffset+ending.width == clipWidth)
+        let short = TimelineClipSlice(clipStart:100,clipWidth:24,scrollOffset:0,viewportWidth:width)
+        #expect(short.width == 24 && short.showsStart && short.showsEnd)
+    }
     @Test func fixedPlayheadCoordinatesRoundTripAcrossZoomAndOrientation() {
         for width in [391.0,844,1024] {for zoom in [8.0,70,1600] {
             let viewport = TimelineViewport(width:width,playhead:3_000_000,pointsPerSecond:zoom)
