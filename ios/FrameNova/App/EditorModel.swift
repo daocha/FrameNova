@@ -4,12 +4,29 @@ import SwiftUI
 @MainActor final class EditorModel: ObservableObject {
     @Published var project: Project
     @Published private var selection: String?
+    @Published private(set) var selectedIDs:Set<String> = []
     var selected: String? {
         get {selection}
         set {
             let next = newValue.flatMap {project.track($0)?.locked == false ? $0:nil}
-            if selection != next {selection = next;selectedGap = nil}
+            if selection != next || selectedIDs != Set(next.map {[$0]} ?? []) {
+                selection = next;selectedIDs = Set(next.map {[$0]} ?? []);selectedGap = nil
+            }
         }
+    }
+    func selectClip(_ id:String,extending:Bool = false) {
+        guard project.track(id)?.locked == false else {return}
+        if !extending {if !selectedIDs.contains(id) {selected = id};return}
+        var ids = selectedIDs
+        if ids.contains(id) {ids.remove(id)} else {ids.insert(id)}
+        selectedIDs = ids
+        selection = ids.contains(id) ? id:selection.flatMap {ids.contains($0) ? $0:nil} ?? project.tracks.lazy.flatMap(\.clips).first {ids.contains($0.id)}?.id
+        selectedGap = nil
+    }
+    func selectAllClips() {
+        selectedIDs = Set(project.tracks.filter {!$0.locked}.flatMap(\.clips).map(\.id))
+        selection = project.tracks.lazy.flatMap(\.clips).first {selectedIDs.contains($0.id)}?.id
+        selectedGap = nil
     }
     @Published var selectedGap: Int64?
     @Published var playhead: Int64 = 0
@@ -49,7 +66,7 @@ import SwiftUI
         TimelineThumbnails.shared.prepare(project.assets)
         schedulePreview()
     }
-    var clip: Clip? { project.clip(selected) }
+    var clip: Clip? { selectedIDs.count<=1 ? project.clip(selected):nil }
     var canUndo: Bool { !undoStack.isEmpty }; var canRedo: Bool { !redoStack.isEmpty }
     func change(_ body:(inout Project)->Void) {
         let old = project; body(&project)
@@ -60,6 +77,7 @@ import SwiftUI
         reconcileSelection()
         revision += 1
         var lockUpdate = old
+        lockUpdate.coverAssetID = project.coverAssetID
         if old.tracks.map(\.id) == project.tracks.map(\.id) {
             for i in lockUpdate.tracks.indices {lockUpdate.tracks[i].locked = project.tracks[i].locked}
         }
@@ -83,13 +101,15 @@ import SwiftUI
     }
 
     func edit(_ body:(inout Clip)->Void) {
-        guard let id = selected, project.track(id)?.locked != true else { return }
+        guard let id = selected, canEditSelection else { return }
         change { $0.update(id,body) }
     }
     func undo() { guard let p = undoStack.popLast() else { return }; redoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
     func redo() { guard let p = redoStack.popLast() else { return }; undoStack.append(project); project = p;reconcileSelection(); persist(); revision += 1; schedulePreview() }
     private func reconcileSelection() {
-        if let selected,project.track(selected)?.locked != false {self.selected = nil}
+        let valid = selectedIDs.filter {project.track($0)?.locked == false}
+        if valid != selectedIDs {selectedIDs = valid}
+        if let selection,!selectedIDs.contains(selection) {self.selection = project.tracks.lazy.flatMap(\.clips).first {selectedIDs.contains($0.id)}?.id}
         if let selectedGap,project.tracks[project.mainIndex].locked || project.mainGap(at:selectedGap) == nil {self.selectedGap = nil}
         playhead = clamp(playhead,0,project.durationUs)
     }
@@ -104,7 +124,9 @@ import SwiftUI
                 guard snapshot.durationUs > 0 else { player.replaceCurrentItem(with:nil); return }
                 let built = try await CompositionFactory.build(snapshot,previewState:state)
                 try Task.checkCancellation()
+                let resume = playing
                 player.replaceCurrentItem(with:built.playerItem()); seek(min(playhead,snapshot.durationUs))
+                if resume {player.play()}
             } catch is CancellationError {} catch { self.error = error.localizedDescription }
         }
     }
@@ -132,6 +154,7 @@ import SwiftUI
         }
     }
     func play() {
+        guard project.durationUs>0 else {return}
         if playing { player.pause(); playing = false }
         else { if playhead >= project.durationUs { seek(0) }; player.play(); playing = true }
     }
@@ -144,8 +167,19 @@ import SwiftUI
         if let endObserver {NotificationCenter.default.removeObserver(endObserver);self.endObserver = nil}
         recorder?.stop()
     }
-    func split() { guard let id = selected ?? project.tracks[project.mainIndex].clips.first(where: { $0.contains(playhead) })?.id else { return }; guard project.track(id)?.locked != true else {return}; change { selected = $0.split(id,at:playhead) ?? id } }
-    func delete() { guard let id = selected, project.track(id)?.locked != true else { return }; change { $0.delete(id) }; selected = nil }
+    func split() {
+        guard selectedIDs.count<=1,let id = selected ?? project.tracks[project.mainIndex].clips.first(where: {$0.contains(playhead)})?.id,project.track(id)?.locked != true else {return}
+        var next:String?
+        change {next = $0.split(id,at:playhead)}
+        selected = next ?? id
+    }
+    var canDeleteSelection:Bool {!selectedIDs.isEmpty && selectedIDs.allSatisfy {project.track($0)?.locked == false}}
+    func delete() {
+        guard canDeleteSelection else {return}
+        let ids = selectedIDs
+        change {p in for index in p.tracks.indices {p.tracks[index].clips.removeAll {ids.contains($0.id)}};p.normalize()}
+        selected = nil
+    }
     func addText(_ role:String,content:String? = nil) {
         var style = TextStyle();style.role = role
         if role == "Subtitle" {style.text = content ?? "Subtitle";style.size = 0.055;style.strokeWidth = 0.08}
@@ -191,21 +225,27 @@ import SwiftUI
             }
         } else { change { $0.add(assets,kind:kind,at:playhead) } }
     }
-    var canEditSelection: Bool {selected.map {project.clip($0) != nil && project.track($0)?.locked != true} ?? false}
+    var canEditSelection: Bool {selectedIDs.count == 1 && (selected.map {project.clip($0) != nil && project.track($0)?.locked != true} ?? false)}
     func duplicateSelected() {
-        guard let id = selected, canEditSelection else {return}
-        change {selected = $0.duplicate(id)}
+        guard canDeleteSelection else {return}
+        let ids = project.tracks.flatMap(\.clips).filter {selectedIDs.contains($0.id)}.map(\.id)
+        var copies:[String] = []
+        change {p in for id in ids {if let copy = p.duplicate(id) {copies.append(copy)}}}
+        selectedIDs = Set(copies);selection = copies.last
     }
     func moveSelectionToLayer() {
-        guard let id = selected,canEditSelection else {return}
-        change {$0.moveToNewLayer(id)}
+        guard canDeleteSelection else {return}
+        let ids = project.tracks.flatMap(\.clips).filter {selectedIDs.contains($0.id)}.map(\.id)
+        change {p in for id in ids {p.moveToNewLayer(id)}}
     }
     func insert(_ asset:MediaAsset,kind:TrackKind? = nil,trackID:String? = nil,at time:Int64? = nil) {
         let destination = kind ?? (asset.type == .audio ? .audio:.main)
+        var inserted:String?
         change {p in
-            if let id = p.insertAsset(asset,kind:destination,trackID:trackID,at:time ?? playhead) {selected = id}
+            if let id = p.insertAsset(asset,kind:destination,trackID:trackID,at:time ?? playhead) {inserted = id}
             else {error = "This media cannot be added to that track. Check the track type and lock."}
         }
+        if let inserted {selected = inserted}
     }
     func stepFrames(_ frames:Int) {seek(playhead+Int64(frames)*1_000_000/Int64(project.canvas.fps))}
     func trimToPlayhead(start:Bool) {

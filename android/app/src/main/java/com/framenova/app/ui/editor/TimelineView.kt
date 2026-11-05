@@ -527,7 +527,7 @@ private fun DrawScope.drawClip(
                 val peaks = media.peaks(asset)
                 val mid = top + h / 2
                 if (peaks != null) {
-                    var x = max(0f, x0)
+                    var x = x0 + max(0f, floor(-x0 / 3f)) * 3f
                     val end = min(size.width, x1)
                     while (x < end) {
                         val tl = clip.startUs + ((x - x0) / max(1f, x1 - x0) * clip.durationUs).toLong()

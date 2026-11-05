@@ -14,10 +14,13 @@ import SwiftUI
 struct TimelineView: View {
     @ObservedObject var model: EditorModel
     @ObservedObject var display: TimelineDisplay
+    @StateObject private var pointer = DesktopPointerState()
     var desktop = false
     @EditorFocus<Bool> private var keyboardFocus
     @ViewState<Double?> private var initialScale: Double?
     @ViewState<String?> private var movingID: String?
+    @ViewState<String?> private var pressedID:String?
+    @ViewState<Bool> private var extendingSelection = false
     @ViewState<CGSize> private var movement = .zero
     @ViewState<String?> private var trimID: String?
     @ViewState<Bool> private var trimStart = false
@@ -56,7 +59,9 @@ struct TimelineView: View {
                         .coordinateSpace(name:"timeline.scrollViewport")
                         .onPreferenceChange(TimelineOffsetKey.self) {horizontalOffset = $0}
                         .onChange(of: model.playhead) { _, time in
-                            if model.playing { withAnimation(.linear(duration: 0.12)) { reader.scrollTo("playhead", anchor: .center) } }
+                            if model.playing && (x(time)<horizontalOffset || x(time)>horizontalOffset+viewportWidth-12) {
+                                reader.scrollTo("playhead",anchor:.center)
+                            }
                         }
                         .onChange(of:display.pointsPerSecond) {_,_ in reader.scrollTo("playhead",anchor:.center)}
                         .simultaneousGesture(MagnificationGesture().onChanged { factor in
@@ -78,6 +83,7 @@ struct TimelineView: View {
             .onChange(of:viewport.size.width) {_,width in viewportWidth = max(0,width-headerWidth)}
             #if targetEnvironment(macCatalyst)
             .background {TimelineScrollZoom(onZoom:{display.zoom($0)})}
+            .background {DesktopPointerModifiers(state:pointer)}
             #endif
         }
         .padding(.vertical, 5)
@@ -86,23 +92,6 @@ struct TimelineView: View {
         .focusable()
         .focused($keyboardFocus)
         .focusEffectDisabled()
-        .onKeyPress(.space) { guard desktop else { return .ignored }; model.play(); return .handled }
-        .onKeyPress(keys: [.leftArrow], phases: [.down, .repeat]) { press in
-            guard desktop else { return .ignored }
-            if press.modifiers.contains(.command) {model.seek(0)}
-            else if press.modifiers.contains(.option) {model.seek(model.project.adjacentCut(to:model.playhead,forward:false))}
-            else {model.stepFrames(press.modifiers.contains(.shift) ? -10 : -1)}
-            return .handled
-        }
-        .onKeyPress(keys: [.rightArrow], phases: [.down, .repeat]) { press in
-            guard desktop else { return .ignored }
-            if press.modifiers.contains(.command) {model.seek(model.project.durationUs)}
-            else if press.modifiers.contains(.option) {model.seek(model.project.adjacentCut(to:model.playhead,forward:true))}
-            else {model.stepFrames(press.modifiers.contains(.shift) ? 10 : 1)}
-            return .handled
-        }
-        .onKeyPress(.delete) { guard desktop else { return .ignored }; model.delete(); return .handled }
-        .onKeyPress(.escape) { guard desktop else { return .ignored }; model.selected = nil; return .handled }
         .accessibilityIdentifier(desktop ? "desktop.timeline" : "editor.timeline")
     }
 
@@ -170,7 +159,7 @@ struct TimelineView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {point in
                     if desktop {keyboardFocus = true}
-                    model.selected = nil;model.selectedGap = nil
+                    if !desktop || !pointer.command {model.selected = nil;model.selectedGap = nil}
                 }
             ForEach(track.clips.filter {clip in
                 clip.id == movingID || clip.id == trimID || (x(clip.endUs) >= horizontalOffset-32 && x(clip.startUs) <= horizontalOffset+viewportWidth+32)
@@ -202,20 +191,20 @@ struct TimelineView: View {
     }
 
     private func clipView(_ clip: Clip, track: Track) -> some View {
-        let selected = model.selected == clip.id
+        let selected = model.selectedIDs.contains(clip.id)
         let dragging = movingID == clip.id
         let shown = displayedClip(clip)
         let clipWidth = max(24,x(shown.durationUs))
         let clipLeft = max(0,x(shown.startUs)+(dragging ? movement.width:0))
         return HStack(spacing: 0) {
-            if selected && !track.locked { handle(clip, start: true) }
+            if selected && model.selectedIDs.count == 1 && !track.locked { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
                 Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip").font(.caption2).lineLimit(1)
                 if desktop && rowHeight >= 64 {
                     Text("\(formatTime(clip.durationUs))\(clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")").font(.system(size: 9)).foregroundStyle(.white.opacity(0.65))
                 }
             }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
-            if selected && !track.locked { handle(clip, start: false) }
+            if selected && model.selectedIDs.count == 1 && !track.locked { handle(clip, start: false) }
         }
         .frame(width: clipWidth, height: rowHeight-6)
         .contentShape(Rectangle())
@@ -245,13 +234,17 @@ struct TimelineView: View {
         .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("editor.timelineDrag")).onChanged {value in
             guard !track.locked else {return}
             if desktop {keyboardFocus = true}
-            if model.selected != clip.id {model.selected = clip.id}
+            if pressedID != clip.id {
+                pressedID = clip.id;extendingSelection = desktop && pointer.command
+                model.selectClip(clip.id,extending:extendingSelection)
+            }
             model.selectedGap = nil
             if model.playing {model.scrub(model.playhead)}
-            guard !track.locked,hypot(value.translation.width,value.translation.height)>=4 else {return}
+            guard !extendingSelection,model.selectedIDs.count == 1,hypot(value.translation.width,value.translation.height)>=4 else {return}
             movingID = clip.id;movement = value.translation
         }.onEnded {value in
-            defer {movingID = nil;movement = .zero}
+            defer {movingID = nil;movement = .zero;pressedID = nil}
+            if !extendingSelection && hypot(value.translation.width,value.translation.height)<4 {model.selected = clip.id}
             guard !track.locked,movingID == clip.id else {return}
             let time = geometry.snappedStart(clip.startUs+Int64(value.translation.width/display.pointsPerSecond*1_000_000),duration:clip.durationUs,project:model.project,playhead:model.playhead,excluding:clip.id)
             let tracks = model.project.tracks,index = tracks.firstIndex(where:{$0.id == track.id}) ?? 0
@@ -260,9 +253,9 @@ struct TimelineView: View {
         })
         .contextMenu {
             Button("Split") { model.selected = clip.id; model.split() }.disabled(track.locked)
-            Button("To new layer") { model.selected = clip.id; model.moveSelectionToLayer() }.disabled(track.locked)
-            Button("Duplicate") { model.selected = clip.id; model.duplicateSelected() }.disabled(track.locked)
-            Button("Delete", role: .destructive) { model.selected = clip.id; model.delete() }.disabled(track.locked)
+            Button("To new layer") { model.selectClip(clip.id); model.moveSelectionToLayer() }.disabled(track.locked)
+            Button("Duplicate") { model.selectClip(clip.id); model.duplicateSelected() }.disabled(track.locked)
+            Button("Delete", role: .destructive) { model.selectClip(clip.id); model.delete() }.disabled(track.locked)
         }
         .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")
         .allowsHitTesting(!track.locked)

@@ -81,7 +81,7 @@ struct TimelineMediaStrip:View {
                 if clip.audioOnly || asset.type == .audio {
                     let peaks = waveforms.peaks(asset,ready:{}) ?? []
                     var path = Path()
-                    for position in stride(from:start,to:end,by:3.0) {
+                    for position in stride(from:floor(start/3)*3,to:end,by:3.0) {
                         let time = clip.sourceTime(at:clip.startUs+Int64(position/max(0.1,pointsPerSecond)*1_000_000))
                         let index = Int(time/AudioWaveforms.stepUs)
                         let value = index>=0 && index<peaks.count ? Double(peaks[index]):0

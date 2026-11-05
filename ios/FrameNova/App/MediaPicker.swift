@@ -101,6 +101,7 @@ struct LibraryAlbum:Identifiable {
 
 struct MediaPicker:View {
     var multiple = true
+    var imagesOnly = false
     var completion:([MediaAsset],String?)->Void
     @StateObject private var library = PhotoLibraryModel()
     @Environment(\.dismiss) private var dismiss
@@ -112,8 +113,10 @@ struct MediaPicker:View {
     var body:some View {
         NavigationStack {
             VStack(spacing:8) {
-                Picker("Media type",selection:$filter) {ForEach(["Library","Photos","Videos"],id:\.self) {Text($0)}}
-                    .pickerStyle(.segmented).padding(.horizontal).accessibilityIdentifier("media.filters")
+                if !imagesOnly {
+                    Picker("Media type",selection:$filter) {ForEach(["Library","Photos","Videos"],id:\.self) {Text($0)}}
+                        .pickerStyle(.segmented).padding(.horizontal).accessibilityIdentifier("media.filters")
+                }
                 HStack {
                     if section == "albums" && !album.isEmpty {Button {album = ""} label:{Image(systemName:"chevron.left")}.accessibilityLabel("All albums")}
                     Menu {
@@ -161,7 +164,7 @@ struct MediaPicker:View {
                 .overlay {if library.importing {VStack(spacing:12) {ProgressView(value:library.progress);Text("Importing… \(Int(library.progress*100))%").font(.caption)}.padding(24).frame(width:240).background(Palette.surface,in:RoundedRectangle(cornerRadius:16))}}
         }
         .interactiveDismissDisabled(library.importing)
-        .task {chosen.limit = multiple ? 50:1;library.filter = filter;library.sort = sort;library.albumID = section == "albums" && !album.isEmpty ? album:nil;if library.access == .notDetermined {await library.request()} else {reload()}}
+        .task {if imagesOnly {filter = "Photos"};chosen.limit = multiple ? 50:1;library.filter = filter;library.sort = sort;library.albumID = section == "albums" && !album.isEmpty ? album:nil;if library.access == .notDetermined {await library.request()} else {reload()}}
         .onChange(of:filter) {_,_ in reload()}
         .onChange(of:section) {_,_ in reload()}
         .onChange(of:album) {_,_ in reload()}

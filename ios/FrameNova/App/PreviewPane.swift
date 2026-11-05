@@ -16,6 +16,7 @@ struct PreviewLayer:Identifiable {
 }
 struct PreviewPane:View {
     @ObservedObject var model:EditorModel
+    @StateObject private var pointer = DesktopPointerState()
     var onText:((String)->Void)? = nil
     @ViewState<Transform?> private var base:Transform?
     @ViewState<CGSize> private var translation = .zero
@@ -36,7 +37,7 @@ struct PreviewPane:View {
         GeometryReader {geometry in
             let canvas = EditorPresentation.canvasRect(in:geometry.size,aspect:model.project.canvas.aspect.ratio)
             let layers = layers(in:canvas)
-            let selected = layers.first {$0.id == model.selected}
+            let selected = layers.first {model.selectedIDs.count == 1 && $0.id == model.selected}
             let outside = selected?.outside(canvas,tolerance:canvas.width/Double(model.project.canvas.size.width)) == true
             ZStack(alignment:.topLeading) {
                 Color(argb:0xFF2A2A33)
@@ -83,7 +84,9 @@ struct PreviewPane:View {
             }.onEnded {value in
                 if !moved && gestures.isEmpty {
                     let target = hit(value.startLocation,layers:layers),now = CACurrentMediaTime()
-                    model.selected = target?.id;model.selectedGap = nil
+                    if pointer.command,let target {model.selectClip(target.id,extending:true)}
+                    else if !pointer.command {model.selected = target?.id}
+                    model.selectedGap = nil
                     if let target,target.clip.text != nil,lastTapID == target.id,now-lastTapTime<0.32 {onText?(target.id);lastTapID = nil}
                     else {lastTapID = target?.id;lastTapTime = now}
                 }
@@ -91,7 +94,11 @@ struct PreviewPane:View {
             })
             .simultaneousGesture(MagnificationGesture().onChanged {value in begin("scale");magnification = value;apply(canvas:canvas)}.onEnded {_ in end("scale")})
             .simultaneousGesture(RotationGesture().onChanged {value in begin("rotation");rotation = value.degrees;apply(canvas:canvas)}.onEnded {_ in end("rotation")})
-        }.accessibilityIdentifier("editor.preview")
+        }
+        #if targetEnvironment(macCatalyst)
+        .background {DesktopPointerModifiers(state:pointer)}
+        #endif
+        .accessibilityIdentifier("editor.preview")
     }
     private func hit(_ point:CGPoint,layers:[PreviewLayer])->PreviewLayer? {
         layers.reversed().first {$0.clip.text != nil && $0.contains(point,slop:20)} ?? layers.reversed().first {$0.contains(point)}

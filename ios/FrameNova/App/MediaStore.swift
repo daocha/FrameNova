@@ -28,6 +28,7 @@ final class ProjectStore: ObservableObject {
         for asset in project.assets where !referenced.contains(asset.path) { try? FileManager.default.removeItem(at: directory.appendingPathComponent("Media").appendingPathComponent(asset.path)) }
     }
     func coverSource(_ project:Project)->(asset:MediaAsset,time:Int64)? {
+        if let cover = project.asset(project.coverAssetID),cover.type == .image {return (cover,0)}
         let clips = project.tracks[project.mainIndex].clips+project.tracks.flatMap(\.clips)
         guard let clip = clips.first(where:{project.asset($0.assetID).map {$0.type != .audio} == true}),let asset = project.asset(clip.assetID) else {return nil}
         return (asset,clip.srcInUs)

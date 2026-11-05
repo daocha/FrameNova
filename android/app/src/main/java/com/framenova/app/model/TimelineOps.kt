@@ -455,3 +455,15 @@ fun Clip.withTransformAt(atUs: Long, t: Transform, frameUs: Long): Clip {
 
 fun Project.clipsAt(timeUs: Long, kinds: Set<TrackKind>): List<Pair<Track, Clip>> =
     tracks.filter { it.kind in kinds }.mapNotNull { t -> t.clips.firstOrNull { it.contains(timeUs) }?.let { t to it } }
+
+/** Keeps existing tracks aligned when a cover becomes an opening clip. */
+fun Project.prependCover(): Project {
+    val cover = asset(coverAssetId)?.takeIf { it.type == MediaType.IMAGE } ?: return this
+    if (tracks.any { it.locked && (it.kind == TrackKind.MAIN || it.clips.isNotEmpty()) }) return this
+    val duration = 3_000_000L
+    val opening = Clip(id = newId(), assetId = cover.id, startUs = 0, srcOutUs = duration)
+    return copy(tracks = tracks.map { track ->
+        val shifted = track.clips.map { it.copy(startUs = it.startUs + duration) }
+        track.copy(clips = if (track.kind == TrackKind.MAIN) listOf(opening) + shifted else shifted)
+    })
+}

@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +59,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -100,7 +103,7 @@ fun LabeledSlider(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = androidx.compose.material3.MaterialTheme.typography.bodySmall, modifier = Modifier.width(84.dp), color = Palette.TextDim)
-        Slider(value = value.coerceIn(range), onValueChange = onChange, valueRange = range, onValueChangeFinished = onFinished, modifier = Modifier.weight(1f))
+        Slider(value = value.coerceIn(range), onValueChange = onChange, valueRange = range, onValueChangeFinished = onFinished, modifier = Modifier.weight(1f).semantics { contentDescription = label })
         Text(format(value), style = androidx.compose.material3.MaterialTheme.typography.bodySmall, modifier = Modifier.width(52.dp), color = Palette.Text)
     }
 }
@@ -556,3 +559,22 @@ fun VoiceoverPanel(vm: EditorViewModel, requestPermission: () -> Unit, hasPermis
 
 @Composable
 fun EmptyPanelBox(modifier: Modifier = Modifier) = Box(modifier.fillMaxSize())
+
+@UnstableApi
+@Composable
+fun CoverPanel(vm: EditorViewModel, onImport: () -> Unit) {
+    val project = vm.project
+    PanelScaffold("Cover", onDone = { vm.panel = Panel.NONE }) {
+        Text("Choose a project thumbnail, or add it as a three-second opening clip and trim it in the timeline.", fontSize = 12.sp, color = Palette.TextDim)
+        Button(onClick = onImport) { Text("Choose image…") }
+        project.assets.filter { it.type == MediaType.IMAGE }.forEach { asset ->
+            TextButton(onClick = { vm.chooseCover(asset.id) }) {
+                Text((if (project.coverAssetId == asset.id) "✓ " else "") + asset.name)
+            }
+        }
+        TextButton(onClick = { vm.chooseCover(null) }, enabled = project.coverAssetId != null) { Text("Use automatic thumbnail") }
+        val locked = project.tracks.any { it.locked && (it.kind == TrackKind.MAIN || it.clips.isNotEmpty()) }
+        Button(onClick = { vm.prependCover() }, enabled = project.asset(project.coverAssetId)?.type == MediaType.IMAGE && !locked) { Text("Add cover to start") }
+        if (locked) Text("Unlock tracks before adding an opening clip.", fontSize = 12.sp, color = Palette.TextDim)
+    }
+}

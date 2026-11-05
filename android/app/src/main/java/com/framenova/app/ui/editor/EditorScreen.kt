@@ -108,6 +108,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     var renaming by remember { mutableStateOf(false) }
     var micGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     var library by remember { mutableStateOf<LibraryRequest?>(null) }
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.import(listOf(uri), ImportTarget.COVER) }
     val pickSubs = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.importSubtitles(uri) }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { micGranted = it }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -136,6 +137,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 Tool("Audio", Icons.Default.LibraryMusic) { pickMedia(ImportTarget.AUDIO) },
                 Tool("Voiceover", Icons.Default.Mic) { vm.panel = Panel.VOICEOVER },
                 Tool("Layout", Icons.Default.GridView) { vm.panel = Panel.LAYOUT },
+                Tool("Cover", Icons.Default.Image) { vm.panel = Panel.COVER },
                 Tool("Ratio", Icons.Default.AspectRatio) { vm.panel = Panel.CANVAS },
                 Tool("Split", Icons.Default.ContentCut) { vm.split() },
                 Tool("Freeze", Icons.Default.AcUnit) { vm.freezeFrame() },
@@ -191,6 +193,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
 
     val panelContent: @Composable () -> Unit = {
         when (vm.panel) {
+            Panel.COVER -> CoverPanel(vm) { pickCover.launch(arrayOf("image/*")) }
             Panel.SPEED -> SpeedPanel(vm)
             Panel.VOLUME -> VolumePanel(vm)
             Panel.FADE -> VolumePanel(vm, fadesOnly = true)
@@ -335,8 +338,9 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 ImportTarget.OVERLAY -> "Add as a layer"
                 ImportTarget.AUDIO -> "Add audio"
                 ImportTarget.REPLACE -> "Replace clip"
+                ImportTarget.COVER -> "Choose cover image"
             },
-            multiple = req.target != ImportTarget.REPLACE,
+            multiple = req.target != ImportTarget.REPLACE && req.target != ImportTarget.COVER,
             onDismiss = { library = null },
         ) { uris -> library = null; vm.import(uris, req.target) }
     }

@@ -3,6 +3,49 @@ import Foundation
 @testable import FrameNova
 
 @Suite(.serialized) @MainActor struct DesktopEditorTests {
+    @Test func commandSelectionSpansTrackTypesAndDeleteIsOneUndoStep() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        var project = Project(name:"Multiple selection")
+        project.tracks = [Track(id:"overlay",kind:.overlay,clips:[Clip(id:"layer")]),
+            Track(id:"main",kind:.main,clips:[Clip(id:"video")]),
+            Track(id:"audio",kind:.audio,clips:[Clip(id:"sound",audioOnly:true)]),
+            Track(id:"locked",kind:.text,clips:[Clip(id:"locked-clip",text:TextStyle())],locked:true)]
+        let model = EditorModel(project:project,store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.selected = "video"
+        model.selectClip("layer",extending:true);model.selectClip("sound",extending:true)
+        model.selectClip("locked-clip",extending:true)
+        #expect(model.selectedIDs == ["video","layer","sound"])
+        #expect(model.canDeleteSelection && !model.canEditSelection)
+        model.selectClip("layer",extending:true)
+        #expect(model.selectedIDs == ["video","sound"])
+        model.selectClip("layer",extending:true)
+        model.delete()
+        #expect(model.project.clip("video") == nil && model.project.clip("layer") == nil && model.project.clip("sound") == nil)
+        #expect(model.project.clip("locked-clip") != nil)
+        model.undo();#expect(model.project == project);#expect(!model.canUndo)
+        model.redo();#expect(model.project.clip("video") == nil)
+    }
+
+    @Test func selectAllSkipsLockedClipsAndDuplicateKeepsMultipleSelection() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
+        let store = ProjectStore(directory:folder)
+        var project = Project(name:"Selection actions")
+        project.tracks[0].clips = [Clip(id:"a"),Clip(id:"b",startUs:3_000_000)]
+        project.tracks.append(Track(kind:.audio,clips:[Clip(id:"locked",audioOnly:true)],locked:true))
+        let model = EditorModel(project:project,store:store)
+        defer {model.close();try? FileManager.default.removeItem(at:folder)}
+        model.selectAllClips();#expect(model.selectedIDs == ["a","b"])
+        model.duplicateSelected()
+        #expect(model.selectedIDs.count == 2)
+        #expect(model.selectedIDs.isDisjoint(with:["a","b","locked"]))
+        model.undo();#expect(model.project == project)
+        model.selected = "a";model.selectClip("b",extending:true)
+        model.change {$0.tracks[0].locked = true}
+        #expect(model.selectedIDs.isEmpty && model.selected == nil)
+    }
+
     @Test func libraryImportIsSavedWithoutAddingClipsAndSupportsUndo() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(newID())
         let store = ProjectStore(directory: folder), project = Project(name: "Desktop import test")

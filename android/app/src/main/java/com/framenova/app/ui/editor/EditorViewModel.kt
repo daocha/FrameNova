@@ -34,11 +34,11 @@ import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 enum class Panel {
-    NONE, SPEED, VOLUME, FADE, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
+    NONE, COVER, SPEED, VOLUME, FADE, ADJUST, FILTER, CROP, TRANSFORM, TRANSITION, LAYOUT, CANVAS,
     TEXT_EDIT, TEXT_FONT, TEXT_STYLE, TEXT_ANIM, STICKER, VOICEOVER, EXPORT,
 }
 
-enum class ImportTarget { MAIN, OVERLAY, AUDIO, REPLACE }
+enum class ImportTarget { MAIN, OVERLAY, AUDIO, REPLACE, COVER }
 
 @UnstableApi
 class EditorViewModel(app: Application, val projectId: String) : AndroidViewModel(app) {
@@ -299,9 +299,26 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                     commit(p)
                 }
                 ImportTarget.REPLACE -> replaceSelected(assets.first())
+                ImportTarget.COVER -> {
+                    val image = assets.firstOrNull { it.type == MediaType.IMAGE }
+                    if (image == null) message = "Choose an image for the cover"
+                    else commit(project.withAssets(listOf(image)).copy(coverAssetId = image.id))
+                }
             }
             (allClipIds() - before).firstOrNull()?.let { selectedId = it }
         }
+    }
+
+    fun chooseCover(id: String?) {
+        if (id == null || project.asset(id)?.type == MediaType.IMAGE) commit(project.copy(coverAssetId = id))
+    }
+
+    fun prependCover() {
+        val next = project.prependCover()
+        if (next == project) return
+        commit(next)
+        selectedId = project.mainTrack.clips.firstOrNull()?.id
+        jumpTo(0)
     }
 
     private fun replaceSelected(asset: MediaAsset) {

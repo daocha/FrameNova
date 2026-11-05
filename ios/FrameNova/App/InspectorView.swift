@@ -7,7 +7,7 @@ struct ValueSlider: View {
     @Environment(\.editGestureActions) private var editing
     @Binding var value:Double
     var range:ClosedRange<Double> = 0...1
-    var body: some View {VStack(alignment:.leading,spacing:4) {HStack {Text(title); Spacer(); Text(value.formatted(.number.precision(.fractionLength(2)))).foregroundStyle(Palette.dim).monospacedDigit()}; Slider(value:$value,in:range,onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})}.font(.caption)}
+    var body: some View {VStack(alignment:.leading,spacing:4) {HStack {Text(title); Spacer(); Text(value.formatted(.number.precision(.fractionLength(2)))).foregroundStyle(Palette.dim).monospacedDigit()}; EditorSlider(value:$value,range:range,label:title,onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})}.font(.caption)}
 }
 struct CanvasControls: View {
     @Binding var canvas:CanvasSettings
@@ -64,6 +64,8 @@ struct InspectorView: View {
     }
     @ViewBuilder var content:some View {
         switch page {
+        case "Cover":
+            CoverPanel(model:model)
         case "Speed":
             ValueSlider(title:"Speed",value:Binding(get:{model.clip?.speed ?? 1},set:{v in if let id = model.selected {model.change {$0.setSpeed(id,speed:v)}}}),range:0.25...4)
             HStack {ForEach([0.25,0.5,1,2,4],id:\.self) {s in Button("\(s.formatted())×") {if let id = model.selected {model.change {$0.setSpeed(id,speed:s)}}}.buttonStyle(.bordered)}}

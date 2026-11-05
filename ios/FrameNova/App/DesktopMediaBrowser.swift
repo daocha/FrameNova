@@ -90,10 +90,11 @@ struct DesktopMediaBrowser: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(selectedID == asset.id ? Palette.accent : .clear, lineWidth: 1))
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { selectedID = asset.id; model.insert(asset) }
-        .onTapGesture { selectedID = asset.id }
+        .simultaneousGesture(TapGesture().onEnded { selectedID = asset.id })
         .onDrag { selectedID = asset.id; return NSItemProvider(object: (WorkspaceDrop.assetPrefix + asset.id) as NSString) }
         .contextMenu {
             Button("Add to timeline") { model.insert(asset) }
+            if asset.type == .image {Button("Use as cover") {model.change {$0.coverAssetID = asset.id}}}
             Button("Add as layer") { model.insert(asset, kind: .overlay) }.disabled(asset.type == .audio)
             Button("Add audio") { model.insert(asset, kind: .audio) }.disabled(!asset.hasAudio)
         }

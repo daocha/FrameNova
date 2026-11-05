@@ -52,3 +52,28 @@ extension Project {
         return forward ? edges.filter { $0 > time }.min() ?? durationUs : edges.filter { $0 < time }.max() ?? 0
     }
 }
+
+/// Repeated frame steps ramp up while a direction remains held.
+struct PlaybackKeyRepeat {
+    private var direction = 0
+    private var began = 0.0
+    mutating func frames(direction: Int, repeating: Bool, time: Double) -> Int {
+        if !repeating || direction != self.direction {self.direction = direction;began = time}
+        let elapsed = max(0,time-began)
+        return direction * (elapsed >= 2 ? 30 : elapsed >= 1 ? 10 : elapsed >= 0.4 ? 3 : 1)
+    }
+}
+
+extension Project {
+    var canPrependCover: Bool {
+        asset(coverAssetID)?.type == .image && !tracks.contains {$0.locked && ($0.kind == .main || !$0.clips.isEmpty)}
+    }
+    @discardableResult mutating func prependCover() -> String? {
+        guard canPrependCover,let asset = asset(coverAssetID) else {return nil}
+        let duration: Int64 = 3_000_000
+        for t in tracks.indices {for c in tracks[t].clips.indices {tracks[t].clips[c].startUs += duration}}
+        let clip = Clip(assetID:asset.id,srcOutUs:duration)
+        tracks[mainIndex].clips.insert(clip,at:0)
+        return clip.id
+    }
+}

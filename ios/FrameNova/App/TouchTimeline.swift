@@ -242,7 +242,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                 UIColor(argb:row.track.locked ? 0xFF33333B:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:60,height:row.rect.height))
                 let icon = row.track.kind == .text ? "textformat" : row.track.hidden ? "eye.slash" : row.track.muted ? "speaker.slash" : row.track.kind == .audio ? "waveform":"film"
                 UIImage(systemName:icon)?.withTintColor(.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:7,y:row.rect.midY-8,width:16,height:16))
-                UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? .systemYellow:.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:row.rect.midY-8,width:16,height:16))
+                UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? UIColor(argb:0xFF8B6CFF):.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:row.rect.midY-8,width:16,height:16))
             }
         }
         if case .move(let clip,let track) = mode,let row = rows.first(where:{$0.track.id == track.id}) {
@@ -298,7 +298,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             UIColor.black.withAlphaComponent(0.35).setFill();context.fill(CGRect(x:box.minX,y:box.minY,width:box.width,height:16))
         }
         if let asset = model.project.asset(clip.assetID),asset.hasAudio,(clip.audioOnly || row.track.kind == .audio || asset.type == .audio),let peaks = AudioWaveforms.shared.peaks(asset,ready:{[weak self] in self?.setNeedsDisplay()}) {
-            var position = max(0,box.minX)
+            var position = box.minX+max(0,floor(-box.minX/3))*3
             (row.track.locked ? UIColor.lightGray:UIColor(argb:0xFF2FD1C1)).setStroke();context.setLineWidth(2)
             while position<min(box.maxX,bounds.width) {
                 let timeline = clip.startUs+Int64((position-box.minX)/(display?.pointsPerSecond ?? 70)*1_000_000)

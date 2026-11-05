@@ -16,6 +16,23 @@ class TimelineOpsTest {
 
     private fun base() = Project("id", "Test", 0, 0).addToMainAt(listOf(video, photo, video2), 0)
 
+    @Test fun openingCoverShiftsAllTracksAndRespectsLocks() {
+        val p = base().addAudioAt(song, 500_000).copy(coverAssetId = photo.id)
+        val covered = p.prependCover()
+        assertEquals(photo.id, covered.mainTrack.clips.first().assetId)
+        assertEquals(0L, covered.mainTrack.clips.first().startUs)
+        assertEquals(3_000_000L, covered.mainTrack.clips.first().durationUs)
+        for (track in p.tracks) for (clip in track.clips) {
+            val shifted = covered.clip(clip.id)!!
+            assertEquals(clip.startUs + 3_000_000L, shifted.startUs)
+            assertEquals(clip.srcInUs, shifted.srcInUs)
+            assertEquals(clip.srcOutUs, shifted.srcOutUs)
+        }
+        val locked = p.updateTrack(p.mainTrack.id) { it.copy(locked = true) }
+        assertEquals(locked, locked.prependCover())
+        assertEquals(p.copy(coverAssetId = song.id), p.copy(coverAssetId = song.id).prependCover())
+    }
+
     @Test fun trackLockDisablesSelectionUntilUnlocked() {
         val p = base()
         val id = p.mainTrack.clips.first().id

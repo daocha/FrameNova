@@ -125,6 +125,7 @@ struct Project: Codable, Equatable, Identifiable {
     var name: String
     var createdAt = Date(), modifiedAt = Date()
     var canvas = CanvasSettings()
+    var coverAssetID: String?
     var assets: [MediaAsset] = []
     var tracks = [Track(id: "main", kind: .main)]
     var durationUs: Int64 { tracks.reduce(0) {end,track in track.clips.reduce(end) {max($0,$1.endUs)}} }

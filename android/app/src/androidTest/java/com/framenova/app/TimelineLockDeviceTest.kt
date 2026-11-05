@@ -181,18 +181,29 @@ class TimelineLockDeviceTest {
             onMain { assertEquals(Panel.FADE, vm.panel) }
             bounds("Fade in")
             bounds("Fade out")
+            for (label in listOf("Fade in", "Fade out")) {
+                val slider = bounds(label, rangeOnly = true)
+                val x = slider.left + slider.width() * 3 / 4
+                tap(Rect(x - 1, slider.centerY() - 1, x + 1, slider.centerY() + 1))
+            }
+            onMain {
+                assertTrue("Fade-in slider tap must save the duration", vm.selectedClip!!.fadeInUs > 0)
+                assertTrue("Fade-out slider tap must save the duration", vm.selectedClip!!.fadeOutUs > 0)
+            }
         } finally {
             onMain { store.clear(); activity.finish() }
             repo.delete(id)
         }
     }
 
-    private fun bounds(label: String): Rect {
+    private fun bounds(label: String, rangeOnly: Boolean = false): Rect {
         val deadline = SystemClock.uptimeMillis() + 5_000
         fun find(node: android.view.accessibility.AccessibilityNodeInfo?): Rect? {
             if (node == null) return null
             if ((node.contentDescription?.toString() == label || node.text?.toString() == label) && node.isVisibleToUser) {
-                return Rect().also { node.getBoundsInScreen(it) }
+                var target: android.view.accessibility.AccessibilityNodeInfo? = node
+                if (rangeOnly) while (target != null && target.rangeInfo == null) target = target.parent
+                if (target != null) return Rect().also { target.getBoundsInScreen(it) }
             }
             for (index in 0 until node.childCount) find(node.getChild(index))?.let { return it }
             return null

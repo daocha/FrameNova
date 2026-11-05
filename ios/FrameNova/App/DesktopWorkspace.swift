@@ -23,7 +23,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @ViewState<Double> private var availableWidth = 1000
 
     private var panels: [String] {
-        guard let clip = model.clip else { return ["Ratio", "Layout", "Stickers", "Voiceover"] }
+        guard let clip = model.clip else { return ["Ratio", "Cover", "Layout", "Stickers", "Voiceover"] }
         if clip.text != nil { return ["Text", "Font", "Style", "Animation", "Position", "Ratio"] }
         if clip.audioOnly || model.project.asset(clip.assetID)?.type == .audio { return ["Volume", "Fade", "Speed", "Ratio"] }
         var choices = ["Position", "Crop", "Adjust", "Filters", "Layout"]
@@ -90,6 +90,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 model.selected = nil;model.selectedGap = nil;panel = "Ratio";showInspector = !close
             })
             Spacer()
+            Button("Cover") {model.selected = nil;panel = "Cover";showInspector = true}
             Button(action: onImport) { Label("Import", systemImage: "square.and.arrow.down") }.disabled(model.busy).help("Import media (⌘I)")
             Button { showBrowser.toggle() } label: { Image(systemName: "sidebar.left") }.help("Toggle media browser")
             Button { showInspector.toggle() } label: { Image(systemName: "sidebar.right") }.help("Toggle inspector")
@@ -100,15 +101,20 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? "Project settings")
+                Text(model.selectedIDs.count>1 ? "\(model.selectedIDs.count) clips selected":model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? "Project settings")
                     .font(.caption.bold()).lineLimit(2)
                 Picker("Inspector", selection: $panel) {
                     ForEach(panels.contains(panel) ? panels : panels + [panel], id: \.self) { Text($0).tag($0) }
-                }.pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                }.pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading).disabled(model.selectedIDs.count>1)
             }.padding(12)
             Divider()
-            InspectorView(model: model, panel: panel).id(panel)
-                .disabled(model.selected.map { model.project.track($0)?.locked == true } == true && panel != "Ratio")
+            if model.selectedIDs.count>1 {
+                Text("Command-click to add or remove clips. Use Delete, Duplicate or To new layer for the selected clips.")
+                    .font(.caption).foregroundStyle(Palette.dim).padding(12)
+                Spacer()
+            } else {InspectorView(model: model, panel: panel).id(panel)
+                .disabled(model.selected.map { model.project.track($0)?.locked == true } == true && panel != "Ratio" && panel != "Cover")
+            }
         }.background(Palette.surface).accessibilityIdentifier("desktop.inspector")
     }
 
@@ -132,7 +138,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 Button("Large tracks") {timeline.rowHeight = 96}
             } label:{Image(systemName:"line.3.horizontal")}.help("Track height").accessibilityLabel("Track height")
             Button {timeline.zoom(1/1.3)} label:{Image(systemName:"minus.magnifyingglass")}.help("Zoom out (⌘−)")
-            Slider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),in:log2(0.1)...log2(1600)).frame(width:70).accessibilityLabel("Timeline zoom")
+            EditorSlider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),range:log2(0.1)...log2(1600),label:"Timeline zoom").frame(width:70)
             Button {timeline.zoom(1.3)} label:{Image(systemName:"plus.magnifyingglass")}.help("Zoom in (⌘+)")
             Button("Fit") {timeline.fit(duration:model.project.durationUs,width:availableWidth)}.help("Fit project to timeline (⇧Z)")
         }.buttonStyle(.borderless).padding(.horizontal,12).frame(height:44).background(Palette.surface)
@@ -152,17 +158,29 @@ struct WorkspaceDivider: View {
     var horizontal = false
     var reversed = false
     @ViewState<Double?> private var start: Double?
-    @ViewState<Bool> private var hovered = false
+    @ViewState<CGPoint?> private var pointerLocation = nil
     var body: some View {
-        Rectangle().fill(hovered ? Palette.accent.opacity(0.6) : Palette.surface2)
+        Rectangle().fill((pointerLocation != nil || start != nil) ? Palette.accent.opacity(0.6) : Palette.surface2)
             .frame(width: horizontal ? nil : 5, height: horizontal ? 5 : nil)
             .contentShape(Rectangle())
-            .onHover { hovered = $0 }
+            .onContinuousHover {phase in
+                switch phase {case .active(let point):pointerLocation = point;case .ended:if start == nil {pointerLocation = nil}}
+            }
             .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
                 if start == nil { start = value }
+                pointerLocation = drag.location
                 let delta = horizontal ? drag.translation.height : drag.translation.width
                 value = clamp((start ?? value) + delta * (reversed ? -1 : 1), range.lowerBound, range.upperBound)
-            }.onEnded { _ in start = nil })
+            }.onEnded { _ in start = nil;pointerLocation = nil })
+            .overlay(alignment:.topLeading) {
+                if let point = pointerLocation {
+                    Image(systemName:horizontal ? "arrow.up.and.down":"arrow.left.and.right")
+                        .font(.system(size:12,weight:.bold)).foregroundStyle(.white)
+                        .padding(6).background(Palette.accent,in:Circle())
+                        .offset(x:point.x+16,y:point.y+12).allowsHitTesting(false)
+                }
+            }
+            .zIndex(100)
             .accessibilityLabel(horizontal ? "Resize timeline" : "Resize panel")
             .accessibilityAdjustableAction { direction in value = clamp(value + (direction == .increment ? 20 : -20), range.lowerBound, range.upperBound) }
             .help("Drag to resize")

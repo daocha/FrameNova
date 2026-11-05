@@ -77,11 +77,12 @@ struct EditorView: View {
         .alert("Rename project",isPresented:$rename) { TextField("Name",text:$name); Button("Save") {model.change {$0.name = name}}; Button("Cancel",role:.cancel) {} }
         .alert("FrameNova",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error = nil}})) {Button("OK") {model.error = nil}} message: {Text(model.error ?? "")}
         .overlay { if model.busy { ProgressView("Importing…").padding(24).background(Palette.surface,in:RoundedRectangle(cornerRadius:16)) } }
+        .modifier(EditorKeyboard(model:model))
         #if !targetEnvironment(macCatalyst)
-        .background { keyboardCommands }
+        .background {keyboardCommands}
         #endif
         .onChange(of:model.selected) {_,id in
-            if id == nil && !["Ratio","Layout","Stickers","Voiceover"].contains(panel) {showInspector = false}
+            if id == nil && !["Ratio","Cover","Layout","Stickers","Voiceover"].contains(panel) {showInspector = false}
         }
         .onDisappear {model.close()}
     }
@@ -158,7 +159,11 @@ struct EditorView: View {
             .background(Palette.surface).accessibilityIdentifier("editor.tools")
     }
     @ViewBuilder private var toolButtons:some View {
-                if let c = model.clip {
+                if model.selectedIDs.count>1 {
+                    tool("To new layer","square.3.layers.3d") {model.moveSelectionToLayer()}
+                    tool("Duplicate","doc.on.doc") {model.duplicateSelected()}
+                    tool("Delete","trash") {model.delete()}
+                } else if let c = model.clip {
                     let audio = c.audioOnly || model.project.asset(c.assetID)?.type == .audio
                     let video = model.project.asset(c.assetID)?.type == .video
                     let track = model.project.track(c.id)
@@ -194,6 +199,7 @@ struct EditorView: View {
                     tool("Delete gap","trash") {model.change {$0.deleteGap(at:gap)};model.selectedGap = nil}
                     tool("Media","photo.badge.plus") {pick(.main)}
                 } else {
+                    tool("Cover","photo") {open("Cover")}
                     tool("Media","photo.badge.plus") {pick(.main)}
                     tool("Add layer","square.3.layers.3d") {pick(.overlay)}
                     tool("Text","textformat") {model.addText("Title"); open("Text")}; tool("Subtitle","captions.bubble") {model.addText("Subtitle"); open("Text")}
@@ -207,9 +213,7 @@ struct EditorView: View {
         Group {
             Button("Undo") {model.undo()}.keyboardShortcut("z",modifiers:.command)
             Button("Redo") {model.redo()}.keyboardShortcut("z",modifiers:[.command,.shift])
-            Button("Play") {model.play()}.keyboardShortcut(.space,modifiers:[])
             Button("Split") {model.split()}.keyboardShortcut("b",modifiers:.command)
-            Button("Delete") {model.delete()}.keyboardShortcut(.delete,modifiers:[])
             Button("Export") {export = true}.keyboardShortcut("e",modifiers:.command)
         }.hidden()
     }

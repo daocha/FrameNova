@@ -43,10 +43,13 @@ struct DesktopEditorCommands: Commands {
         CommandMenu("Clip") {
             Button("Split at playhead") { editor?.model.split() }.keyboardShortcut("b").disabled(!canEdit)
             Button("To new layer") { editor?.model.moveSelectionToLayer() }.keyboardShortcut("l", modifiers: [.command, .shift])
-                .disabled(!canEdit)
+                .disabled(editor?.model.canDeleteSelection != true || editingText != nil)
             Divider()
-            Button("Duplicate") { editor?.model.duplicateSelected() }.keyboardShortcut("d").disabled(!canEdit)
-            Button("Delete") { editor?.model.delete() }.disabled(!canEdit)
+            Button("Duplicate") { editor?.model.duplicateSelected() }.keyboardShortcut("d").disabled(editor?.model.canDeleteSelection != true || editingText != nil)
+            Button("Delete") { editor?.model.delete() }.disabled(editor?.model.canDeleteSelection != true || editingText != nil)
+            Button("Delete forward") { editor?.model.delete() }.disabled(editor?.model.canDeleteSelection != true || editingText != nil)
+            Button("Select all clips") {editor?.model.selectAllClips()}.keyboardShortcut("a").disabled(editor == nil || editingText != nil)
+            Button("Deselect clips") {editor?.model.selected = nil}.disabled(editor == nil || editingText != nil)
             Divider()
             Button("Trim start to playhead") { editor?.model.trimToPlayhead(start: true) }.keyboardShortcut("q", modifiers: .option).disabled(!canEdit)
             Button("Trim end to playhead") { editor?.model.trimToPlayhead(start: false) }.keyboardShortcut("w", modifiers: .option).disabled(!canEdit)
@@ -58,12 +61,16 @@ struct DesktopEditorCommands: Commands {
             Button("Add text") { editor?.model.addText("Title") }.keyboardShortcut("t", modifiers: [.command, .shift]).disabled(editor == nil)
         }
         CommandMenu("Playback") {
-            Button(editor?.model.playing == true ? "Pause" : "Play") { editor?.model.play() }.disabled(editor == nil)
-            Button("Previous frame") { editor?.model.stepFrames(-1) }.disabled(editor == nil)
-            Button("Next frame") { editor?.model.stepFrames(1) }.disabled(editor == nil)
+            Button(editor?.model.playing == true ? "Pause" : "Play") { editor?.model.play() }.disabled(editor == nil || editingText != nil)
+            Button("Previous frame") { editor?.model.stepFrames(-1) }.disabled(editor == nil || editingText != nil)
+            Button("Next frame") { editor?.model.stepFrames(1) }.disabled(editor == nil || editingText != nil)
+            Button("Previous ten frames") { editor?.model.stepFrames(-10) }.disabled(editor == nil || editingText != nil)
+            Button("Next ten frames") { editor?.model.stepFrames(10) }.disabled(editor == nil || editingText != nil)
             Divider()
-            Button("Previous cut") { if let model = editor?.model { model.seek(model.project.adjacentCut(to: model.playhead, forward: false)) } }.disabled(editor == nil)
-            Button("Next cut") { if let model = editor?.model { model.seek(model.project.adjacentCut(to: model.playhead, forward: true)) } }.disabled(editor == nil)
+            Button("Previous cut") { if let model = editor?.model { model.seek(model.project.adjacentCut(to: model.playhead, forward: false)) } }.disabled(editor == nil || editingText != nil)
+            Button("Next cut") { if let model = editor?.model { model.seek(model.project.adjacentCut(to: model.playhead, forward: true)) } }.disabled(editor == nil || editingText != nil)
+            Button("Start of project") {editor?.model.seek(0)}.disabled(editor == nil || editingText != nil)
+            Button("End of project") {if let model = editor?.model {model.seek(model.project.durationUs)}}.disabled(editor == nil || editingText != nil)
         }
         CommandMenu("Workspace") {
             Button("Toggle media browser") { editor?.toggleBrowser() }.keyboardShortcut("1", modifiers: [.command, .option]).disabled(editor == nil)
