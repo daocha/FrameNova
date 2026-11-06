@@ -26,7 +26,7 @@ Notes:
 | Delete "%1$s"? | 刪除「%1$s」？ | `home_delete_title` |
 | The project is removed. Your original videos and photos are not touched. | 專案將被移除，你的原始影片與照片不會受到影響。 | `home_delete_message` |
 | Duplicate | 複製 | `home_duplicate` |
-| Ratio | 比例 | `home_ratio` |
+| Aspect ratio | 比例 | `home_ratio` |
 | Resolution | 解析度 | `home_resolution` |
 | Frame rate | 影格率 | `home_frame_rate` |
 | %1$d fps | %1$d fps | `home_fps` |
@@ -264,11 +264,11 @@ Notes:
 | fx | 特效 | `timeline_badge_fx` |
 | Cover | 封面 | `timeline_cover` |
 | Timeline | 時間軸 | `timeline_description` |
-| text layer | 文字圖層 | `timeline_track_text` |
+| text | 文字 | `timeline_track_text` |
 | layer | 圖層 | `timeline_track_layer` |
 | main track | 主軌 | `timeline_track_main` |
 | audio track | 音訊軌 | `timeline_track_audio` |
-| Text layer | 文字圖層 | `timeline_text_layer` |
+| Text | 文字 | `timeline_text_layer` |
 | Show %1$s | 顯示%1$s | `timeline_show` |
 | Hide %1$s | 隱藏%1$s | `timeline_hide` |
 | Unmute %1$s | 取消%1$s靜音 | `timeline_unmute` |
@@ -332,7 +332,6 @@ Notes:
 
 | English (iOS) | Traditional Chinese | Note |
 | --- | --- | --- |
-| Aspect ratio | 比例 | same as Android `home_ratio` ("Ratio") |
 | Choose a project thumbnail. You can also add it as a three-second opening clip, then trim it in the timeline. | 選擇專案縮圖，或將它加為三秒的開場片段，再到時間軸上修剪。 | Android `panel_choose_a_project_thumbnail`, English worded differently |
 | Add overlays at the playhead, then pick a layout to arrange them in one frame. | 在播放頭處加入疊加層（子母畫面），再選擇版面，將它們排列在同一個畫面中。 | Android `panel_layout_hint_few`, English lacks "(picture-in-picture)" |
 | Add videos and photos to start | 新增影片與照片即可開始 | Android has "Add videos and photos" (`editor_add_videos_photos`) |
@@ -464,7 +463,16 @@ Notes:
 | Trim start to playhead | 將開頭修剪至播放頭 |
 | Zoom in (⌘+) | 放大 (⌘+) |
 | Zoom out (⌘−) | 縮小 (⌘−) |
-| Medium | 中 |
-| Low | 低 |
 
-Also only on iOS: Medium 中 and Low 低 (export quality, next to High 高).
+## Language and updates (both platforms)
+
+| English | Traditional Chinese | Notes |
+|---|---|---|
+| Language | 語言 | `language_title` |
+| System default | 跟隨系統 | `language_system` |
+| English | English | `language_english` |
+| 繁體中文 | 繁體中文 | `language_chinese` |
+| Updates · App Store | 更新 · App Store | iOS and Mac only |
+| The language changes the next time FrameNova opens. | 語言會在下次開啟 FrameNova 時更換。 | iOS and Mac only; Android changes it at once |
+| This build isn't on the App Store, so it doesn't check for updates. | 此版本不在 App Store 上，因此不會檢查更新。 | iOS and Mac only |
+| Could not check for updates: %@ | 無法檢查更新：%@ | iOS and Mac only |

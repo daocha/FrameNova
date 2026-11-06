@@ -257,11 +257,11 @@
     <string name="timeline_badge_fx">特效</string>
     <string name="timeline_cover">封面</string>
     <string name="timeline_description">時間軸</string>
-    <string name="timeline_track_text">文字圖層</string>
+    <string name="timeline_track_text">文字</string>
     <string name="timeline_track_layer">圖層</string>
     <string name="timeline_track_main">主軌</string>
     <string name="timeline_track_audio">音訊軌</string>
-    <string name="timeline_text_layer">文字圖層</string>
+    <string name="timeline_text_layer">文字</string>
     <string name="timeline_show">顯示%1$s</string>
     <string name="timeline_hide">隱藏%1$s</string>
     <string name="timeline_unmute">取消%1$s靜音</string>
@@ -311,4 +311,8 @@
     <string name="notif_failed">匯出失敗：%1$s</string>
     <string name="home_copy_name">%1$s 複本</string>
     <string name="editor_freeze_frame">定格畫面</string>
+    <string name="language_title">語言</string>
+    <string name="language_system">跟隨系統</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">繁體中文</string>
 </resources>

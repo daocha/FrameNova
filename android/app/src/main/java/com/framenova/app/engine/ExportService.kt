@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 /** Keeps the app alive and shows progress while an export runs, even if the editor is in the background. */
 @UnstableApi
 class ExportService : Service() {
+    override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(com.framenova.app.AppLanguage.wrap(newBase))
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val manager by lazy { getSystemService(NotificationManager::class.java) }
     private var collector: kotlinx.coroutines.Job? = null

@@ -201,7 +201,7 @@ struct ExportView: View {
             Picker("Resolution",selection:$settings.tier) {ForEach(Resolution.allCases.reversed(),id:\.self) {Text($0.label).tag($0)}}
             Picker("Frame rate",selection:$settings.fps) {ForEach([60,50,30,25,24],id:\.self) {Text("\($0) fps").tag($0)}}
             Toggle("HEVC",isOn:$settings.hevc)
-            Picker("Quality",selection:$settings.quality) {ForEach(["High","Medium","Low"],id:\.self) {Text(loc($0)).tag($0)}}
+            Picker("Quality",selection:$settings.quality) {ForEach(["Standard","High","Maximum"],id:\.self) {Text(loc($0)).tag($0)}}
             Button("Export") {exporter.start(project,settings:settings)}.buttonStyle(.borderedProminent)
         }
         if let error = exporter.error {Text(error).foregroundStyle(.red)}

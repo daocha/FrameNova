@@ -57,6 +57,8 @@ struct HomeView: View {
     @ViewState<Bool> private var files = false
     @ViewState<Bool> private var mediaSources = false
     @ViewState<Bool> private var settings = false
+    @StateObject private var updates = AppStoreUpdates()
+    @Environment(\.openURL) private var openURL
     @ViewState<Bool> private var importing = false
     @ViewState<[MediaAsset]> private var pending: [MediaAsset] = []
     @ViewState<CanvasSettings> private var canvas = CanvasSettings()
@@ -94,13 +96,22 @@ struct HomeView: View {
                             } label: {
                                 HStack(spacing:12) { Image(systemName:"plus").font(.largeTitle); VStack(alignment:.leading) { Text("New project").font(.title3.bold()); Text("Pick videos and photos to start").font(.footnote) } }.frame(maxWidth:.infinity,minHeight:120)
                             }.buttonStyle(.plain).background(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.topLeading,endPoint:.bottomTrailing)).clipShape(RoundedRectangle(cornerRadius:18))
+                            if updates.hasUpdate {
+                                HStack {
+                                    Image(systemName:"arrow.down.app").foregroundStyle(Palette.accent)
+                                    Text("Version \(updates.version) is available")
+                                    Spacer()
+                                    Button("Update") {if let url = updates.storeURL {openURL(url)}}
+                                }.padding(14).background(Palette.accent.opacity(0.18)).clipShape(RoundedRectangle(cornerRadius:14))
+                                    .contentShape(Rectangle()).onTapGesture {settings = true}
+                            }
                             if importing { ProgressView("Importing…") }
                             if store.projects.isEmpty { Text("Your projects appear here. Everything stays on this device.").font(.subheadline).foregroundStyle(Palette.dim).padding(8) }
                         }.padding(.bottom,12)
                     }
                 }.padding(16).frame(maxWidth:1400).frame(maxWidth:.infinity)
             }.background(Palette.bg).navigationTitle("").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement:.topBarLeading) { BrandMark() }; ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape") }.accessibilityLabel("Settings") } }
+                .toolbar { ToolbarItem(placement:.topBarLeading) { BrandMark() }; ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape").overlay(alignment:.topTrailing) {if updates.hasUpdate {Circle().fill(.red).frame(width:8,height:8).offset(x:3,y:-3)}} }.accessibilityLabel("Settings") } }
                 .navigationDestination(isPresented:Binding(get:{selected != nil},set:{if !$0 {selected = nil}})) { if let project = selected { EditorView(project:project,store:store) } }
         }
         }
@@ -123,7 +134,8 @@ struct HomeView: View {
                 ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:String(localized: "Project \(Date().formatted(date:.abbreviated,time:.omitted))"),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
             } }.presentationDetents([.medium,.large])
         }
-        .sheet(isPresented:$settings) { SettingsView() }
+        .task {await updates.check()}
+        .sheet(isPresented:$settings) { SettingsView(updates:updates) }
         .alert("Rename project",isPresented:Binding(get:{renaming != nil},set:{if !$0 {renaming = nil}})) {
             TextField("Name",text:$name); Button("Save") { if var p = renaming { p.name = name; do { try store.save(p) } catch { store.error = error.localizedDescription } }; renaming = nil }; Button("Cancel",role:.cancel) {}
         }
@@ -156,6 +168,9 @@ struct ProjectCover: View {
 }
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.openURL) private var openURL
+    @ObservedObject var updates: AppStoreUpdates
+    @AppStorage("appLanguage") private var language = "system"
     @AppStorage("developerToolsVersion") private var developerVersion = ""
     @ViewState<Int> private var taps = 0
     @ViewState<Bool> private var logs = false
@@ -163,9 +178,34 @@ struct SettingsView: View {
     private var version:String {Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"}
     private var build:String {Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"}
     private var unlocked:Bool {developerVersion == version+"-"+build}
+    private var updateStatus:String {
+        switch updates.phase {
+        case .idle:return String(localized:"Check for a newer version")
+        case .checking:return String(localized:"Checking for updates…")
+        case .current:return String(localized:"You're up to date")
+        case .available(let version):return String(localized:"Version \(version) is available")
+        case .notListed:return String(localized:"This build isn't on the App Store, so it doesn't check for updates.")
+        case .failed(let message):return String(localized:"Could not check for updates: \(message)")
+        }
+    }
     var body: some View {NavigationStack {Form {
         Text("Version \(version) (\(build))").onTapGesture {taps += 1; if taps >= 10 {developerVersion = version+"-"+build}}
         Text("Projects and imported media stay on this device.")
+        Section {
+            Picker("Language",selection:$language) {
+                Text("System default").tag("system")
+                Text("English").tag("en")
+                Text("繁體中文").tag("zh-Hant")
+            }.onChange(of:language) {_,tag in
+                // The language the app starts in comes from the system's list for it; this puts the choice first.
+                if tag == "system" {UserDefaults.standard.removeObject(forKey:"AppleLanguages")} else {UserDefaults.standard.set([tag],forKey:"AppleLanguages")}
+            }
+        } footer: {Text("The language changes the next time FrameNova opens.")}
+        Section("Updates · App Store") {
+            Text(updateStatus).font(.footnote).foregroundStyle(Palette.dim)
+            if updates.hasUpdate {Button("Update now") {if let url = updates.storeURL {openURL(url)}}}
+            else {Button("Check for updates") {Task {await updates.check(manual:true)}}.disabled(updates.phase == .checking)}
+        }
         if unlocked {
             Section("Developer tools") {
                 Toggle("Enabled",isOn:Binding(get:{unlocked},set:{if !$0 {developerVersion = ""; taps = 0}}))

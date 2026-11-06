@@ -15,7 +15,7 @@
     <string name="home_delete_title">Delete \"%1$s\"?</string>
     <string name="home_delete_message">The project is removed. Your original videos and photos are not touched.</string>
     <string name="home_duplicate">Duplicate</string>
-    <string name="home_ratio">Ratio</string>
+    <string name="home_ratio">Aspect ratio</string>
     <string name="home_resolution">Resolution</string>
     <string name="home_frame_rate">Frame rate</string>
     <string name="home_fps">%1$d fps</string>
@@ -259,11 +259,11 @@
     <string name="timeline_badge_fx">fx</string>
     <string name="timeline_cover">Cover</string>
     <string name="timeline_description">Timeline</string>
-    <string name="timeline_track_text">text layer</string>
+    <string name="timeline_track_text">text</string>
     <string name="timeline_track_layer">layer</string>
     <string name="timeline_track_main">main track</string>
     <string name="timeline_track_audio">audio track</string>
-    <string name="timeline_text_layer">Text layer</string>
+    <string name="timeline_text_layer">Text</string>
     <string name="timeline_show">Show %1$s</string>
     <string name="timeline_hide">Hide %1$s</string>
     <string name="timeline_unmute">Unmute %1$s</string>
@@ -314,4 +314,8 @@
     <string name="notif_failed">Export failed: %1$s</string>
     <string name="home_copy_name">%1$s copy</string>
     <string name="editor_freeze_frame">Freeze frame</string>
+    <string name="language_title">Language</string>
+    <string name="language_system">System default</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">繁體中文</string>
 </resources>

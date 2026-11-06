@@ -41,7 +41,7 @@ struct ExportSettings {
             let video = AVAssetReaderVideoCompositionOutput(videoTracks:built.asset.tracks(withMediaType:.video),videoSettings:[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA])
             video.videoComposition = built.video; video.alwaysCopiesSampleData = false; reader.add(video)
             let size = project.canvas.size
-            let factor = settings.quality == "High" ? 0.16 : settings.quality == "Medium" ? 0.1 : 0.06
+            let factor = settings.quality == "Maximum" ? 0.18 : settings.quality == "High" ? 0.11 : 0.06
             let videoInput = AVAssetWriterInput(mediaType:.video,outputSettings:[AVVideoCodecKey:settings.hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,AVVideoWidthKey:size.width,AVVideoHeightKey:size.height,AVVideoCompressionPropertiesKey:[AVVideoAverageBitRateKey:Int(Double(size.width*size.height*project.canvas.fps)*factor),AVVideoExpectedSourceFrameRateKey:project.canvas.fps]])
             guard writer.canAdd(videoInput) else { throw MediaError.export }; writer.add(videoInput)
             var audio: AVAssetReaderAudioMixOutput?, audioInput: AVAssetWriterInput?

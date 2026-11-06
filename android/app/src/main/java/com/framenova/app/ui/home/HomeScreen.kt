@@ -66,6 +66,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.framenova.app.AppLanguage
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -123,7 +125,7 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
     val projects by produceState(initialValue = emptyList<ProjectSummary>(), refresh) { value = withContext(Dispatchers.IO) { repo.list() } }
     var pending by remember { mutableStateOf<List<MediaAsset>?>(null) }
     var importing by remember { mutableStateOf(false) }
-    var settings by remember { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ProjectSummary?>(null) }
     var deleting by remember { mutableStateOf<ProjectSummary?>(null) }
 
@@ -316,6 +318,18 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.home_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE), versionModifier, color = Palette.TextDim, fontSize = 13.sp)
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.language_title), fontWeight = FontWeight.Medium)
+                var language by remember { mutableStateOf(AppLanguage.get(context)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppLanguage.all.forEach { tag ->
+                        FilterChip(
+                            selected = language == tag,
+                            onClick = { language = tag; AppLanguage.set(context, tag) },
+                            label = { Text(stringResource(when (tag) { AppLanguage.ENGLISH -> R.string.language_english; AppLanguage.TRADITIONAL_CHINESE -> R.string.language_chinese; else -> R.string.language_system })) },
+                        )
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 if (updates.enabled) {
                     Text(stringResource(R.string.update_heading, when (ui.source) { UpdateSource.LAN -> stringResource(R.string.update_source_lan); UpdateSource.PLAY -> stringResource(R.string.update_source_play); UpdateSource.GITHUB -> stringResource(R.string.update_source_github); UpdateSource.NONE -> "" }), fontWeight = FontWeight.Medium)

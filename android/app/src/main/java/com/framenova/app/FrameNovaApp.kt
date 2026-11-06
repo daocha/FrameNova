@@ -4,6 +4,8 @@ import android.app.Application
 import com.framenova.app.engine.FontManager
 
 class FrameNovaApp : Application() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(AppLanguage.wrap(base))
+
     override fun onCreate() {
         super.onCreate()
         DevTools.recordCrashes(this)
