@@ -60,7 +60,7 @@ struct PreviewPane:View {
                 }.allowsHitTesting(false)
                 if outside {
                     Text("Partly outside the canvas: only the part inside is in the video")
-                        .font(.system(size:11)).foregroundStyle(.black).padding(.horizontal,8).padding(.vertical,3)
+                        .font(.small(11)).foregroundStyle(.black).padding(.horizontal,8).padding(.vertical,3)
                         .background(outsideColor,in:RoundedRectangle(cornerRadius:6)).frame(maxWidth:.infinity).padding(.top,6)
                         .allowsHitTesting(false).accessibilityIdentifier("editor.outsideCanvas")
                 }

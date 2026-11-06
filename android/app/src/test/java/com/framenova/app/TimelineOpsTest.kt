@@ -174,6 +174,18 @@ class TimelineOpsTest {
         assertEquals(30_000_000L, p.clip(last)!!.startUs) // far enough away: not moved
     }
 
+    @Test fun draggingAMainClipAboveAProjectWithOnlyTheMainTrackCreatesAnOverlay() {
+        val p = base()
+        assertEquals(listOf(TrackKind.MAIN), p.tracks.filter { it.kind != TrackKind.TEXT && it.kind != TrackKind.AUDIO }.map { it.kind })
+        val id = p.mainTrack.clips[1].id
+        val moved = p.moveClip(id, p.mainTrack.id, 4_000_000, newTrack = true)
+        val overlay = moved.tracks.single { it.kind == TrackKind.OVERLAY }
+        assertEquals(listOf(id), overlay.clips.map { it.id })
+        assertEquals(4_000_000L, overlay.clips.single().startUs)
+        assertTrue(moved.mainTrack.clips.none { it.id == id })
+        assertTrue(moved.tracks.indexOfFirst { it.kind == TrackKind.OVERLAY } < moved.tracks.indexOfFirst { it.kind == TrackKind.MAIN })
+    }
+
     @Test fun insertingPushesOnlyAsFarAsNeeded() {
         var p = base()
         val last = p.mainTrack.clips[2].id

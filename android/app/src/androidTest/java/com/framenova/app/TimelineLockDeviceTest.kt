@@ -90,14 +90,14 @@ class TimelineLockDeviceTest {
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(100)
             }
-            tap(72 * density, drift = 4 * density)
+            tap(45 * density, drift = 4 * density)
             onMain {
                 assertTrue("The lock tap did not lock the track", vm.project.track(track)!!.locked)
                 assertNull("Locking must clear selection", vm.selectedId)
             }
             tap(width / 2f + 30 * density)
             onMain { assertNull("A locked clip must not be selectable", vm.selectedId) }
-            tap(72 * density)
+            tap(45 * density)
             onMain { assertFalse("A second lock tap must unlock", vm.project.track(track)!!.locked) }
             tap(width / 2f + 30 * density)
             onMain { assertEquals(clip, vm.selectedId) }

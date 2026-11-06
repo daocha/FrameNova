@@ -85,7 +85,7 @@ struct EditorView: View {
             Button("Photos…") {picker = true}
             Button("Cancel",role:.cancel) {}
         }
-        .sheet(isPresented:$export) { ExportView(project:model.project,exporter:model.exporter) }
+        .modifier(ExportPresentation(isPresented:$export,project:model.project,exporter:model.exporter))
         .sheet(isPresented:Binding(get:{model.shareURL != nil},set:{if !$0 {model.shareURL = nil}})) {if let url = model.shareURL {ShareSheet(url:url)}}
         .alert("Rename project",isPresented:$rename) { TextField("Name",text:$name); Button("Save") {model.change {$0.name = name}}; Button("Cancel",role:.cancel) {} }
         .alert("FrameNova",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error = nil}})) {Button("OK") {model.error = nil}} message: {Text(model.error ?? "")}
@@ -158,9 +158,9 @@ struct EditorView: View {
     private func tool(_ title:LocalizedStringKey,_ icon:String,action:@escaping ()->Void) -> some View {
         Button(action:action) {
             #if targetEnvironment(macCatalyst)
-            Label(title,systemImage:icon).font(.system(size:11)).fixedSize().padding(.horizontal,6).frame(minHeight:30)
+            Label(title,systemImage:icon).font(.system(size:15)).fixedSize().padding(.horizontal,8).frame(minHeight:36)
             #else
-            VStack(spacing:2) {Image(systemName:icon).font(.system(size:22)).frame(height:24); Text(title).font(.system(size:11)).lineLimit(1)}
+            VStack(spacing:2) {Image(systemName:icon).font(.system(size:22)).frame(height:24); Text(title).font(.small(11)).lineLimit(1)}
                 .foregroundStyle(Palette.text).frame(width:76).padding(.vertical,6).contentShape(RoundedRectangle(cornerRadius:10))
             #endif
         }.buttonStyle(.plain).help(title).accessibilityLabel(title)
@@ -268,7 +268,7 @@ struct ProjectHeading:View {
                 .accessibilityLabel("Rename project").accessibilityIdentifier("editor.projectName")
             Button(action:onFormat) {
                 HStack(spacing:4) {
-                    Text(project.canvas.formatSummary).font(.system(size:11)).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(project.canvas.formatSummary).font(.small(11)).lineLimit(1).minimumScaleFactor(0.8)
                     Image(systemName:"arrowtriangle.down.fill").font(.system(size:8)).rotationEffect(.degrees(expanded ? 180:0))
                 }.foregroundStyle(Palette.accent).padding(.vertical,3).contentShape(Rectangle())
             }.accessibilityLabel(expanded ? loc("Hide project format"):loc("Show project format"))

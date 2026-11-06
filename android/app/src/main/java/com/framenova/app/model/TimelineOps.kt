@@ -341,7 +341,7 @@ fun Project.moveClip(clipId: String, targetTrackId: String, startUs: Long, newTr
     val removed = copy(tracks = tracks.map { t -> t.copy(clips = t.clips.filterNot { it.id == clipId }) })
     val start = max(0L, startUs)
     return when {
-        target.kind == TrackKind.MAIN -> {
+        target.kind == TrackKind.MAIN && !newTrack -> {
             val fromMain = from.kind == TrackKind.MAIN
             val moved = clip.copy(
                 startUs = start,
@@ -358,7 +358,14 @@ fun Project.moveClip(clipId: String, targetTrackId: String, startUs: Long, newTr
             }
         }
         newTrack -> {
-            val (p, id) = removed.withNewTrack(target.kind, target.id)
+            // The new track's kind follows the clip, so dropping a video above a project that only has the main
+            // track still creates an overlay.
+            val kind = when (category) {
+                ClipCategory.VISUAL -> TrackKind.OVERLAY
+                ClipCategory.TEXT -> TrackKind.TEXT
+                ClipCategory.AUDIO -> TrackKind.AUDIO
+            }
+            val (p, id) = removed.withNewTrack(kind, target.id)
             p.mapTrack(id) { it.copy(clips = listOf(clip.copy(startUs = start, transitionIn = null))) }.normalized()
         }
         else -> {

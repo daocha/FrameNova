@@ -363,6 +363,7 @@
 "HDR clips are converted to SDR." = "HDR 片段會轉換為 SDR。";
 "Export failed" = "匯出失敗";
 "Video saved" = "影片已儲存";
+"Could not prepare the export file." = "無法準備匯出檔案。";
 "Exporting…" = "匯出中…";
 "Fade in" = "淡入";
 "Fade out" = "淡出";

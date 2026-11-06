@@ -22,14 +22,14 @@ struct DesktopMediaBrowser: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Media").font(.headline)
-                Text("\(model.project.assets.count)").font(.caption).foregroundStyle(Palette.dim)
+                Text("\(model.project.assets.count)").font(.callout).foregroundStyle(Palette.dim)
                 Spacer()
                 Button(action: onImport) { Image(systemName: "plus") }.help("Import media (⌘I)").disabled(model.busy)
             }.padding(12)
             TextField("Search media", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal, 10)
             Picker("Show", selection: $filter) { ForEach(["All", "Video", "Photos", "Audio"], id: \.self) { Text(loc($0)).tag($0) } }
                 .pickerStyle(.menu).padding(.horizontal, 10).padding(.vertical, 8)
-            if let status = model.importStatus {Text(status).font(.caption2).foregroundStyle(Palette.dim).textSelection(.enabled).padding(.horizontal,10).padding(.bottom,8)}
+            if let status = model.importStatus {Text(status).font(.subheadline).foregroundStyle(Palette.dim).textSelection(.enabled).padding(.horizontal,10).padding(.bottom,8)}
             Divider()
             ScrollView {
                 if media.isEmpty {
@@ -38,7 +38,7 @@ struct DesktopMediaBrowser: View {
                         Text(query.isEmpty && filter == "All" ? loc("Drop media files here") : loc("No matching media")).font(.callout)
                         if query.isEmpty && filter == "All" {
                             Text("Import once, then drag onto the timeline or double-click to add at the playhead.")
-                                .font(.caption).foregroundStyle(Palette.dim).multilineTextAlignment(.center)
+                                .font(.callout).foregroundStyle(Palette.dim).multilineTextAlignment(.center)
                             Button("Import media…", action: onImport).buttonStyle(.bordered).disabled(model.busy)
                         }
                     }.padding(20).frame(maxWidth: .infinity).padding(.top, 24)
@@ -55,9 +55,9 @@ struct DesktopMediaBrowser: View {
             Divider()
             if let asset = selection {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(asset.name).font(.caption.bold()).lineLimit(2)
+                    Text(asset.name).font(.callout.bold()).lineLimit(2)
                     Text(asset.type == .audio ? formatTime(asset.durationUs) : "\(asset.width) × \(asset.height) · \(asset.type == .image ? loc("Photo") : formatTime(asset.durationUs))")
-                        .font(.caption2).foregroundStyle(Palette.dim)
+                        .font(.subheadline).foregroundStyle(Palette.dim)
                     HStack {
                         Button("Add to timeline") { model.insert(asset) }.buttonStyle(.borderedProminent)
                         Menu {
@@ -67,7 +67,7 @@ struct DesktopMediaBrowser: View {
                     }.controlSize(.small)
                 }.padding(12)
             } else {
-                Text("Drag media onto a track to place it.").font(.caption2).foregroundStyle(Palette.dim).padding(12)
+                Text("Drag media onto a track to place it.").font(.subheadline).foregroundStyle(Palette.dim).padding(12)
             }
         }
         .background(Palette.surface)
@@ -81,9 +81,9 @@ struct DesktopMediaBrowser: View {
             MediaThumbnail(asset: asset).aspectRatio(1.6, contentMode: .fit)
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: asset.type == .audio ? "waveform" : asset.type == .image ? "photo" : "film")
-                        .font(.system(size: 9)).padding(4).background(.black.opacity(0.6)).clipShape(RoundedRectangle(cornerRadius: 3)).padding(3)
+                        .font(.system(size:13)).padding(4).background(.black.opacity(0.6)).clipShape(RoundedRectangle(cornerRadius: 3)).padding(3)
                 }
-            Text(asset.name).font(.system(size: 10)).lineLimit(2).padding(.horizontal, 5).padding(.bottom, 5)
+            Text(asset.name).font(.system(size:14)).lineLimit(2).padding(.horizontal, 5).padding(.bottom, 5)
         }
         .background(selectedID == asset.id ? Palette.accent.opacity(0.25) : Palette.surface2)
         .clipShape(RoundedRectangle(cornerRadius: 6))

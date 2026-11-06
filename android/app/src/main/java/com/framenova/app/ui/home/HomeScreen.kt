@@ -84,7 +84,7 @@ import androidx.media3.common.util.UnstableApi
 import com.framenova.app.BuildConfig
 import com.framenova.app.DevLogPanel
 import com.framenova.app.DevTools
-import com.framenova.app.saveLogToast
+import com.framenova.app.rememberLogSaver
 import com.framenova.app.data.ProjectRepository
 import com.framenova.app.data.ProjectSummary
 import com.framenova.app.engine.MediaProbe
@@ -297,6 +297,7 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
     var devTools by remember { mutableStateOf(DevTools.enabled(context)) }
     var versionTaps by remember { mutableIntStateOf(0) }
     var showLog by remember { mutableStateOf(false) }
+    val saveLog = rememberLogSaver()
     var licensesExpanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Like Android's build number: ten taps on the version unlock the developer tools.
@@ -364,7 +365,7 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
                         Switch(true, { DevTools.disable(context); devTools = false; versionTaps = 0 })
                     }
                     OutlinedButton(onClick = { showLog = true }) { Text(stringResource(R.string.home_dev_logs)) }
-                    OutlinedButton(onClick = { scope.launch { saveLogToast(context) } }) { Text(stringResource(R.string.home_save_logs)) }
+                    OutlinedButton(onClick = { saveLog(null) }) { Text(stringResource(R.string.home_save_logs)) }
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(

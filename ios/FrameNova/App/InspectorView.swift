@@ -11,9 +11,9 @@ struct ValueSlider: View {
     var format:(Double)->String = percentText
     var body: some View {
         HStack(spacing:0) {
-            Text(loc(title)).font(.system(size:12)).foregroundStyle(Palette.dim).frame(width:84,alignment:.leading)
+            Text(loc(title)).font(.small(12)).foregroundStyle(Palette.dim).frame(width:84,alignment:.leading)
             EditorSlider(value:Binding(get:{min(max(value,range.lowerBound),range.upperBound)},set:{value = $0}),range:range,label:loc(title),onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})
-            Text(format(value)).font(.system(size:12)).foregroundStyle(Palette.text).lineLimit(1).frame(width:52,alignment:.leading)
+            Text(format(value)).font(.small(12)).foregroundStyle(Palette.text).lineLimit(1).frame(width:52,alignment:.leading)
         }
     }
 }
@@ -30,7 +30,7 @@ struct CanvasControls: View {
         PanelLabel("Background")
         FlowLayout {Chip(title:loc("Color"),selected:!canvas.blurred) {canvas.blurred = false};Chip(title:loc("Blur"),selected:canvas.blurred) {canvas.blurred = true}}
         if canvas.blurred {ValueSlider(title:"Blur",value:$canvas.blur)} else {ColorStrip(value:$canvas.background,allowNone:false)}
-        Text("\(canvas.size.width) × \(canvas.size.height)").font(.system(size:12)).foregroundStyle(Palette.dim)
+        Text("\(canvas.size.width) × \(canvas.size.height)").font(.small(12)).foregroundStyle(Palette.dim)
     }.frame(maxWidth:.infinity,alignment:.leading).accessibilityIdentifier("editor.canvasSettings")}
 }
 struct ColorStrip: View {
@@ -123,7 +123,7 @@ struct InspectorView: View {
                 let speed = model.clip?.speed ?? 1
                 ValueSlider(title:"Speed",value:Binding(get:{log(speed)/log(4)},set:{setSpeed(pow(4,$0))}),range:-1...1,format:{String(format:"%.2f×",pow(4,$0))})
                 FlowLayout {ForEach([0.25,0.5,0.75,1,1.5,2,3,4],id:\.self) {s in Chip(title:speedText(s),selected:abs(speed-s)<0.01) {setSpeed(s)}}}
-                Text(String(format:loc("New duration %@. Pitch is preserved."),secondsText(Double(model.clip?.durationUs ?? 0)/1_000_000))).font(.system(size:12)).foregroundStyle(Palette.dim)
+                Text(String(format:loc("New duration %@. Pitch is preserved."),secondsText(Double(model.clip?.durationUs ?? 0)/1_000_000))).font(.small(12)).foregroundStyle(Palette.dim)
             }
         case "Volume":
             let maxFade = max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000))
@@ -152,7 +152,7 @@ struct InspectorView: View {
             ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180,format:{"\(Int($0.rounded()))°"})
             ValueSlider(title:"Opacity",value:transform(\.opacity))
             ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
-            if model.clip?.keyframes.isEmpty == false {Text("Keyframed: changes apply to the keyframe at the playhead.").font(.system(size:12)).foregroundStyle(Palette.dim)}
+            if model.clip?.keyframes.isEmpty == false {Text("Keyframed: changes apply to the keyframe at the playhead.").font(.small(12)).foregroundStyle(Palette.dim)}
         case "Adjust":
             ValueSlider(title:"Brightness",value:adjust(\.brightness),range:-1...1,format:signedText); ValueSlider(title:"Contrast",value:adjust(\.contrast),range:-1...1,format:signedText)
             ValueSlider(title:"Saturation",value:adjust(\.saturation),range:-1...1,format:signedText); ValueSlider(title:"Warmth",value:adjust(\.warmth),range:-1...1,format:signedText)
@@ -203,7 +203,7 @@ struct InspectorView: View {
                     Button {model.edit {$0.text?.alignment = name}} label:{Image(systemName:icon).font(.system(size:20)).foregroundStyle(model.clip?.text?.alignment == name ? Palette.accent:Palette.dim).frame(width:48,height:48)}.accessibilityLabel(loc("Align "+name.lowercased()))
                 }
                 Spacer()
-                Text("Shadow").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.trailing,8)
+                Text("Shadow").font(.small(12)).foregroundStyle(Palette.dim).padding(.trailing,8)
                 Toggle("Shadow",isOn:text(\.shadow,fallback:true)).labelsHidden()
             }
             ValueSlider(title:"Size",value:text(\.size,fallback:0.07),range:0.02...0.35,format:{String(format:"%.1f",($0*1000).rounded()/10)})
@@ -223,7 +223,7 @@ struct InspectorView: View {
             FlowLayout(spacing:8) {ForEach(["⭐","✨","🔥","❤️","💖","😂","😍","🥰","😎","🤩","😭","🥺","👍","👏","🙌","🎉","🎂","🎵","🎬","📸","🌸","🌈","☀️","🌙","⚡","💯","✅","❌","➡️","⬅️","⬆️","⬇️","💬","💭","🐶","🐱","🍜","☕","✈️","🏝️"],id:\.self) {s in
                 Button {model.addText("Sticker",content:s)} label:{Text(s).font(.system(size:26)).frame(width:48,height:48).background(Palette.surface2,in:RoundedRectangle(cornerRadius:10))}.buttonStyle(.plain)
             }}
-            Text("Tip: use Overlay to add your own PNG stickers with transparency.").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.top,8)
+            Text("Tip: use Overlay to add your own PNG stickers with transparency.").font(.small(12)).foregroundStyle(Palette.dim).padding(.top,8)
         case "Voiceover":
             HStack(spacing:16) {
                 Button {model.toggleRecording()} label:{
@@ -259,6 +259,31 @@ struct InspectorView: View {
         for ext in ["ttf","otf"] {for url in Bundle.main.urls(forResourcesWithExtension:ext,subdirectory:nil) ?? [] {CTFontManagerRegisterFontsForURL(url as CFURL,.process,nil)}}
     }
 }
+/// Saves a copy of a file to a place the user chooses (the Files picker on iPhone and iPad, a save panel on the Mac).
+struct FileSaveSheet: UIViewControllerRepresentable {
+    let url:URL
+    /// Called with the file at the chosen location.
+    var onPicked:(URL)->Void = {_ in}
+    /// Called when the picker closes, whether or not a location was chosen.
+    var onFinish:()->Void = {}
+    func makeCoordinator() -> Coordinator {Coordinator(onPicked:onPicked,onFinish:onFinish)}
+    func makeUIViewController(context:Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting:[url],asCopy:true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ controller:UIDocumentPickerViewController,context:Context) {}
+    final class Coordinator:NSObject,UIDocumentPickerDelegate {
+        let onPicked:(URL)->Void
+        let onFinish:()->Void
+        init(onPicked:@escaping (URL)->Void,onFinish:@escaping ()->Void) {self.onPicked = onPicked;self.onFinish = onFinish}
+        func documentPicker(_ controller:UIDocumentPickerViewController,didPickDocumentsAt urls:[URL]) {
+            if let url = urls.first {onPicked(url)}
+            onFinish()
+        }
+        func documentPickerWasCancelled(_ controller:UIDocumentPickerViewController) {onFinish()}
+    }
+}
 struct ShareSheet: UIViewControllerRepresentable {
     let url:URL
     func makeUIViewController(context:Context) -> UIActivityViewController {UIActivityViewController(activityItems:[url],applicationActivities:nil)}
@@ -268,18 +293,22 @@ struct ShareSheet: UIViewControllerRepresentable {
 struct ExportView: View {
     let project:Project
     @ObservedObject var exporter:Exporter
-    @Environment(\.dismiss) var dismiss
+    /// Closes the dialog by clearing the state that presents it. `dismiss` is not used: in the Mac's in-window dialog it
+    /// would close the whole editor.
+    var onClose:()->Void = {}
     @ViewState<ExportSettings> private var settings = ExportSettings()
     @ViewState<Bool> private var share = false
     @ViewState<Bool> private var saved = false
+    @ViewState<URL?> private var saveFile:URL?
     private var canvas:CanvasSettings {var c = project.canvas;c.tier = settings.tier;return c}
     private var bitrate:Int {ExportEstimate.bitrate(width:canvas.size.width,height:canvas.size.height,fps:settings.fps,hevc:settings.hevc,quality:settings.quality)}
     private var fileSize:String? {
-        guard let url = exporter.url,let bytes = (try? url.resourceValues(forKeys:[.fileSizeKey]))?.fileSize else {return nil}
-        return String(format:"%.1f MB",Double(bytes)/1_000_000)
+        let size = exporter.savedBytes ?? exporter.url.flatMap {(try? $0.resourceValues(forKeys:[.fileSizeKey]))?.fileSize}
+        return size.map {String(format:"%.1f MB",Double($0)/1_000_000)}
     }
     private var title:String {
         if exporter.running {return loc("Exporting…")}
+        if exporter.savedTo != nil {return loc("Video saved")}
         if exporter.url != nil {return saved ? loc("Video saved"):loc("Export complete")}
         if exporter.error != nil {return loc("Export failed")}
         return loc("Export")
@@ -290,7 +319,7 @@ struct ExportView: View {
             Text(project.name).font(.system(size:16)).foregroundStyle(Palette.text).lineLimit(1)
             ProgressView(value:Double(exporter.progress)).padding(.top,12)
             line(String(format:loc("%lld%% · keeps running if you leave the app"),Int(exporter.progress*100))).padding(.top,6)
-        } else if let url = exporter.url {
+        } else if let url = exporter.savedTo ?? exporter.url {
             Text(url.lastPathComponent+(fileSize.map {"\n"+$0} ?? "")).font(.system(size:16)).foregroundStyle(Palette.text)
             if let error = exporter.error {Text(error).font(.system(size:14)).foregroundStyle(Palette.danger).padding(.top,8)}
         } else if let error = exporter.error {
@@ -308,16 +337,39 @@ struct ExportView: View {
             if project.assets.contains(where:{$0.isHDR == true}) {line(loc("HDR clips are converted to SDR."))}
         }
     }
+    /// iPhone and iPad add the finished video to the Photos library.
+    private func saveVideo() {
+        Task {await exporter.saveToPhotos(); saved = exporter.error == nil}
+    }
+    #if targetEnvironment(macCatalyst)
+    /// The Mac asks where to save the video before rendering (the Finder's save dialog), so a long export can never end
+    /// with a video nobody saved. A placeholder file with the project's name is offered to the dialog; the render is
+    /// written into the file the user picks.
+    private func askDestination() {
+        let invalid = CharacterSet(charactersIn:"/:\\").union(.controlCharacters)
+        let base = project.name.components(separatedBy:invalid).joined(separator:" ").trimmingCharacters(in:.whitespaces)
+        let placeholder = FileManager.default.temporaryDirectory.appendingPathComponent("\(base.isEmpty ? "FrameNova":base).mp4")
+        try? FileManager.default.removeItem(at:placeholder)
+        guard FileManager.default.createFile(atPath:placeholder.path,contents:Data()) else {exporter.error = loc("Could not prepare the export file.");return}
+        saveFile = placeholder
+    }
+    #endif
     @ViewBuilder private var buttons:some View {
         if exporter.running {TextAction(title:loc("Cancel")) {exporter.cancel()}}
-        else if exporter.url != nil {
+        else if exporter.savedTo != nil {
+            TextAction(title:loc("Done"),prominent:true) {onClose()}.keyboardShortcut(.defaultAction)
+        } else if exporter.url != nil {
             TextAction(title:loc("Share")) {share = true}
-            TextAction(title:saved ? loc("Saved"):loc("Save video"),enabled:!saved) {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}
-            TextAction(title:loc("Done"),prominent:true) {dismiss()}
+            TextAction(title:saved ? loc("Saved"):loc("Save video"),enabled:!saved) {saveVideo()}
+            TextAction(title:loc("Done"),prominent:true) {onClose()}.keyboardShortcut(.defaultAction)
         } else if exporter.error != nil {TextAction(title:loc("OK"),prominent:true) {exporter.error = nil}}
         else {
-            TextAction(title:loc("Cancel")) {dismiss()}.keyboardShortcut(.cancelAction)
+            TextAction(title:loc("Cancel")) {onClose()}.keyboardShortcut(.cancelAction)
+            #if targetEnvironment(macCatalyst)
+            FilledAction(title:loc("Export")) {askDestination()}
+            #else
             FilledAction(title:loc("Export")) {exporter.start(project,settings:settings)}
+            #endif
         }
     }
     var body: some View {
@@ -326,8 +378,15 @@ struct ExportView: View {
             ScrollView {VStack(alignment:.leading,spacing:0) {content}.frame(maxWidth:.infinity,alignment:.leading)}
             HStack(spacing:8) {Spacer(); buttons}.padding(.top,24)
         }.padding(24).background(Palette.surface3.ignoresSafeArea()).presentationDetents([.medium,.large])
-            .onAppear {settings.tier = project.canvas.tier; settings.fps = project.canvas.fps}
+            .onAppear {
+                // A finished export belongs to the project as it was then: start from the settings again.
+                exporter.reset()
+                settings.tier = project.canvas.tier; settings.fps = project.canvas.fps
+            }
             .sheet(isPresented:$share) {if let url = exporter.url {ShareSheet(url:url)}}
+            .sheet(isPresented:Binding(get:{saveFile != nil},set:{if !$0 {saveFile = nil}})) {
+                if let file = saveFile {FileSaveSheet(url:file,onPicked:{destination in exporter.start(project,settings:settings,destination:destination)}) {saveFile = nil}}
+            }
             .interactiveDismissDisabled(exporter.running)
     }
 }

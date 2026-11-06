@@ -93,6 +93,18 @@ import Testing
         #expect(project.clip(main.id)?.transform.scale == main.transform.scale*0.6)
         #expect(project.tracks.first {$0.id == free.id} == free)
     }
+    @Test func draggingBeyondTheOnlyMainTrackStartsANewLayer() {
+        var project = Project(name:"Only main");let clip = Clip(id:"clip",startUs:1_000_000,srcOutUs:4_000_000)
+        project.tracks[0].clips = [clip]
+        #expect(project.tracks.count == 1)
+        #expect(project.dragDestination(from:0,rows:0) == (0,false))
+        #expect(project.dragDestination(from:0,rows:1) == (nil,true))
+        #expect(project.dragDestination(from:0,rows:-1) == (nil,true))
+        #expect(project.newLayerKind(for:clip) == .overlay)
+        project.moveToNewTrack(clip.id,kind:project.newLayerKind(for:clip),at:2_000_000)
+        #expect(project.track(clip.id)?.kind == .overlay)
+        #expect(project.clip(clip.id)?.startUs == 2_000_000)
+    }
     @Test func selectionOrderAndLimitSurviveFilterChanges() {
         var selection = OrderedMediaSelection(limit:2)
         selection.toggle("video");selection.toggle("photo");selection.toggle("extra")

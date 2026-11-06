@@ -68,6 +68,17 @@ extension Project {
         if clip.audioOnly || asset(clip.assetID)?.type == .audio {return kind == .audio}
         return kind == .main || kind == .overlay
     }
+    /// The kind of track a clip gets when it is dragged onto a new layer.
+    func newLayerKind(for clip:Clip)->TrackKind {
+        clip.text != nil ? .text : clip.audioOnly || asset(clip.assetID)?.type == .audio ? .audio:.overlay
+    }
+    /// Where a clip dragged `rows` rows from track `index` lands: `nil` for an existing track, or a new layer when the
+    /// drop is above the first track or below the last one (so a project with only the main track still gets one).
+    func dragDestination(from index:Int,rows:Int)->(trackIndex:Int?,newLayer:Bool) {
+        let target = index+rows
+        if target < 0 || target >= tracks.count {return (nil,true)}
+        return (target,false)
+    }
     mutating func moveToNewTrack(_ id:String,kind:TrackKind,at time:Int64) {
         guard var clip = clip(id),track(id)?.locked != true,kind != .main,accepts(clip,kind:kind) else {return}
         delete(id);clip.startUs = max(0,time);clip.transitionIn = nil
