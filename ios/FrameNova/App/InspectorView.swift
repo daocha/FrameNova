@@ -262,8 +262,8 @@ struct InspectorView: View {
 /// Saves a copy of a file to a place the user chooses (the Files picker on iPhone and iPad, a save panel on the Mac).
 struct FileSaveSheet: UIViewControllerRepresentable {
     let url:URL
-    /// Called when a location was chosen and the file saved there.
-    var onPicked:()->Void = {}
+    /// Called with the file at the chosen location.
+    var onPicked:(URL)->Void = {_ in}
     /// Called when the picker closes, whether or not a location was chosen.
     var onFinish:()->Void = {}
     func makeCoordinator() -> Coordinator {Coordinator(onPicked:onPicked,onFinish:onFinish)}
@@ -274,10 +274,13 @@ struct FileSaveSheet: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ controller:UIDocumentPickerViewController,context:Context) {}
     final class Coordinator:NSObject,UIDocumentPickerDelegate {
-        let onPicked:()->Void
+        let onPicked:(URL)->Void
         let onFinish:()->Void
-        init(onPicked:@escaping ()->Void,onFinish:@escaping ()->Void) {self.onPicked = onPicked;self.onFinish = onFinish}
-        func documentPicker(_ controller:UIDocumentPickerViewController,didPickDocumentsAt urls:[URL]) {onPicked();onFinish()}
+        init(onPicked:@escaping (URL)->Void,onFinish:@escaping ()->Void) {self.onPicked = onPicked;self.onFinish = onFinish}
+        func documentPicker(_ controller:UIDocumentPickerViewController,didPickDocumentsAt urls:[URL]) {
+            if let url = urls.first {onPicked(url)}
+            onFinish()
+        }
         func documentPickerWasCancelled(_ controller:UIDocumentPickerViewController) {onFinish()}
     }
 }
@@ -300,11 +303,12 @@ struct ExportView: View {
     private var canvas:CanvasSettings {var c = project.canvas;c.tier = settings.tier;return c}
     private var bitrate:Int {ExportEstimate.bitrate(width:canvas.size.width,height:canvas.size.height,fps:settings.fps,hevc:settings.hevc,quality:settings.quality)}
     private var fileSize:String? {
-        guard let url = exporter.url,let bytes = (try? url.resourceValues(forKeys:[.fileSizeKey]))?.fileSize else {return nil}
-        return String(format:"%.1f MB",Double(bytes)/1_000_000)
+        let size = exporter.savedBytes ?? exporter.url.flatMap {(try? $0.resourceValues(forKeys:[.fileSizeKey]))?.fileSize}
+        return size.map {String(format:"%.1f MB",Double($0)/1_000_000)}
     }
     private var title:String {
         if exporter.running {return loc("Exporting…")}
+        if exporter.savedTo != nil {return loc("Video saved")}
         if exporter.url != nil {return saved ? loc("Video saved"):loc("Export complete")}
         if exporter.error != nil {return loc("Export failed")}
         return loc("Export")
@@ -315,7 +319,7 @@ struct ExportView: View {
             Text(project.name).font(.system(size:16)).foregroundStyle(Palette.text).lineLimit(1)
             ProgressView(value:Double(exporter.progress)).padding(.top,12)
             line(String(format:loc("%lld%% · keeps running if you leave the app"),Int(exporter.progress*100))).padding(.top,6)
-        } else if let url = exporter.url {
+        } else if let url = exporter.savedTo ?? exporter.url {
             Text(url.lastPathComponent+(fileSize.map {"\n"+$0} ?? "")).font(.system(size:16)).foregroundStyle(Palette.text)
             if let error = exporter.error {Text(error).font(.system(size:14)).foregroundStyle(Palette.danger).padding(.top,8)}
         } else if let error = exporter.error {
@@ -333,31 +337,39 @@ struct ExportView: View {
             if project.assets.contains(where:{$0.isHDR == true}) {line(loc("HDR clips are converted to SDR."))}
         }
     }
-    /// The Mac asks where to save the video (the Finder's save dialog); iPhone and iPad add it to the Photos library.
+    /// iPhone and iPad add the finished video to the Photos library.
     private func saveVideo() {
-        #if targetEnvironment(macCatalyst)
-        guard let url = exporter.url else {return}
+        Task {await exporter.saveToPhotos(); saved = exporter.error == nil}
+    }
+    #if targetEnvironment(macCatalyst)
+    /// The Mac asks where to save the video before rendering (the Finder's save dialog), so a long export can never end
+    /// with a video nobody saved. A placeholder file with the project's name is offered to the dialog; the render is
+    /// written into the file the user picks.
+    private func askDestination() {
         let invalid = CharacterSet(charactersIn:"/:\\").union(.controlCharacters)
         let base = project.name.components(separatedBy:invalid).joined(separator:" ").trimmingCharacters(in:.whitespaces)
-        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("\(base.isEmpty ? "FrameNova":base).\(url.pathExtension)")
-        try? FileManager.default.removeItem(at:copy)
-        // A link costs no disk space; fall back to a copy across volumes.
-        if (try? FileManager.default.linkItem(at:url,to:copy)) == nil {try? FileManager.default.copyItem(at:url,to:copy)}
-        saveFile = copy
-        #else
-        Task {await exporter.saveToPhotos(); saved = exporter.error == nil}
-        #endif
+        let placeholder = FileManager.default.temporaryDirectory.appendingPathComponent("\(base.isEmpty ? "FrameNova":base).mp4")
+        try? FileManager.default.removeItem(at:placeholder)
+        guard FileManager.default.createFile(atPath:placeholder.path,contents:Data()) else {exporter.error = loc("Could not prepare the export file.");return}
+        saveFile = placeholder
     }
+    #endif
     @ViewBuilder private var buttons:some View {
         if exporter.running {TextAction(title:loc("Cancel")) {exporter.cancel()}}
-        else if exporter.url != nil {
+        else if exporter.savedTo != nil {
+            TextAction(title:loc("Done"),prominent:true) {onClose()}.keyboardShortcut(.defaultAction)
+        } else if exporter.url != nil {
             TextAction(title:loc("Share")) {share = true}
             TextAction(title:saved ? loc("Saved"):loc("Save video"),enabled:!saved) {saveVideo()}
             TextAction(title:loc("Done"),prominent:true) {onClose()}.keyboardShortcut(.defaultAction)
         } else if exporter.error != nil {TextAction(title:loc("OK"),prominent:true) {exporter.error = nil}}
         else {
             TextAction(title:loc("Cancel")) {onClose()}.keyboardShortcut(.cancelAction)
+            #if targetEnvironment(macCatalyst)
+            FilledAction(title:loc("Export")) {askDestination()}
+            #else
             FilledAction(title:loc("Export")) {exporter.start(project,settings:settings)}
+            #endif
         }
     }
     var body: some View {
@@ -373,7 +385,7 @@ struct ExportView: View {
             }
             .sheet(isPresented:$share) {if let url = exporter.url {ShareSheet(url:url)}}
             .sheet(isPresented:Binding(get:{saveFile != nil},set:{if !$0 {saveFile = nil}})) {
-                if let file = saveFile {FileSaveSheet(url:file,onPicked:{saved = true}) {saveFile = nil}}
+                if let file = saveFile {FileSaveSheet(url:file,onPicked:{destination in exporter.start(project,settings:settings,destination:destination)}) {saveFile = nil}}
             }
             .interactiveDismissDisabled(exporter.running)
     }

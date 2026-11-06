@@ -12,6 +12,10 @@ struct ExportSettings {
     @Published var running = false
     @Published var progress: Float = 0
     @Published var url: URL?
+    /// On the Mac the video is written to the place the user chose before the export starts: where it went, and its size.
+    @Published var savedTo: URL?
+    @Published var savedBytes: Int?
+    var finished: Bool { url != nil || savedTo != nil }
     @Published var error: String? {didSet {if let error {AppLog.record(error)}}}
     private var job: Task<Void,Never>?
     private var background: UIBackgroundTaskIdentifier = .invalid
@@ -21,11 +25,14 @@ struct ExportSettings {
     func reset() {
         guard !running else { return }
         if let url { try? FileManager.default.removeItem(at:url) }
-        url = nil; progress = 0; error = nil
+        url = nil; savedTo = nil; savedBytes = nil; progress = 0; error = nil
     }
-    func start(_ project: Project,settings:ExportSettings) {
+    /// With a `destination` (the Mac), the finished video is written into that file, which the user chose beforehand; without
+    /// one it stays in a temporary file for the caller to share or save.
+    func start(_ project: Project,settings:ExportSettings,destination target:URL? = nil) {
         guard !running else { return }
-        running = true; progress = 0; error = nil; url = nil
+        running = true; progress = 0; error = nil; url = nil; savedTo = nil; savedBytes = nil
+        let scoped = target?.startAccessingSecurityScopedResource() ?? false
         background = UIApplication.shared.beginBackgroundTask(withName:"FrameNova export") { [weak self] in Task { @MainActor in self?.cancel() } }
         job = Task {
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent("FrameNova-\(newID()).mp4")
@@ -33,14 +40,34 @@ struct ExportSettings {
                 var p = project; p.canvas.tier = settings.tier; p.canvas.fps = settings.fps
                 let built = try await CompositionFactory.build(p,exportCover:true)
                 try await Self.write(built,project:p,settings:settings,to:destination) { [weak self] value in Task { @MainActor in self?.progress = value } }
-                self.url = destination; progress = 1
+                if let target {
+                    let bytes = (try? destination.resourceValues(forKeys:[.fileSizeKey]))?.fileSize
+                    try await Task.detached(priority:.userInitiated) {try Self.overwrite(target,with:destination)}.value
+                    try? FileManager.default.removeItem(at:destination)
+                    savedBytes = bytes; savedTo = target
+                } else {self.url = destination}
+                progress = 1
             } catch {
                 try? FileManager.default.removeItem(at:destination)
+                // The file the user chose exists already (empty); a cancelled or failed export must not leave it behind.
+                if let target {try? FileManager.default.removeItem(at:target)}
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
+            if scoped {target?.stopAccessingSecurityScopedResource()}
             running = false
             if background != .invalid { UIApplication.shared.endBackgroundTask(background); background = .invalid }
         }
+    }
+    /// Replaces the contents of the existing file `target` with `source`, in chunks: the file was created by the save dialog,
+    /// and only that file (not its folder) is open to the app.
+    nonisolated private static func overwrite(_ target:URL,with source:URL) throws {
+        let input = try FileHandle(forReadingFrom:source)
+        defer {try? input.close()}
+        let output = try FileHandle(forWritingTo:target)
+        defer {try? output.close()}
+        try output.truncate(atOffset:0)
+        while let chunk = try input.read(upToCount:8_000_000),!chunk.isEmpty {try output.write(contentsOf:chunk)}
+        try output.synchronize()
     }
     nonisolated private static func write(_ built:BuiltComposition,project:Project,settings:ExportSettings,to url:URL,progress:@escaping (Float)->Void) async throws {
         let task = Task.detached(priority:.userInitiated) {
