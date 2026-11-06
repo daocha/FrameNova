@@ -366,7 +366,11 @@ struct ExportView: View {
             ScrollView {VStack(alignment:.leading,spacing:0) {content}.frame(maxWidth:.infinity,alignment:.leading)}
             HStack(spacing:8) {Spacer(); buttons}.padding(.top,24)
         }.padding(24).background(Palette.surface3.ignoresSafeArea()).presentationDetents([.medium,.large])
-            .onAppear {settings.tier = project.canvas.tier; settings.fps = project.canvas.fps}
+            .onAppear {
+                // A finished export belongs to the project as it was then: start from the settings again.
+                exporter.reset()
+                settings.tier = project.canvas.tier; settings.fps = project.canvas.fps
+            }
             .sheet(isPresented:$share) {if let url = exporter.url {ShareSheet(url:url)}}
             .sheet(isPresented:Binding(get:{saveFile != nil},set:{if !$0 {saveFile = nil}})) {
                 if let file = saveFile {FileSaveSheet(url:file,onPicked:{saved = true}) {saveFile = nil}}

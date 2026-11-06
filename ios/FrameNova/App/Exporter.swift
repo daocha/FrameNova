@@ -16,6 +16,13 @@ struct ExportSettings {
     private var job: Task<Void,Never>?
     private var background: UIBackgroundTaskIdentifier = .invalid
     func cancel() { job?.cancel() }
+    /// Forgets the last finished export (and deletes its temporary file), so the export dialog starts from its settings
+    /// again. Does nothing while an export runs.
+    func reset() {
+        guard !running else { return }
+        if let url { try? FileManager.default.removeItem(at:url) }
+        url = nil; progress = 0; error = nil
+    }
     func start(_ project: Project,settings:ExportSettings) {
         guard !running else { return }
         running = true; progress = 0; error = nil; url = nil
