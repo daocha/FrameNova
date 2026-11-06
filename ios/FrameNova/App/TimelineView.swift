@@ -62,7 +62,11 @@ struct TimelineView: View {
                             }
                         }
                         .coordinateSpace(name:"timeline.scrollViewport")
-                        .onPreferenceChange(TimelineOffsetKey.self) {horizontalOffset = $0}
+                        .onPreferenceChange(TimelineOffsetKey.self) {offset in
+                            // Before iOS 18 the offset can only be measured from the layout; later it is read from the scroll view.
+                            if #unavailable(iOS 18) {horizontalOffset = offset}
+                        }
+                        .modifier(TimelineScrollOffset(coverWidth:coverWidth,offset:$horizontalOffset))
                         .onChange(of: model.playhead) { _, time in
                             let position = geometry.viewportPosition(time,scrollOffset:horizontalOffset)
                             if !rulerDragging && (position<0 || position>viewportWidth-12) {
@@ -76,6 +80,8 @@ struct TimelineView: View {
                         }.onEnded { _ in initialScale = nil })
                     }
                    }
+                   // The layers fill the panel and sit in its vertical middle, growing outwards as layers are added.
+                   .frame(minHeight:max(0,Double(viewport.size.height)-(desktop ? 64:28)-20),alignment:.center)
                   } header: {
                     HStack(spacing:0) {
                         Text("Tracks").font(.callout.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
@@ -149,13 +155,17 @@ struct TimelineView: View {
                     guard !rulerDragging else {return}
                     switch phase {case .active(let point):rulerHover = point;case .ended:rulerHover = nil}
                 }
-                .gesture(DragGesture(minimumDistance:0,coordinateSpace:.global).onChanged {drag in
+                // The location is relative to the ruler itself, so it needs no window coordinates to turn into a time.
+                .gesture(DragGesture(minimumDistance:0).onChanged {drag in
                     if desktop {keyboardFocus = true}
-                    rulerDragging = true;rulerHover = drag.location
-                    model.scrub(geometry.time(atViewportX:drag.location.x-proxy.frame(in:.global).minX,scrollOffset:horizontalOffset))
+                    rulerDragging = true
+                    let frame = proxy.frame(in:.global);rulerHover = CGPoint(x:frame.minX+drag.location.x,y:frame.minY+drag.location.y)
+                    model.scrub(geometry.time(atViewportX:drag.location.x,scrollOffset:horizontalOffset))
                 }.onEnded {drag in
                     // Land exactly where the pointer was released, even if the last move event was coalesced.
-                    model.scrub(geometry.time(atViewportX:drag.location.x-proxy.frame(in:.global).minX,scrollOffset:horizontalOffset))
+                    let time = geometry.time(atViewportX:drag.location.x,scrollOffset:horizontalOffset)
+                    model.scrub(time)
+                    AppLog.record("Ruler seek: x=\(Int(drag.location.x)) scroll=\(Int(horizontalOffset)) zoom=\(Int(display.pointsPerSecond)) time=\(time) playhead=\(model.playhead)")
                     rulerDragging = false;rulerHover = nil;model.finishScrub()
                 })
                 .preference(key:WorkspacePointerHintKey.self,value:rulerHover.map {
@@ -342,3 +352,21 @@ struct TimelineView: View {
 }
 
 private struct TimelineOffsetKey:PreferenceKey {static let defaultValue:Double = 0;static func reduce(value:inout Double,nextValue:()->Double) {value = nextValue()}}
+
+/// Reports how far the tracks (which start after the cover) are scrolled, read from the scroll view itself so that it is
+/// exact while scrolling. The ruler and the seek position are computed from it.
+private struct TimelineScrollOffset:ViewModifier {
+    let coverWidth:Double
+    @Binding var offset:Double
+    @State private var scroll = 0.0
+    func body(content:Content)->some View {
+        if #available(iOS 18,*) {
+            content
+                .onScrollGeometryChange(for:Double.self,of:{$0.contentOffset.x+$0.contentInsets.leading}) {_,value in
+                    scroll = value;offset = value-coverWidth
+                }
+                .onAppear {offset = scroll-coverWidth}
+                .onChange(of:coverWidth) {_,width in offset = scroll-width}
+        } else {content}
+    }
+}

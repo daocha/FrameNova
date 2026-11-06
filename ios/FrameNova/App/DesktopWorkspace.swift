@@ -22,6 +22,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @AppStorage("desktop.timelineHeightDefaultVersion") private var timelineHeightDefaultVersion = 0
     @ViewState<Double> private var availableWidth = 1000
     @ViewState<Bool> private var chooseCoverPhoto = false
+    @ViewState<Bool> private var showCover = false
 
     private var panels: [String] {
         guard let clip = model.clip else { return ["Ratio", "Cover", "Layout", "Stickers", "Voiceover"] }
@@ -61,7 +62,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 VStack(spacing: 0) {
                     timelineToolbar
                     TimelineView(model: model, display: timeline, desktop: true,onCover:{
-                        model.selected = nil;model.selectedGap = nil;panel = "Cover";showInspector = true
+                        model.selected = nil;model.selectedGap = nil;showCover = true
                         // An empty tile (the plus) goes straight to choosing a photo.
                         if model.project.asset(model.project.coverAssetID)?.type != .image {chooseCoverPhoto = true}
                     })
@@ -80,7 +81,12 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
         .background(Palette.bg)
         .focusedSceneValue(\.desktopEditor, commandActions)
         .onChange(of:inspectorRequest) {_,_ in showInspector = true}
-        .onChange(of:panel) {_,value in if value == "Text" {showInspector = true}}
+        .onChange(of:panel) {_,value in
+            if value == "Text" {showInspector = true}
+            // The cover has its own dialog on the Mac instead of a side panel.
+            if value == "Cover" {panel = panels.first {$0 != "Cover"} ?? "Ratio";showCover = true}
+        }
+        .sheet(isPresented:$showCover) {CoverDialog(model:model,choosePhoto:$chooseCoverPhoto)}
         .onChange(of: model.selected) { _, _ in
             if !panels.contains(panel) || model.clip != nil { panel = panels[0] }
         }
@@ -153,6 +159,27 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                              toggleBrowser: { showBrowser.toggle() }, toggleInspector: { showInspector.toggle() },
                              resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 540; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
                              zoom: { timeline.zoom($0) }, fit: { timeline.fit(duration: model.project.durationUs, width: availableWidth) })
+    }
+}
+
+/// The cover chooser as a dialog, opened from the cover tile in the main layer or the inspector menu.
+struct CoverDialog: View {
+    @ObservedObject var model: EditorModel
+    var choosePhoto:Binding<Bool>? = nil
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Cover").font(.system(size:18,weight:.bold))
+                Spacer()
+                Button("Done") {dismiss()}.keyboardShortcut(.defaultAction)
+            }.padding(16)
+            Divider()
+            ScrollView {CoverPanel(model:model,choosePhoto:choosePhoto).padding(16)}
+        }
+        .frame(minWidth:520,idealWidth:560,minHeight:480,idealHeight:560)
+        .background(Palette.surface)
+        .accessibilityIdentifier("desktop.coverDialog")
     }
 }
 
