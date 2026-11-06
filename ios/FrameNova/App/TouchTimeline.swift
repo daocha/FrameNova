@@ -70,7 +70,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target:self,action:#selector(tapped(_:)));tap.require(toFail:pan);tap.require(toFail:hold)
         let pinch = UIPinchGestureRecognizer(target:self,action:#selector(pinched(_:)));pinch.delegate = self
         for recognizer in [pan!,hold!,tap,pinch] {addGestureRecognizer(recognizer)}
-        accessibilityLabel = String(localized: "Timeline. Swipe to scrub. Hold a clip to move it. Drag the selected clip's white handles to trim.")
+        accessibilityLabel = localized("Timeline. Swipe to scrub. Hold a clip to move it. Drag the selected clip's white handles to trim.")
     }
     required init?(coder:NSCoder) {fatalError("init(coder:) is unavailable")}
     override func accessibilityIncrement() {if let model {model.scrub(model.playhead+1_000_000)}}
@@ -223,7 +223,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     override func draw(_ rect:CGRect) {
         guard let context = UIGraphicsGetCurrentContext(),let model else {return}
         UIColor(argb:0xFF0E0E12).setFill();context.fill(bounds)
-        accessibilityValue = String(localized: "Playhead \(formatTime(model.playhead))")+(model.clip.map {String(localized: "; Start \(formatTime($0.startUs)); End \(formatTime($0.endUs))")} ?? "")
+        accessibilityValue = localized("Playhead \(formatTime(model.playhead))")+(model.clip.map {localized("; Start \(formatTime($0.startUs)); End \(formatTime($0.endUs))")} ?? "")
         drawRuler(context)
         context.saveGState();context.clip(to:CGRect(x:0,y:24,width:bounds.width,height:max(0,bounds.height-24)))
         for row in rows where row.rect.maxY>=24 && row.rect.minY<bounds.height {

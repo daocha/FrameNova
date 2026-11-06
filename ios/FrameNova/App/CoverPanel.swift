@@ -131,7 +131,7 @@ struct CoverFramer: View {
                     .accessibilityLabel("Cover position. Drag to move, pinch to zoom.")
                 Spacer()
             }
-            ValueSlider(title:"Zoom",value:Binding(get:{framing.zoom},set:{value in var next = framing;next.zoom = value;set(next)}),range:1...CoverFraming.maxZoom)
+            ValueSlider(title:"Zoom",value:Binding(get:{framing.zoom},set:{value in var next = framing;next.zoom = value;set(next)}),range:1...CoverFraming.maxZoom,format:{String(format:"%.1f×",$0)})
         }.padding(.vertical,6)
     }
 }

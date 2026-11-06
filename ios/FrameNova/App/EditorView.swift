@@ -48,19 +48,19 @@ struct EditorView: View {
                     HStack(spacing:0) {preview.frame(maxWidth:.infinity,maxHeight:.infinity);inlinePanel.frame(width:min(380,geo.size.width*0.5))}
                 } else if textFocus {
                     preview.frame(maxHeight:.infinity)
-                    inlinePanel.frame(height:min(geo.size.height*0.42,380))
+                    inlinePanel.frame(height:geo.size.height*0.42)
                 } else if landscape {
                     HStack(spacing:0) {
                         preview.frame(maxWidth:.infinity,maxHeight:.infinity)
                         Group {if showInspector && !coverOverlay {inlinePanel} else {toolGrid}}.frame(width:min(380,geo.size.width*0.5))
                     }.frame(maxHeight:.infinity)
                     transport
-                    touchTimeline.frame(height:max(90,(geo.size.height-102)*0.44))
+                    touchTimeline.frame(height:max(90,(geo.size.height-96)*0.44))
                 } else {
                     preview.frame(maxHeight:.infinity)
                     transport
                     touchTimeline.frame(height:clamp(geo.size.height*0.3,180,320))
-                    if showInspector && !coverOverlay {inlinePanel.frame(height:min(geo.size.height*0.34,320))} else {tools}
+                    if showInspector && !coverOverlay {inlinePanel.frame(height:geo.size.height*0.34)} else {tools}
                 }
             }.background(Palette.bg)
             .overlay(alignment:.bottom) {
@@ -83,7 +83,7 @@ struct EditorView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden,for:.navigationBar)
         .sheet(isPresented:$picker) { MediaPicker(multiple:!replace) { assets,error in picker = false; model.imported(assets,kind:importKind,replace:replace,libraryOnly:libraryOnly); if let error {model.error = error} } }
-        .mediaFileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace,onCancellation:{model.importStatus = String(localized: "File selection cancelled. No files imported.")}) { result in
+        .mediaFileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace,onCancellation:{model.importStatus = localized("File selection cancelled. No files imported.")}) { result in
             do { model.ingest(try result.get(),kind:importKind,replace:replace,subtitles:subtitleFiles,libraryOnly:libraryOnly) } catch {model.error = error.localizedDescription}
         }
         .confirmationDialog("Choose media source",isPresented:$mediaSources,titleVisibility:.visible) {
@@ -95,7 +95,12 @@ struct EditorView: View {
         .sheet(isPresented:Binding(get:{model.shareURL != nil},set:{if !$0 {model.shareURL = nil}})) {if let url = model.shareURL {ShareSheet(url:url)}}
         .alert("Rename project",isPresented:$rename) { TextField("Name",text:$name); Button("Save") {model.change {$0.name = name}}; Button("Cancel",role:.cancel) {} }
         .alert("FrameNova",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error = nil}})) {Button("OK") {model.error = nil}} message: {Text(model.error ?? "")}
-        .overlay { if model.busy { ProgressView("Importing…").padding(24).background(Palette.surface,in:RoundedRectangle(cornerRadius:16)) } }
+        .overlay {
+            if model.busy {
+                // Android dims the editor and shows the spinner with its label, without a card.
+                VStack(spacing:12) {ProgressView().controlSize(.large); Text("Importing…")}.frame(maxWidth:.infinity,maxHeight:.infinity).background(Color.black.opacity(0.45).ignoresSafeArea())
+            }
+        }
         .modifier(EditorKeyboard(model:model))
         #if !targetEnvironment(macCatalyst)
         .background {keyboardCommands}
@@ -115,21 +120,25 @@ struct EditorView: View {
     private func updateTrack(_ track:Track,_ key:WritableKeyPath<Track,Bool>) {
         model.change {p in if let index = p.tracks.firstIndex(where:{$0.id == track.id}) {p.tracks[index][keyPath:key].toggle()}}
     }
+    /// Same bar as Android: back, name and format, undo, redo, Export; no fill of its own.
     private var topBar: some View {
-        HStack(spacing:8) {
-            Button {dismiss()} label:{Image(systemName:"chevron.left").padding(8)}.accessibilityLabel("Close editor")
+        HStack(spacing:0) {
+            Button {dismiss()} label:{Image(systemName:"arrow.left").font(.system(size:20)).foregroundStyle(Palette.text).frame(width:48,height:48)}.accessibilityLabel("Close editor")
             ProjectHeading(project:model.project,expanded:showInspector && panel == "Ratio",onRename:{name = model.project.name;rename = true},onFormat:{
                 let close = showInspector && panel == "Ratio"
                 model.selected = nil;model.selectedGap = nil;panel = "Ratio";showInspector = !close
-            })
-            Spacer()
-            Button {model.undo()} label:{Image(systemName:"arrow.uturn.backward")}.disabled(!model.canUndo).accessibilityLabel("Undo")
-            Button {model.redo()} label:{Image(systemName:"arrow.uturn.forward")}.disabled(!model.canRedo).accessibilityLabel("Redo")
-            Button("Export") {export = true}.buttonStyle(.borderedProminent).disabled(model.project.durationUs == 0)
-        }.padding(.horizontal,8).frame(height:52).background(Palette.surface)
+            }).frame(maxWidth:.infinity,alignment:.leading)
+            Button {model.undo()} label:{Image(systemName:"arrow.uturn.backward").font(.system(size:20)).frame(width:48,height:48)}.disabled(!model.canUndo).accessibilityLabel("Undo")
+            Button {model.redo()} label:{Image(systemName:"arrow.uturn.forward").font(.system(size:20)).frame(width:48,height:48)}.disabled(!model.canRedo).accessibilityLabel("Redo")
+            Button {export = true} label:{
+                Text("Export").font(.system(size:14,weight:.medium)).foregroundStyle(.white).padding(.horizontal,24).frame(height:40)
+                    .background(Palette.accent,in:RoundedRectangle(cornerRadius:10)).opacity(model.project.durationUs == 0 ? 0.4:1)
+            }.disabled(model.project.durationUs == 0).padding(.trailing,6)
+        }.padding(.horizontal,4).frame(height:52)
     }
     private var preview: some View {PreviewPane(model:model,onText:{_ in open("Text")})}
     private var transport: some View {
+        #if targetEnvironment(macCatalyst)
         HStack(spacing:18) {
             Text("\(formatTime(model.playhead)) / \(formatTime(model.project.durationUs))").font(.caption.monospacedDigit()).foregroundStyle(Palette.dim)
             Spacer()
@@ -138,17 +147,28 @@ struct EditorView: View {
             Button {model.seek(model.project.durationUs)} label:{Image(systemName:"forward.end.fill")}.accessibilityLabel("End")
             Spacer()
             Button {fullscreen.toggle()} label:{Image(systemName:fullscreen ? "arrow.down.right.and.arrow.up.left":"arrow.up.left.and.arrow.down.right")}.accessibilityLabel(fullscreen ? loc("Exit fullscreen"):loc("Fullscreen"))
-            #if targetEnvironment(macCatalyst)
             Button {model.selected = nil;model.selectedGap = nil; showInspector = false} label:{Image(systemName:"xmark")}.accessibilityLabel("Deselect")
-            #endif
         }.padding(.horizontal,16).padding(.vertical,10)
+        #else
+        // Android's transport bar: the time on the left, the three controls centred, full screen on the right.
+        HStack(spacing:0) {
+            Text("\(formatTimecode(model.playhead,fps:model.project.canvas.fps)) / \(formatTime(model.project.durationUs))").font(.system(size:12).monospacedDigit()).foregroundStyle(Palette.dim)
+                .frame(maxWidth:.infinity,alignment:.leading)
+            Button {model.seek(0)} label:{Image(systemName:"backward.end.fill").font(.system(size:20)).frame(width:48,height:48)}.accessibilityLabel("Start")
+            Button {model.play()} label:{Image(systemName:model.playing ? "pause.fill":"play.fill").font(.system(size:30)).frame(width:48,height:48)}.disabled(model.project.durationUs == 0).accessibilityLabel(model.playing ? loc("Pause"):loc("Play"))
+            Button {model.seek(model.project.durationUs)} label:{Image(systemName:"forward.end.fill").font(.system(size:20)).frame(width:48,height:48)}.accessibilityLabel("End")
+            Button {fullscreen.toggle()} label:{Image(systemName:fullscreen ? "arrow.down.right.and.arrow.up.left":"arrow.up.left.and.arrow.down.right").font(.system(size:20)).frame(width:48,height:48)}
+                .accessibilityLabel(fullscreen ? loc("Exit fullscreen"):loc("Fullscreen")).frame(maxWidth:.infinity,alignment:.trailing)
+        }.foregroundStyle(Palette.text).padding(.horizontal,12).frame(height:44)
+        #endif
     }
     private func tool(_ title:LocalizedStringKey,_ icon:String,action:@escaping ()->Void) -> some View {
         Button(action:action) {
             #if targetEnvironment(macCatalyst)
             Label(title,systemImage:icon).font(.system(size:11)).fixedSize().padding(.horizontal,6).frame(minHeight:30)
             #else
-            VStack(spacing:6) {Image(systemName:icon).font(.system(size:20)); Text(title).font(.system(size:10)).lineLimit(1)}.frame(minWidth:56,minHeight:54)
+            VStack(spacing:2) {Image(systemName:icon).font(.system(size:22)).frame(height:24); Text(title).font(.system(size:11)).lineLimit(1)}
+                .foregroundStyle(Palette.text).frame(width:76).padding(.vertical,6).contentShape(RoundedRectangle(cornerRadius:10))
             #endif
         }.buttonStyle(.plain).help(title).accessibilityLabel(title)
     }
@@ -170,12 +190,20 @@ struct EditorView: View {
         #endif
     }
     private var tools:some View {
-        ScrollView(.horizontal,showsIndicators:false) {HStack(spacing:8) {toolButtons}.padding(10)}
+        ScrollView(.horizontal,showsIndicators:false) {HStack(spacing:2) {toolButtons}.padding(.vertical,8)}
             .background(Palette.surface).accessibilityIdentifier("editor.tools")
     }
     private var toolGrid:some View {
-        ScrollView {LazyVGrid(columns:[GridItem(.adaptive(minimum:72))],spacing:12) {toolButtons}.padding(10)}
+        ScrollView {LazyVGrid(columns:[GridItem(.adaptive(minimum:84),spacing:0,alignment:.leading)],spacing:0) {toolButtons}.padding(8)}
             .background(Palette.surface).accessibilityIdentifier("editor.tools")
+    }
+    /// Android labels this tool "Aspect ratio"; the Mac sidebar keeps the short "Ratio".
+    private var ratioTitle:LocalizedStringKey {
+        #if targetEnvironment(macCatalyst)
+        "Ratio"
+        #else
+        "Aspect ratio"
+        #endif
     }
     @ViewBuilder private var toolButtons:some View {
                 if model.selectedIDs.count>1 {
@@ -222,7 +250,7 @@ struct EditorView: View {
                     tool("Text","textformat") {model.addText("Title"); open("Text")}; tool("Subtitle","captions.bubble") {model.addText("Subtitle"); open("Text")}
                     tool("Import SRT/LRC","text.badge.plus") {importSubtitles()}
                     tool("Stickers","face.smiling") {open("Stickers")}; tool("Audio","music.note") {pick(.audio)}
-                    tool("Voiceover","mic") {open("Voiceover")}; tool("Layout","square.grid.2x2") {open("Layout")}; tool("Ratio","aspectratio") {open("Ratio")}
+                    tool("Voiceover","mic") {open("Voiceover")}; tool("Layout","square.grid.2x2") {open("Layout")}; tool(ratioTitle,"aspectratio") {open("Ratio")}
                     tool("Split","scissors") {model.split()}; tool("Freeze","snowflake") {model.freeze()}
                 }
     }

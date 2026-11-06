@@ -47,9 +47,6 @@
     <string name="home_license_summary">FrameNova 的原始碼可供檢視，採用 PolyForm Strict License 1.0.0 授權。</string>
     <string name="home_license_libraries">使用 AndroidX Media3、Jetpack Compose 與 Kotlin 函式庫（Apache License 2.0）。</string>
     <string name="home_license_fonts">字型皆採用 SIL Open Font License 1.1：%1$s。</string>
-    <plurals name="home_items_selected_hint">
-        <item quantity="other">已選取 %1$d 個項目，設定會依據第一個片段建議。</item>
-    </plurals>
     <string name="transition_fade">淡入淡出</string>
     <string name="transition_dip_to_black">黑場轉換</string>
     <string name="transition_dip_to_white">白場轉換</string>

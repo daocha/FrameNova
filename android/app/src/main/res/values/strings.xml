@@ -47,10 +47,6 @@
     <string name="home_license_summary">FrameNova is source-available under the PolyForm Strict License 1.0.0.</string>
     <string name="home_license_libraries">Uses AndroidX Media3, Jetpack Compose and Kotlin libraries (Apache License 2.0).</string>
     <string name="home_license_fonts">Fonts, all under the SIL Open Font License 1.1: %1$s.</string>
-    <plurals name="home_items_selected_hint">
-        <item quantity="one">%1$d item selected. Settings are suggested from your first clip.</item>
-        <item quantity="other">%1$d items selected. Settings are suggested from your first clip.</item>
-    </plurals>
     <string name="transition_fade">Fade</string>
     <string name="transition_dip_to_black">Dip to black</string>
     <string name="transition_dip_to_white">Dip to white</string>

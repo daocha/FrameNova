@@ -98,7 +98,7 @@ struct DesktopMediaBrowser: View {
             Button("Add as layer") { model.insert(asset, kind: .overlay) }.disabled(asset.type == .audio)
             Button("Add audio") { model.insert(asset, kind: .audio) }.disabled(!asset.hasAudio)
         }
-        .help(String(localized: "\(asset.name) — double-click to add, or drag onto a track"))
+        .help(localized("\(asset.name) — double-click to add, or drag onto a track"))
     }
 }
 

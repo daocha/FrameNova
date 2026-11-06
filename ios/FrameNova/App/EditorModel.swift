@@ -215,15 +215,15 @@ import SwiftUI
     }
     func addText(_ role:String,content:String? = nil) {
         var style = TextStyle();style.role = role
-        if role == "Subtitle" {style.text = content ?? String(localized: "Subtitle");style.size = 0.055;style.strokeWidth = 0.08}
+        if role == "Subtitle" {style.text = content ?? localized("Subtitle");style.size = 0.055;style.strokeWidth = 0.08}
         else if role == "Sticker" {style.text = content ?? "⭐";style.size = content == nil ? 0.18:0.2;style.bold = false;style.shadow = false}
-        else {style.text = content ?? String(localized: "Your title");style.size = 0.09}
+        else {style.text = content ?? localized("Your title");style.size = 0.09}
         let c = Clip(startUs:playhead,transform:Transform(cy:role == "Subtitle" ? 0.86:0.5),text:style)
         change { $0.place(c,kind:.text) }; selected = c.id
     }
     func ingest(_ urls:[URL],kind:TrackKind,replace:Bool = false,subtitles:Bool = false,libraryOnly:Bool = false) {
         let scoped = urls.filter {$0.startAccessingSecurityScopedResource()}
-        busy = true;importStatus = String(localized: "Importing \(urls.count) files…")
+        busy = true;importStatus = localized("Importing \(urls.count) files…")
         AppLog.record("Import started: \(urls.count) files, library=\(libraryOnly)")
         Task {
             defer {busy = false;scoped.forEach {$0.stopAccessingSecurityScopedResource()}}
@@ -234,7 +234,7 @@ import SwiftUI
                         let cues = Subtitles.parse(try String(contentsOf:url,encoding:.utf8),filename:url.lastPathComponent)
                         guard !cues.isEmpty else { throw MediaError.invalid }; change { $0.addSubtitles(cues) }
                     }
-                    importStatus = String(localized: "Imported subtitles")
+                    importStatus = localized("Imported subtitles")
                 } else {
                     var assets: [MediaAsset] = []
                     var failures:[String] = []
@@ -243,11 +243,11 @@ import SwiftUI
                         catch {failures.append("\(url.lastPathComponent): \(error.localizedDescription)")}
                     }
                     imported(assets,kind:kind,replace:replace,libraryOnly:libraryOnly)
-                    importStatus = failures.isEmpty ? String(localized: "Imported \(assets.count) files"):String(localized: "Imported \(assets.count) of \(urls.count) files. \(failures.joined(separator:"; "))")
+                    importStatus = failures.isEmpty ? localized("Imported \(assets.count) files"):localized("Imported \(assets.count) of \(urls.count) files. \(failures.joined(separator:"; "))")
                     AppLog.record("\(importStatus ?? ""); library now has \(project.assets.count) assets")
                     if !failures.isEmpty {error = failures.joined(separator:"\n")}
                 }
-            } catch {importStatus = String(localized: "Import failed: \(error.localizedDescription)");AppLog.record(importStatus ?? "Import failed");self.error = error.localizedDescription}
+            } catch {importStatus = localized("Import failed: \(error.localizedDescription)");AppLog.record(importStatus ?? "Import failed");self.error = error.localizedDescription}
         }
     }
     func imported(_ assets:[MediaAsset],kind:TrackKind,replace:Bool = false,libraryOnly:Bool = false) {
@@ -276,7 +276,7 @@ import SwiftUI
         var inserted:String?
         change {p in
             if let id = p.insertAsset(asset,kind:destination,trackID:trackID,at:time ?? playhead) {inserted = id}
-            else {error = String(localized: "This media cannot be added to that track. Check the track type and lock.")}
+            else {error = localized("This media cannot be added to that track. Check the track type and lock.")}
         }
         if let inserted {selected = inserted}
     }
@@ -319,7 +319,7 @@ import SwiftUI
                 let result = try await generator.image(at:mediaTime(c.sourceTime(at:playhead)))
                 guard let data = UIImage(cgImage:result.image).pngData() else { throw MediaError.invalid }
                 let path = newID()+".png"; try data.write(to:ProjectStore.mediaURL(path))
-                let a = MediaAsset(path:path,type:.image,name:String(localized: "Freeze frame"),durationUs:2_000_000,width:result.image.width,height:result.image.height)
+                let a = MediaAsset(path:path,type:.image,name:localized("Freeze frame"),durationUs:2_000_000,width:result.image.width,height:result.image.height)
                 change { p in
                     p.assets.append(a); var still = c; still.id = newID(); still.assetID = a.id; still.srcInUs = 0; still.srcOutUs = 2_000_000; still.speed = 1; still.keyframes = []; still.transitionIn = nil
                     if p.track(c.id)?.kind == .main { let second = p.split(c.id,at:playhead); p.insertMain([still],at:second != nil ? playhead:c.endUs) }
@@ -336,7 +336,7 @@ import SwiftUI
             Task {
                 defer {try? FileManager.default.removeItem(at:url)}
                 do {
-                    var asset = try await ProjectStore.ingest(url);asset.name = String(localized: "Voiceover")
+                    var asset = try await ProjectStore.ingest(url);asset.name = localized("Voiceover")
                     let before = Set(project.tracks.flatMap(\.clips).map(\.id))
                     change {$0.add([asset],kind:.audio,at:recordStart)}
                     selected = project.tracks.flatMap(\.clips).first(where:{!before.contains($0.id)})?.id
@@ -346,7 +346,7 @@ import SwiftUI
         }
         Task {
             let granted = await withCheckedContinuation { continuation in AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning:$0) } }
-            guard granted else { error = String(localized: "Allow microphone access in Settings to record a voiceover."); return }
+            guard granted else { error = localized("Allow microphone access in Settings to record a voiceover."); return }
             do {
                 player.pause(); playing = false
                 try AVAudioSession.sharedInstance().setCategory(.playAndRecord,mode:.default,options:[.defaultToSpeaker,.allowBluetooth])

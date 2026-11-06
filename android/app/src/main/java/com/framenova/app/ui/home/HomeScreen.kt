@@ -74,7 +74,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import com.framenova.app.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -268,28 +267,25 @@ private fun suggestCanvas(assets: List<MediaAsset>): CanvasSettings {
     return CanvasSettings(aspect = aspect, tier = tier, fps = fps)
 }
 
+/** A bottom sheet like iPhone's: Cancel and Create in the header, then the canvas controls, suggested from the first clip. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun NewProjectDialog(assets: List<MediaAsset>, onDismiss: () -> Unit, onCreate: (CanvasSettings) -> Unit) {
     var canvas by remember { mutableStateOf(suggestCanvas(assets)) }
-    AlertDialog(
+    androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.home_new_project)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(pluralStringResource(R.plurals.home_items_selected_hint, assets.size, assets.size), color = Palette.TextDim, fontSize = 12.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.home_ratio), color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = canvas.aspect == a, onClick = { canvas = canvas.copy(aspect = a) }, label = { Text(a.label) }) } }
-                Text(stringResource(R.string.home_resolution), color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = canvas.tier == r, onClick = { canvas = canvas.copy(tier = r) }, label = { Text(r.label) }) } }
-                Text(stringResource(R.string.home_frame_rate), color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = canvas.fps == f, onClick = { canvas = canvas.copy(fps = f) }, label = { Text(stringResource(R.string.home_fps, f)) }) } }
-                Text("${canvas.size.width} × ${canvas.size.height}", color = Palette.TextDim, fontSize = 12.sp)
-            }
-        },
-        confirmButton = { Button(onClick = { onCreate(canvas) }) { Text(stringResource(R.string.home_create)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
-    )
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Palette.Surface,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            Text(stringResource(R.string.home_new_project), Modifier.weight(1f), fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            TextButton(onClick = { onCreate(canvas) }) { Text(stringResource(R.string.home_create), fontWeight = FontWeight.SemiBold) }
+        }
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            com.framenova.app.ui.editor.CanvasControls(canvas) { change -> canvas = change(canvas) }
+        }
+    }
 }
 
 @Composable
