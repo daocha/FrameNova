@@ -34,7 +34,7 @@ struct TimelineView: View {
     @ViewState<Bool> private var rulerDragging = false
     @ViewState<Double> private var contentWidth = 0
     @ViewState<Double?> private var barGrab: Double?
-    @State private var scroller = TimelineScroller()
+    @ViewState<TimelineScroller> private var scroller = TimelineScroller()
 
     private var geometry: TimelineGeometry { display.geometry }
     private var headerWidth: Double { desktop ? 136 : 90 }
@@ -100,7 +100,13 @@ struct TimelineView: View {
                   }
                 }
             }
-            .onAppear {viewportWidth = max(0,viewport.size.width-headerWidth)}
+            .onAppear {
+                viewportWidth = max(0,viewport.size.width-headerWidth)
+                AppLog.record("Timeline layout: viewport=\(Int(viewport.size.width))x\(Int(viewport.size.height)) fill=\(Int(fill)) natural=\(Int(natural)) rowHeight=\(Int(rowHeight)) tracks=\(model.project.tracks.count)")
+            }
+            .onChange(of:viewport.size.height) {_,height in
+                AppLog.record("Timeline layout: viewport height=\(Int(height)) fill=\(Int(fill)) natural=\(Int(natural))")
+            }
             .onChange(of:viewport.size.width) {_,width in viewportWidth = max(0,width-headerWidth)}
             #if targetEnvironment(macCatalyst)
             .background {TimelineScrollZoom(onZoom:{display.zoom($0)})}
@@ -435,8 +441,8 @@ private struct TimelineScrollTracking:ViewModifier {
     @Binding var offset:Double
     @Binding var contentWidth:Double
     let scroller:TimelineScroller
-    @State private var scroll = 0.0
-    @State private var position = ScrollPosition(edge:.leading)
+    @ViewState<Double> private var scroll = 0.0
+    @ViewState<ScrollPosition> private var position = ScrollPosition(edge:.leading)
     func body(content:Content)->some View {
         content
             .scrollPosition($position)
