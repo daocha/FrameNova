@@ -61,7 +61,9 @@ import SwiftUI
     }
 }
 
-struct TimelineMediaStrip:View,Equatable {
+/// The media drawn inside a timeline clip. It watches the thumbnail and waveform loaders and hands their revisions to the
+/// canvas, so a finished thumbnail redraws the clip while a plain drag (which changes none of its inputs) does not.
+struct TimelineMediaStrip:View {
     let clip:Clip
     let asset:MediaAsset
     let pointsPerSecond:Double
@@ -71,14 +73,30 @@ struct TimelineMediaStrip:View,Equatable {
     var locked = false
     @ObservedObject private var waveforms = AudioWaveforms.shared
     @ObservedObject private var thumbnails = TimelineThumbnails.shared
-    /// Used with `.equatable()`: the strip is redrawn only when what it shows changes (the model's own updates still refresh it).
-    nonisolated static func == (a:TimelineMediaStrip,b:TimelineMediaStrip)->Bool {
+    var body:some View {
+        TimelineMediaCanvas(clip:clip,asset:asset,pointsPerSecond:pointsPerSecond,clipOffset:clipOffset,visibleStart:visibleStart,
+            visibleEnd:visibleEnd,locked:locked,waveformRevision:waveforms.revision,thumbnailRevision:thumbnails.revision).equatable()
+    }
+}
+
+private struct TimelineMediaCanvas:View,Equatable {
+    let clip:Clip
+    let asset:MediaAsset
+    let pointsPerSecond:Double
+    let clipOffset:Double
+    let visibleStart:Double
+    let visibleEnd:Double
+    let locked:Bool
+    let waveformRevision:Int
+    let thumbnailRevision:Int
+    private let waveforms = AudioWaveforms.shared
+    private let thumbnails = TimelineThumbnails.shared
+    nonisolated static func == (a:TimelineMediaCanvas,b:TimelineMediaCanvas)->Bool {
         a.clip == b.clip && a.asset == b.asset && a.pointsPerSecond == b.pointsPerSecond && a.clipOffset == b.clipOffset
             && a.visibleStart == b.visibleStart && a.visibleEnd == b.visibleEnd && a.locked == b.locked
+            && a.waveformRevision == b.waveformRevision && a.thumbnailRevision == b.thumbnailRevision
     }
     var body:some View {
-        let _ = waveforms.revision
-        let _ = thumbnails.revision
         GeometryReader {geometry in
             let start = min(geometry.size.width,max(0,visibleStart)),end = max(start,min(geometry.size.width,visibleEnd))
             Canvas {context,size in

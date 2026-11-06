@@ -41,11 +41,14 @@ struct TimelineView: View {
     var body: some View {
         GeometryReader { viewport in
             let width = max(Double(viewport.size.width) - headerWidth, max(600, x(model.project.durationUs) + 180))
+            // The layers fill the panel and sit in its vertical middle, growing outwards as layers are added. Both columns share
+            // this height, so the horizontal scroll bar ends up at the bottom of the panel and the playhead spans all of it.
+            let fill = max(0,Double(viewport.size.height)-(desktop ? 64:28)-80)
             ScrollView(.vertical) {
                 LazyVStack(spacing:5,pinnedViews:[.sectionHeaders]) {
                   Section {
                    HStack(alignment: .top, spacing: 0) {
-                    headers
+                    headers.frame(minHeight:fill,alignment:.center)
                     ScrollViewReader { reader in
                         ScrollView(.horizontal) {
                             HStack(alignment:.top,spacing:0) {
@@ -57,9 +60,10 @@ struct TimelineView: View {
                                         newTrackRow(.audio, width: width)
                                     }
                                 }
-                                .overlay(alignment: .topLeading) { playhead }
                                 .background(GeometryReader {proxy in Color.clear.preference(key:TimelineOffsetKey.self,value:-proxy.frame(in:.named("timeline.scrollViewport")).minX)})
                             }
+                            .frame(minHeight:fill,alignment:.center)
+                            .overlay(alignment: .topLeading) { playhead }
                         }
                         .coordinateSpace(name:"timeline.scrollViewport")
                         .onPreferenceChange(TimelineOffsetKey.self) {offset in
@@ -80,8 +84,6 @@ struct TimelineView: View {
                         }.onEnded { _ in initialScale = nil })
                     }
                    }
-                   // The layers fill the panel and sit in its vertical middle, growing outwards as layers are added.
-                   .frame(minHeight:max(0,Double(viewport.size.height)-(desktop ? 64:28)-20),alignment:.center)
                   } header: {
                     HStack(spacing:0) {
                         Text("Tracks").font(.callout.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
@@ -171,6 +173,7 @@ struct TimelineView: View {
                 .preference(key:WorkspacePointerHintKey.self,value:rulerHover.map {
                     WorkspacePointerHint(location:$0,symbol:"arrow.left.and.right")
                 })
+                .overlay(alignment:.topLeading) {rulerPin(width:width)}
                 .help("Drag left or right to seek")
         }.frame(width:width,height:desktop ? 64:28)
     }
@@ -197,15 +200,29 @@ struct TimelineView: View {
         }.frame(width:coverWidth)
     }
 
+    /// The playhead line runs through the whole editing area; its pin is in the ruler.
     private var playhead: some View {
         HStack(spacing:0) {
-            Color.clear.frame(width:x(model.playhead))
-            VStack(spacing: 0) {
-                Image(systemName: "arrowtriangle.down.fill").font(.system(size: 10))
-                Rectangle().frame(width: 1.5)
-            }.foregroundStyle(.white).frame(width:10).id("playhead")
+            Color.clear.frame(width:coverWidth+x(model.playhead))
+            Rectangle().fill(.white).frame(width:1.5).id("playhead")
             Spacer(minLength:0)
-        }.padding(.leading,-5).allowsHitTesting(false)
+        }.padding(.leading,-0.75).allowsHitTesting(false)
+    }
+
+    /// The pin on top of the playhead, in the ruler. Dragging in the ruler, the pin included, seeks.
+    private func rulerPin(width:Double)->some View {
+        let position = geometry.viewportPosition(model.playhead,scrollOffset:horizontalOffset)
+        return VStack(spacing:0) {
+            ZStack {
+                Circle().fill(.white).frame(width:16,height:16)
+                Circle().fill(Palette.accent).frame(width:6,height:6)
+            }.shadow(color:.black.opacity(0.35),radius:2,y:1)
+            Rectangle().fill(.white).frame(width:1.5)
+        }
+        .frame(width:16,height:desktop ? 64:28)
+        .offset(x:position-8)
+        .opacity(position >= -8 && position <= width+8 ? 1:0)
+        .allowsHitTesting(false)
     }
 
     private func trackRow(_ track: Track, width: Double) -> some View {
@@ -273,7 +290,7 @@ struct TimelineView: View {
                 if track.locked {Color(argb:0xFF505058)} else {Palette.track(track.kind)}
                 if let asset = model.project.asset(clip.assetID) {
                     TimelineMediaStrip(clip:shown,asset:asset,pointsPerSecond:display.pointsPerSecond,
-                        clipOffset:slice.clipOffset,locked:track.locked).equatable()
+                        clipOffset:slice.clipOffset,locked:track.locked)
                     Color.black.opacity(clip.audioOnly || asset.type == .audio ? 0:0.3)
                 }
             }.allowsHitTesting(false)
