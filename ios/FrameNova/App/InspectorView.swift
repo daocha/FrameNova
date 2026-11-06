@@ -11,9 +11,9 @@ struct ValueSlider: View {
     var format:(Double)->String = percentText
     var body: some View {
         HStack(spacing:0) {
-            Text(loc(title)).font(.system(size:12)).foregroundStyle(Palette.dim).frame(width:84,alignment:.leading)
+            Text(loc(title)).font(.small(12)).foregroundStyle(Palette.dim).frame(width:84,alignment:.leading)
             EditorSlider(value:Binding(get:{min(max(value,range.lowerBound),range.upperBound)},set:{value = $0}),range:range,label:loc(title),onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})
-            Text(format(value)).font(.system(size:12)).foregroundStyle(Palette.text).lineLimit(1).frame(width:52,alignment:.leading)
+            Text(format(value)).font(.small(12)).foregroundStyle(Palette.text).lineLimit(1).frame(width:52,alignment:.leading)
         }
     }
 }
@@ -30,7 +30,7 @@ struct CanvasControls: View {
         PanelLabel("Background")
         FlowLayout {Chip(title:loc("Color"),selected:!canvas.blurred) {canvas.blurred = false};Chip(title:loc("Blur"),selected:canvas.blurred) {canvas.blurred = true}}
         if canvas.blurred {ValueSlider(title:"Blur",value:$canvas.blur)} else {ColorStrip(value:$canvas.background,allowNone:false)}
-        Text("\(canvas.size.width) × \(canvas.size.height)").font(.system(size:12)).foregroundStyle(Palette.dim)
+        Text("\(canvas.size.width) × \(canvas.size.height)").font(.small(12)).foregroundStyle(Palette.dim)
     }.frame(maxWidth:.infinity,alignment:.leading).accessibilityIdentifier("editor.canvasSettings")}
 }
 struct ColorStrip: View {
@@ -123,7 +123,7 @@ struct InspectorView: View {
                 let speed = model.clip?.speed ?? 1
                 ValueSlider(title:"Speed",value:Binding(get:{log(speed)/log(4)},set:{setSpeed(pow(4,$0))}),range:-1...1,format:{String(format:"%.2f×",pow(4,$0))})
                 FlowLayout {ForEach([0.25,0.5,0.75,1,1.5,2,3,4],id:\.self) {s in Chip(title:speedText(s),selected:abs(speed-s)<0.01) {setSpeed(s)}}}
-                Text(String(format:loc("New duration %@. Pitch is preserved."),secondsText(Double(model.clip?.durationUs ?? 0)/1_000_000))).font(.system(size:12)).foregroundStyle(Palette.dim)
+                Text(String(format:loc("New duration %@. Pitch is preserved."),secondsText(Double(model.clip?.durationUs ?? 0)/1_000_000))).font(.small(12)).foregroundStyle(Palette.dim)
             }
         case "Volume":
             let maxFade = max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000))
@@ -152,7 +152,7 @@ struct InspectorView: View {
             ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180,format:{"\(Int($0.rounded()))°"})
             ValueSlider(title:"Opacity",value:transform(\.opacity))
             ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
-            if model.clip?.keyframes.isEmpty == false {Text("Keyframed: changes apply to the keyframe at the playhead.").font(.system(size:12)).foregroundStyle(Palette.dim)}
+            if model.clip?.keyframes.isEmpty == false {Text("Keyframed: changes apply to the keyframe at the playhead.").font(.small(12)).foregroundStyle(Palette.dim)}
         case "Adjust":
             ValueSlider(title:"Brightness",value:adjust(\.brightness),range:-1...1,format:signedText); ValueSlider(title:"Contrast",value:adjust(\.contrast),range:-1...1,format:signedText)
             ValueSlider(title:"Saturation",value:adjust(\.saturation),range:-1...1,format:signedText); ValueSlider(title:"Warmth",value:adjust(\.warmth),range:-1...1,format:signedText)
@@ -203,7 +203,7 @@ struct InspectorView: View {
                     Button {model.edit {$0.text?.alignment = name}} label:{Image(systemName:icon).font(.system(size:20)).foregroundStyle(model.clip?.text?.alignment == name ? Palette.accent:Palette.dim).frame(width:48,height:48)}.accessibilityLabel(loc("Align "+name.lowercased()))
                 }
                 Spacer()
-                Text("Shadow").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.trailing,8)
+                Text("Shadow").font(.small(12)).foregroundStyle(Palette.dim).padding(.trailing,8)
                 Toggle("Shadow",isOn:text(\.shadow,fallback:true)).labelsHidden()
             }
             ValueSlider(title:"Size",value:text(\.size,fallback:0.07),range:0.02...0.35,format:{String(format:"%.1f",($0*1000).rounded()/10)})
@@ -223,7 +223,7 @@ struct InspectorView: View {
             FlowLayout(spacing:8) {ForEach(["⭐","✨","🔥","❤️","💖","😂","😍","🥰","😎","🤩","😭","🥺","👍","👏","🙌","🎉","🎂","🎵","🎬","📸","🌸","🌈","☀️","🌙","⚡","💯","✅","❌","➡️","⬅️","⬆️","⬇️","💬","💭","🐶","🐱","🍜","☕","✈️","🏝️"],id:\.self) {s in
                 Button {model.addText("Sticker",content:s)} label:{Text(s).font(.system(size:26)).frame(width:48,height:48).background(Palette.surface2,in:RoundedRectangle(cornerRadius:10))}.buttonStyle(.plain)
             }}
-            Text("Tip: use Overlay to add your own PNG stickers with transparency.").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.top,8)
+            Text("Tip: use Overlay to add your own PNG stickers with transparency.").font(.small(12)).foregroundStyle(Palette.dim).padding(.top,8)
         case "Voiceover":
             HStack(spacing:16) {
                 Button {model.toggleRecording()} label:{

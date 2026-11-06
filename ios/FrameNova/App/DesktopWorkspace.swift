@@ -45,9 +45,9 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                     }
                     VStack(spacing: 0) {
                         HStack {
-                            Text("Preview").font(.caption.bold()).foregroundStyle(Palette.dim)
+                            Text("Preview").font(.callout.bold()).foregroundStyle(Palette.dim)
                             Spacer()
-                            Text("\(model.project.canvas.size.width) × \(model.project.canvas.size.height)").font(.caption2.monospacedDigit()).foregroundStyle(Palette.dim)
+                            Text("\(model.project.canvas.size.width) × \(model.project.canvas.size.height)").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.dim)
                         }.padding(.horizontal, 16).padding(.top, 10)
                         preview().frame(maxWidth: .infinity, maxHeight: .infinity)
                         transport()
@@ -106,7 +106,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(model.selectedIDs.count>1 ? localized("\(model.selectedIDs.count) clips selected"):model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? loc("Project settings"))
-                    .font(.caption.bold()).lineLimit(2)
+                    .font(.system(size:16,weight:.bold)).lineLimit(2)
                 Picker("Inspector", selection: $panel) {
                     ForEach(panels.contains(panel) ? panels : panels + [panel], id: \.self) { Text(loc($0)).tag($0) }
                 }.pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading).disabled(model.selectedIDs.count>1)
@@ -114,7 +114,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
             Divider()
             if model.selectedIDs.count>1 {
                 Text("Command-click to add or remove clips. Use Delete, Duplicate or To new layer for the selected clips.")
-                    .font(.caption).foregroundStyle(Palette.dim).padding(12)
+                    .font(.callout).foregroundStyle(Palette.dim).padding(12)
                 Spacer()
             } else {InspectorView(model: model, panel: panel, choosePhoto: $chooseCoverPhoto).id(panel)
                 .disabled(model.selected.map { model.project.track($0)?.locked == true } == true && panel != "Ratio" && panel != "Cover")
@@ -124,7 +124,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
 
     private var timelineToolbar: some View {
         HStack(spacing:8) {
-            Text("Timeline").font(.caption.bold())
+            Text("Timeline").font(.system(size:14,weight:.bold))
             Button {model.undo()} label:{Image(systemName:"arrow.uturn.backward")}.disabled(!model.canUndo).help("Undo (⌘Z)").accessibilityLabel("Undo")
             Button {model.redo()} label:{Image(systemName:"arrow.uturn.forward")}.disabled(!model.canRedo).help("Redo (⇧⌘Z)").accessibilityLabel("Redo")
             Divider().frame(height:18)

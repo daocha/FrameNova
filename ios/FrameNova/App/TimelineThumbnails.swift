@@ -61,7 +61,7 @@ import SwiftUI
     }
 }
 
-struct TimelineMediaStrip:View {
+struct TimelineMediaStrip:View,Equatable {
     let clip:Clip
     let asset:MediaAsset
     let pointsPerSecond:Double
@@ -71,6 +71,11 @@ struct TimelineMediaStrip:View {
     var locked = false
     @ObservedObject private var waveforms = AudioWaveforms.shared
     @ObservedObject private var thumbnails = TimelineThumbnails.shared
+    /// Used with `.equatable()`: the strip is redrawn only when what it shows changes (the model's own updates still refresh it).
+    nonisolated static func == (a:TimelineMediaStrip,b:TimelineMediaStrip)->Bool {
+        a.clip == b.clip && a.asset == b.asset && a.pointsPerSecond == b.pointsPerSecond && a.clipOffset == b.clipOffset
+            && a.visibleStart == b.visibleStart && a.visibleEnd == b.visibleEnd && a.locked == b.locked
+    }
     var body:some View {
         let _ = waveforms.revision
         let _ = thumbnails.revision

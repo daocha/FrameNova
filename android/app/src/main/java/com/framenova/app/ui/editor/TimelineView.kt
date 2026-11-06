@@ -234,7 +234,14 @@ fun TimelineView(
             val anchor = group.firstOrNull() ?: rs.firstOrNull { it.track.kind == TrackKind.MAIN && category == ClipCategory.VISUAL }
             if (anchor != null && d.fingerY < anchor.top) {
                 val kind = when (category) { ClipCategory.VISUAL -> TrackKind.OVERLAY; ClipCategory.TEXT -> TrackKind.TEXT; ClipCategory.AUDIO -> TrackKind.AUDIO }
-                val ref = p.tracks.firstOrNull { it.kind == kind } ?: return null
+                // With only the main track there is no overlay yet to anchor on; the main track stands in.
+                val ref = p.tracks.firstOrNull { it.kind == kind }
+                    ?: p.tracks.firstOrNull { it.kind == TrackKind.MAIN && category == ClipCategory.VISUAL } ?: return null
+                return ref to true
+            }
+            // A video or photo dropped below the last row also starts a new layer.
+            if (category == ClipCategory.VISUAL && rs.lastOrNull()?.let { d.fingerY > it.top + it.height + gap } == true) {
+                val ref = p.tracks.firstOrNull { it.kind == TrackKind.OVERLAY } ?: p.tracks.firstOrNull { it.kind == TrackKind.MAIN } ?: return null
                 return ref to true
             }
             if (category == ClipCategory.AUDIO && rs.lastOrNull()?.let { d.fingerY > it.top + it.height } == true) {

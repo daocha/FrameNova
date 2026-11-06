@@ -78,7 +78,7 @@ struct TimelineView: View {
                    }
                   } header: {
                     HStack(spacing:0) {
-                        Text("Tracks").font(.caption.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
+                        Text("Tracks").font(.callout.bold()).frame(width:headerWidth,height:desktop ? 64 : 28).background(Palette.surface)
                         ruler(width:max(0,viewport.size.width-headerWidth)).clipped()
                     }.background(Palette.surface).zIndex(20)
                   }
@@ -105,7 +105,7 @@ struct TimelineView: View {
             ForEach(model.project.tracks) { track in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing:6) {
-                        Text(loc(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized)).font(.caption2.bold())
+                        Text(loc(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized)).font(.subheadline.bold())
                     }
                     HStack(spacing: desktop ? 16 : 8) {
                         trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: loc("Mute track"))
@@ -115,8 +115,8 @@ struct TimelineView: View {
                 }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(track.locked ? Color.gray.opacity(0.2):Palette.surface2)
             }
             if desktop {
-                Text("New layer").font(.caption2).frame(width: headerWidth, height: 36)
-                Text("New audio").font(.caption2).frame(width: headerWidth, height: 36)
+                Text("New layer").font(.subheadline).frame(width: headerWidth, height: 36)
+                Text("New audio").font(.subheadline).frame(width: headerWidth, height: 36)
             }
         }.frame(width: headerWidth)
     }
@@ -153,7 +153,9 @@ struct TimelineView: View {
                     if desktop {keyboardFocus = true}
                     rulerDragging = true;rulerHover = drag.location
                     model.scrub(geometry.time(atViewportX:drag.location.x-proxy.frame(in:.global).minX,scrollOffset:horizontalOffset))
-                }.onEnded {_ in
+                }.onEnded {drag in
+                    // Land exactly where the pointer was released, even if the last move event was coalesced.
+                    model.scrub(geometry.time(atViewportX:drag.location.x-proxy.frame(in:.global).minX,scrollOffset:horizontalOffset))
                     rulerDragging = false;rulerHover = nil;model.finishScrub()
                 })
                 .preference(key:WorkspacePointerHintKey.self,value:rulerHover.map {
@@ -176,7 +178,7 @@ struct TimelineView: View {
                         }
                         .frame(width:coverWidth-6,height:rowHeight).clipShape(RoundedRectangle(cornerRadius:6))
                         .overlay {RoundedRectangle(cornerRadius:6).stroke(Palette.accent.opacity(0.8),lineWidth:2)}
-                        .overlay(alignment:.topLeading) {Text("Cover").font(.system(size:10)).foregroundStyle(.white).shadow(radius:2).padding(4)}
+                        .overlay(alignment:.topLeading) {Text("Cover").font(.system(size:14)).foregroundStyle(.white).shadow(radius:2).padding(4)}
                     }.buttonStyle(.plain).padding(.trailing,6)
                         .accessibilityLabel("Add or edit cover").accessibilityIdentifier("desktop.mainCover")
                         .help("Choose the cover image of the exported video")
@@ -225,7 +227,7 @@ struct TimelineView: View {
         return ZStack(alignment: .leading) {
             Palette.surface2.opacity(0.4)
             Text(kind == .audio ? loc("Drop sound here to add an audio track") : loc("Drop video or a photo here to add a layer"))
-                .font(.caption2).foregroundStyle(Palette.dim).padding(.leading, 12)
+                .font(.subheadline).foregroundStyle(Palette.dim).padding(.leading, 12)
             if hoveredTrack == id, let dropTime { dropMarker(dropTime) }
         }.frame(width: width, height: 36)
             .onDrop(of: WorkspaceDrop.types, delegate: TimelineMediaDrop(model: model, geometry: geometry, kind: kind, trackID: nil,
@@ -241,14 +243,15 @@ struct TimelineView: View {
         let dragging = movingID == clip.id
         let shown = displayedClip(clip)
         let clipWidth = max(24,x(shown.durationUs))
-        let clipLeft = max(0,x(shown.startUs)+(dragging ? movement.width:0))
+        // The drawn slice ignores the drag offset, so dragging only moves the finished clip instead of redrawing its media.
+        let clipLeft = max(0,x(shown.startUs))
         let slice = TimelineClipSlice(clipStart:clipLeft,clipWidth:clipWidth,scrollOffset:horizontalOffset,viewportWidth:viewportWidth)
         return HStack(spacing: 0) {
             if selected && model.selectedIDs.count == 1 && !track.locked && slice.showsStart { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
-                Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? loc("Clip")).font(.caption2).lineLimit(1)
+                Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? loc("Clip")).font(.subheadline).lineLimit(1)
                 if desktop && rowHeight >= 64 {
-                    Text("\(formatTime(clip.durationUs))\(clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")").font(.system(size: 9)).foregroundStyle(.white.opacity(0.65))
+                    Text("\(formatTime(clip.durationUs))\(clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")").font(.system(size:13)).foregroundStyle(.white.opacity(0.65))
                 }
             }.padding(6).frame(maxWidth: .infinity, alignment: .leading)
             if selected && model.selectedIDs.count == 1 && !track.locked && slice.showsEnd { handle(clip, start: false) }
@@ -260,7 +263,7 @@ struct TimelineView: View {
                 if track.locked {Color(argb:0xFF505058)} else {Palette.track(track.kind)}
                 if let asset = model.project.asset(clip.assetID) {
                     TimelineMediaStrip(clip:shown,asset:asset,pointsPerSecond:display.pointsPerSecond,
-                        clipOffset:slice.clipOffset,locked:track.locked)
+                        clipOffset:slice.clipOffset,locked:track.locked).equatable()
                     Color.black.opacity(clip.audioOnly || asset.type == .audio ? 0:0.3)
                 }
             }.allowsHitTesting(false)
@@ -275,28 +278,35 @@ struct TimelineView: View {
         .overlay {
             if track.locked {RoundedRectangle(cornerRadius:5).fill(Color.gray.opacity(0.35)).allowsHitTesting(false)}
         }
-        .offset(x: slice.origin,
+        .offset(x: slice.origin+(dragging ? movement.width:0),
                 y: dragging ? movement.height : 0)
         .zIndex(dragging ? 10 : selected ? 1 : 0)
         .gesture(DragGesture(minimumDistance:0,coordinateSpace:.named("editor.timelineDrag")).onChanged {value in
             guard !track.locked else {return}
-            if desktop {keyboardFocus = true}
             if pressedID != clip.id {
+                if desktop {keyboardFocus = true}
                 pressedID = clip.id;extendingSelection = desktop && pointer.command
                 model.selectClip(clip.id,extending:extendingSelection)
             }
-            model.selectedGap = nil
+            // Published properties notify on every write, so touch them only when they change.
+            if model.selectedGap != nil {model.selectedGap = nil}
             if model.playing {model.scrub(model.playhead)}
             guard !extendingSelection,model.selectedIDs.count == 1,hypot(value.translation.width,value.translation.height)>=4 else {return}
-            movingID = clip.id;movement = value.translation
+            if movingID != clip.id {movingID = clip.id}
+            movement = value.translation
         }.onEnded {value in
             defer {movingID = nil;movement = .zero;pressedID = nil}
             if !extendingSelection && hypot(value.translation.width,value.translation.height)<4 {model.selected = clip.id}
             guard !track.locked,movingID == clip.id else {return}
             let time = geometry.snappedStart(clip.startUs+Int64(value.translation.width/display.pointsPerSecond*1_000_000),duration:clip.durationUs,project:model.project,playhead:model.playhead,excluding:clip.id)
             let tracks = model.project.tracks,index = tracks.firstIndex(where:{$0.id == track.id}) ?? 0
-            let destination = clamp(index+Int((value.translation.height/(rowHeight+5)).rounded()),0,tracks.count-1)
-            model.change {$0.move(clip.id,to:tracks[destination].id,at:time)}
+            let destination = model.project.dragDestination(from:index,rows:Int((value.translation.height/(rowHeight+5)).rounded()))
+            if destination.newLayer {
+                let kind = model.project.newLayerKind(for:clip)
+                model.change {$0.moveToNewTrack(clip.id,kind:kind,at:time)}
+            } else if let target = destination.trackIndex {
+                model.change {$0.move(clip.id,to:tracks[target].id,at:time)}
+            }
         })
         .contextMenu {
             Button("Split") { model.selected = clip.id; model.split() }.disabled(track.locked)
