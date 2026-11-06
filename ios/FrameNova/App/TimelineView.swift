@@ -32,6 +32,9 @@ struct TimelineView: View {
     @ViewState<Double> private var viewportWidth = 1000
     @ViewState<CGPoint?> private var rulerHover = nil
     @ViewState<Bool> private var rulerDragging = false
+    @ViewState<Double> private var contentWidth = 0
+    @ViewState<Double?> private var barGrab: Double?
+    @State private var scroller = TimelineScroller()
 
     private var geometry: TimelineGeometry { display.geometry }
     private var headerWidth: Double { desktop ? 136 : 90 }
@@ -39,6 +42,7 @@ struct TimelineView: View {
     private func x(_ time: Int64) -> Double { geometry.position(time) }
 
     var body: some View {
+        VStack(spacing:0) {
         GeometryReader { viewport in
             let width = max(Double(viewport.size.width) - headerWidth, max(600, x(model.project.durationUs) + 180))
             // The layers fill the panel and sit in its vertical middle, growing outwards as layers are added. Both columns share
@@ -70,7 +74,7 @@ struct TimelineView: View {
                             // Before iOS 18 the offset can only be measured from the layout; later it is read from the scroll view.
                             if #unavailable(iOS 18) {horizontalOffset = offset}
                         }
-                        .modifier(TimelineScrollOffset(coverWidth:coverWidth,offset:$horizontalOffset))
+                        .modifier(TimelineScrollOffset(coverWidth:coverWidth,offset:$horizontalOffset,contentWidth:$contentWidth,scroller:scroller))
                         .onChange(of: model.playhead) { _, time in
                             let position = geometry.viewportPosition(time,scrollOffset:horizontalOffset)
                             if !rulerDragging && (position<0 || position>viewportWidth-12) {
@@ -98,6 +102,8 @@ struct TimelineView: View {
             .background {TimelineScrollZoom(onZoom:{display.zoom($0)})}
             .background {DesktopPointerModifiers(state:pointer)}
             #endif
+        }
+        scrollBar
         }
         .padding(.vertical, 5)
         .background(Palette.bg)
@@ -198,6 +204,38 @@ struct TimelineView: View {
                 } else {Color.clear.frame(width:coverWidth,height:rowHeight)}
             }
         }.frame(width:coverWidth)
+    }
+
+    /// A horizontal scroll bar fixed to the bottom of the panel. The scroll view's own bar sits at the end of the layers, so it
+    /// scrolls out of sight when there are many of them; this one drives the same scroll position.
+    @ViewBuilder private var scrollBar: some View {
+        if contentWidth > viewportWidth+1 && viewportWidth > 0 {
+            let range = contentWidth-viewportWidth
+            let scroll = clamp(horizontalOffset+coverWidth,0,range)
+            HStack(spacing:0) {
+                Color.clear.frame(width:headerWidth)
+                GeometryReader {bar in
+                    let trackWidth = Double(bar.size.width)
+                    let thumb = max(40,trackWidth*viewportWidth/contentWidth)
+                    let travel = max(1,trackWidth-thumb)
+                    let left = scroll/range*travel
+                    ZStack(alignment:.leading) {
+                        Capsule().fill(Palette.surface2)
+                        Capsule().fill(Palette.dim.opacity(barGrab == nil ? 0.6:0.95)).frame(width:thumb).offset(x:left)
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance:0).onChanged {drag in
+                        if barGrab == nil {
+                            let start = drag.startLocation.x
+                            barGrab = start >= left && start <= left+thumb ? start-left:thumb/2
+                        }
+                        let newLeft = clamp(drag.location.x-(barGrab ?? thumb/2),0,travel)
+                        scroller.scrollTo?(newLeft/travel*range)
+                    }.onEnded {_ in barGrab = nil})
+                }.frame(height:12)
+            }.padding(.vertical,4).background(Palette.surface)
+            .accessibilityLabel("Timeline scroll bar")
+        }
     }
 
     /// The playhead line runs through the whole editing area; its pin is in the ruler.
@@ -370,20 +408,43 @@ struct TimelineView: View {
 
 private struct TimelineOffsetKey:PreferenceKey {static let defaultValue:Double = 0;static func reduce(value:inout Double,nextValue:()->Double) {value = nextValue()}}
 
-/// Reports how far the tracks (which start after the cover) are scrolled, read from the scroll view itself so that it is
-/// exact while scrolling. The ruler and the seek position are computed from it.
+/// Lets the fixed scroll bar move the tracks' scroll view.
+final class TimelineScroller {var scrollTo:((Double)->Void)?}
+
+/// Reports how far the tracks (which start after the cover) are scrolled and how wide they are, read from the scroll view
+/// itself so that it is exact while scrolling. The ruler, the seek position and the fixed scroll bar are computed from it.
 private struct TimelineScrollOffset:ViewModifier {
     let coverWidth:Double
     @Binding var offset:Double
-    @State private var scroll = 0.0
+    @Binding var contentWidth:Double
+    let scroller:TimelineScroller
     func body(content:Content)->some View {
         if #available(iOS 18,*) {
-            content
-                .onScrollGeometryChange(for:Double.self,of:{$0.contentOffset.x+$0.contentInsets.leading}) {_,value in
-                    scroll = value;offset = value-coverWidth
-                }
-                .onAppear {offset = scroll-coverWidth}
-                .onChange(of:coverWidth) {_,width in offset = scroll-width}
+            content.modifier(TimelineScrollTracking(coverWidth:coverWidth,offset:$offset,contentWidth:$contentWidth,scroller:scroller))
         } else {content}
+    }
+}
+
+@available(iOS 18,*)
+private struct TimelineScrollTracking:ViewModifier {
+    let coverWidth:Double
+    @Binding var offset:Double
+    @Binding var contentWidth:Double
+    let scroller:TimelineScroller
+    @State private var scroll = 0.0
+    @State private var position = ScrollPosition(edge:.leading)
+    func body(content:Content)->some View {
+        content
+            .scrollPosition($position)
+            .scrollIndicators(.hidden,axes:.horizontal)
+            .onScrollGeometryChange(for:Double.self,of:{$0.contentOffset.x+$0.contentInsets.leading}) {_,value in
+                scroll = value;offset = value-coverWidth
+            }
+            .onScrollGeometryChange(for:Double.self,of:{$0.contentSize.width}) {_,value in contentWidth = value}
+            .onAppear {
+                offset = scroll-coverWidth
+                scroller.scrollTo = {x in position.scrollTo(x:x)}
+            }
+            .onChange(of:coverWidth) {_,width in offset = scroll-width}
     }
 }
