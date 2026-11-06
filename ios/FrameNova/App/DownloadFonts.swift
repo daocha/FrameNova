@@ -40,10 +40,18 @@ struct DownloadableFont: Codable, Identifiable {
 struct DownloadFontList:View {
     @StateObject private var fonts = DownloadFonts()
     var selected:(String)->Void
+    private func available(_ font:DownloadableFont) -> Bool {FileManager.default.fileExists(atPath:DownloadFonts.folder.appendingPathComponent(font.id+".ttf").path)}
     var body: some View {
-        DisclosureGroup("Download fonts") {
-            ForEach(fonts.catalog) {font in Button {fonts.select(font,completion:selected)} label:{HStack {Text(font.name); Spacer(); if fonts.busy == font.id {ProgressView()} else {Text("\(font.sizeMB) MB").font(.caption).foregroundStyle(Palette.dim)}}}.disabled(fonts.busy != nil)}
-            if let error = fonts.error {Text(error).foregroundStyle(.red).font(.caption)}
+        VStack(alignment:.leading,spacing:0) {
+            ForEach(fonts.catalog) {font in
+                Button {fonts.select(font,completion:selected)} label:{HStack(spacing:8) {
+                    Text(font.name).font(.system(size:16)).foregroundStyle(Palette.text)
+                    Spacer()
+                    if fonts.busy == font.id {ProgressView().controlSize(.small)}
+                    else if !available(font) {Text("\(font.sizeMB) MB").font(.system(size:11)).foregroundStyle(Palette.dim);Image(systemName:"arrow.down.to.line").font(.system(size:14)).foregroundStyle(Palette.dim)}
+                }.padding(.horizontal,10).padding(.vertical,8).contentShape(Rectangle())}.buttonStyle(.plain).disabled(fonts.busy != nil)
+            }
+            if let error = fonts.error {Text(error).foregroundStyle(Palette.danger).font(.system(size:12))}
         }
     }
 }

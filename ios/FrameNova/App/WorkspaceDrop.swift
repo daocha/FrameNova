@@ -53,7 +53,7 @@ struct WorkspaceDropTarget {
                             if kind == .main { cursor = project.clip(id)?.endUs ?? cursor }
                         } else {
                             project.addLibraryAssets([asset])
-                            failures.append(String(localized: "\(asset.name) was added to Media because it is incompatible with the destination track."))
+                            failures.append(localized("\(asset.name) was added to Media because it is incompatible with the destination track."))
                         }
                     }
                 } else { project.addLibraryAssets(media) }

@@ -7,7 +7,7 @@ struct LibraryAlbum:Identifiable {
     let cover:PHAsset
     let count:Int
     var id:String {collection.localIdentifier}
-    var name:String {collection.localizedTitle ?? String(localized: "Album")}
+    var name:String {collection.localizedTitle ?? localized("Album")}
 }
 
 @MainActor final class PhotoLibraryModel:NSObject,ObservableObject,PHPhotoLibraryChangeObserver {
@@ -73,7 +73,7 @@ struct LibraryAlbum:Identifiable {
             let assets = PHAsset.fetchAssets(withLocalIdentifiers:ids,options:nil)
             var index:[String:PHAsset] = [:];assets.enumerateObjects {asset,_,_ in index[asset.localIdentifier] = asset}
             for (offset,id) in ids.enumerated() {
-                guard let asset = index[id] else {failures.append(String(localized: "An item is no longer available in the library."));continue}
+                guard let asset = index[id] else {failures.append(localized("An item is no longer available in the library."));continue}
                 do {
                     let resources = PHAssetResource.assetResources(for:asset)
                     let type:PHAssetResourceType = asset.mediaType == .video ? .video:.photo
@@ -154,7 +154,7 @@ struct MediaPicker:View {
                 HStack {
                     Text("\(chosen.ids.count) selected").font(.caption).foregroundStyle(Palette.dim)
                     Spacer()
-                    Button(chosen.ids.isEmpty ? loc("Add") : String(localized: "Add (\(chosen.ids.count))")) {
+                    Button(chosen.ids.isEmpty ? loc("Add") : localized("Add (\(chosen.ids.count))")) {
                         library.choose(chosen.ids) {media,error in completion(media,error);dismiss()}
                     }.buttonStyle(.borderedProminent).disabled(chosen.ids.isEmpty)
                 }.padding()

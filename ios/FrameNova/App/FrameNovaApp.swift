@@ -6,25 +6,34 @@ typealias ViewState<Value> = SwiftUI.State<Value>
 typealias EditorFocus<Value: Hashable> = SwiftUI.FocusState<Value>
 
 extension Color { init(argb:UInt32) { self.init(uiColor:UIColor(argb:argb)) } }
-/// The app icon followed by the FrameNova wordmark: heavy, rounded letters, with "Nova" in the icon's gradient.
+/// The app icon followed by the FrameNova wordmark: heavy, tightly spaced letters, with "Nova" in the icon's gradient.
 struct BrandMark: View {
     var body: some View {
-        HStack(spacing:9) {
-            Image("BrandIcon").resizable().frame(width:30,height:30).clipShape(RoundedRectangle(cornerRadius:7,style:.continuous))
-            (Text("Frame").foregroundStyle(.white)
-                + Text("Nova").foregroundStyle(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.leading,endPoint:.trailing)))
-                .font(.system(size:24,weight:.black,design:.rounded)).tracking(-0.6)
+        HStack(spacing:10) {
+            Image("BrandIcon").resizable().frame(width:34,height:34).clipShape(RoundedRectangle(cornerRadius:8,style:.continuous))
+            (Text("Frame").foregroundStyle(Palette.text)
+                + Text("Nova").foregroundStyle(Palette.brandGradient(startPoint:.leading,endPoint:.trailing)))
+                .font(.system(size:27,weight:.black)).tracking(-0.8)
         }.accessibilityElement(children:.ignore).accessibilityLabel("FrameNova")
     }
 }
 
 enum Palette {
-    static let accent = Color(argb:0xFF8B6CFF), teal = Color(argb:0xFF2FD1C1), bg = Color(argb:0xFF0E0E12)
-    static let surface = Color(argb:0xFF17171D), surface2 = Color(argb:0xFF202028), dim = Color(argb:0xFF9B9BA8)
+    static let accent = Color(argb:0xFF8B6CFF), accentSoft = Color(argb:0xFF2C2547), teal = Color(argb:0xFF2FD1C1), bg = Color(argb:0xFF0E0E12)
+    static let surface = Color(argb:0xFF17171D), surface2 = Color(argb:0xFF202028), surface3 = Color(argb:0xFF2A2A34)
+    static let text = Color(argb:0xFFF2F2F5), dim = Color(argb:0xFF9B9BA8), danger = Color(argb:0xFFFF5A6A)
+    static func brandGradient(startPoint:UnitPoint = .topLeading,endPoint:UnitPoint = .bottomTrailing) -> LinearGradient {
+        LinearGradient(colors:[accent,Color(argb:0xFF4F7CFF),teal],startPoint:startPoint,endPoint:endPoint)
+    }
     static func track(_ kind:TrackKind) -> Color { Color(argb:kind == .main ? 0xFF3A3A48 : kind == .overlay ? 0xFF4A3B7A : kind == .text ? 0xFFB0457E:0xFF1F6F6A) }
 }
 @main struct FrameNovaApp: App {
     @StateObject private var store = ProjectStore()
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system
+    init() {
+        // An earlier build kept the language in the system's per-app list, which only applies after a restart.
+        UserDefaults.standard.removeObject(forKey:"AppleLanguages")
+    }
     var body: some Scene {
         WindowGroup { root.onAppear {
             FontRegistry.register()
@@ -33,7 +42,7 @@ enum Palette {
             #if targetEnvironment(macCatalyst)
             for scene in UIApplication.shared.connectedScenes.compactMap({$0 as? UIWindowScene}) {scene.sizeRestrictions?.minimumSize = CGSize(width:1000,height:640)}
             #endif
-        }.environmentObject(store).preferredColorScheme(.dark).tint(Palette.accent) }
+        }.environmentObject(store).environment(\.locale,AppLanguage.locale(for:language)).preferredColorScheme(.dark).tint(Palette.accent) }
         .commands {
             #if targetEnvironment(macCatalyst)
             DesktopEditorCommands()
@@ -58,6 +67,7 @@ struct HomeView: View {
     @ViewState<Bool> private var mediaSources = false
     @ViewState<Bool> private var settings = false
     @StateObject private var updates = AppStoreUpdates()
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system
     @Environment(\.openURL) private var openURL
     @ViewState<Bool> private var importing = false
     @ViewState<[MediaAsset]> private var pending: [MediaAsset] = []
@@ -68,53 +78,76 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { viewport in
-            ScrollView {
-                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:12),count:EditorPresentation.projectColumns(width:viewport.size.width)),spacing:12) {
-                    Section {
-                        ForEach(store.projects) { project in
-                            VStack(spacing:0) {
-                                ProjectCover(project:project).aspectRatio(1.6,contentMode:.fit).overlay(alignment:.bottomTrailing) { Text(formatTime(project.durationUs)).font(.caption2).padding(5).background(.black.opacity(0.65)).padding(6) }
-                                HStack {
-                                    VStack(alignment:.leading) { Text(project.name).lineLimit(1); Text("\(project.canvas.aspect.rawValue) · \(project.modifiedAt.formatted(date:.numeric,time:.omitted))").font(.caption2).foregroundStyle(Palette.dim) }
-                                    Spacer(minLength:0)
-                                    Menu {
-                                        Button("Rename") { name = project.name; renaming = project }
-                                        Button("Duplicate") { var copy = project; copy.id = newID(); copy.name = String(localized: "\(project.name) copy"); do { try store.save(copy) } catch { store.error = error.localizedDescription } }
-                                        Button("Delete",role:.destructive) { deleting = project }
-                                    } label: { Image(systemName:"ellipsis").padding(8) }
-                                }.padding(10)
-                            }.background(Palette.surface).clipShape(RoundedRectangle(cornerRadius:14)).contentShape(Rectangle()).onTapGesture { selected = project }
+            VStack(spacing:0) {
+                // Same header as Android: the brand on the left, the settings cog on the right, no navigation bar.
+                HStack(spacing:0) {
+                    BrandMark(); Spacer(minLength:0)
+                    Button { settings = true } label: {
+                        Image(systemName:"gearshape.fill").font(.system(size:21)).foregroundStyle(Palette.text).frame(width:48,height:48)
+                            .overlay(alignment:.topTrailing) {if updates.hasUpdate {Circle().fill(Palette.danger).frame(width:8,height:8).padding(.top,12).padding(.trailing,12)}}
+                    }.accessibilityLabel("Settings")
+                }.padding(.leading,20).padding(.trailing,8).padding(.top,12).padding(.bottom,4)
+                ScrollView {
+                    VStack(spacing:12) {
+                        if updates.hasUpdate {
+                            HStack(spacing:10) {
+                                Image(systemName:"arrow.down.app").font(.system(size:22)).foregroundStyle(Palette.accent)
+                                Text("Version \(updates.version) is available").font(.system(size:16)).foregroundStyle(Palette.text).frame(maxWidth:.infinity,alignment:.leading)
+                                Button("Update") {if let url = updates.storeURL {openURL(url)}}.font(.system(size:14,weight:.medium))
+                            }.padding(14).background(Palette.accentSoft).clipShape(RoundedRectangle(cornerRadius:12))
+                                .contentShape(Rectangle()).onTapGesture {settings = true}
                         }
-                    } header: {
-                        VStack(alignment:.leading,spacing:16) {
-                            Button {
-                                #if targetEnvironment(macCatalyst)
-                                mediaSources = true
-                                #else
-                                picker = true
-                                #endif
-                            } label: {
-                                HStack(spacing:12) { Image(systemName:"plus").font(.largeTitle); VStack(alignment:.leading) { Text("New project").font(.title3.bold()); Text("Pick videos and photos to start").font(.footnote) } }.frame(maxWidth:.infinity,minHeight:120)
-                            }.buttonStyle(.plain).background(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.topLeading,endPoint:.bottomTrailing)).clipShape(RoundedRectangle(cornerRadius:18))
-                            if updates.hasUpdate {
-                                HStack {
-                                    Image(systemName:"arrow.down.app").foregroundStyle(Palette.accent)
-                                    Text("Version \(updates.version) is available")
-                                    Spacer()
-                                    Button("Update") {if let url = updates.storeURL {openURL(url)}}
-                                }.padding(14).background(Palette.accent.opacity(0.18)).clipShape(RoundedRectangle(cornerRadius:14))
-                                    .contentShape(Rectangle()).onTapGesture {settings = true}
+                        Button {
+                            #if targetEnvironment(macCatalyst)
+                            mediaSources = true
+                            #else
+                            picker = true
+                            #endif
+                        } label: {
+                            Group {
+                                if importing { ProgressView().tint(.white) }
+                                else {
+                                    HStack(spacing:8) {
+                                        Image(systemName:"plus").font(.system(size:34))
+                                        VStack(alignment:.leading,spacing:0) {
+                                            Text("New project").font(.system(size:20,weight:.semibold))
+                                            Text("Pick videos and photos to start").font(.system(size:13)).opacity(0.85)
+                                        }
+                                    }.foregroundStyle(.white)
+                                }
+                            }.frame(maxWidth:.infinity).frame(height:120)
+                        }.buttonStyle(.plain).disabled(importing).background(Palette.brandGradient()).clipShape(RoundedRectangle(cornerRadius:18))
+                        if store.projects.isEmpty { Text("Your projects appear here. Everything stays on this device.").font(.system(size:16)).foregroundStyle(Palette.dim).padding(8).frame(maxWidth:.infinity,alignment:.leading) }
+                        LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:12),count:EditorPresentation.projectColumns(width:viewport.size.width)),spacing:12) {
+                            ForEach(store.projects) { project in
+                                VStack(spacing:0) {
+                                    ProjectCover(project:project).aspectRatio(1.6,contentMode:.fit).overlay(alignment:.bottomTrailing) {
+                                        Text(formatTime(project.durationUs)).font(.system(size:11)).foregroundStyle(Palette.text).padding(.horizontal,5).padding(.vertical,1)
+                                            .background(.black.opacity(0.6),in:RoundedRectangle(cornerRadius:4)).padding(6)
+                                    }
+                                    HStack(spacing:0) {
+                                        VStack(alignment:.leading,spacing:0) {
+                                            Text(project.name).font(.system(size:16,weight:.medium)).foregroundStyle(Palette.text).lineLimit(1)
+                                            Text("\(project.canvas.aspect.rawValue) · \(project.modifiedAt.formatted(date:.numeric,time:.omitted))").font(.system(size:11)).foregroundStyle(Palette.dim)
+                                        }.frame(maxWidth:.infinity,alignment:.leading)
+                                        Menu {
+                                            Button("Rename") { name = project.name; renaming = project }
+                                            Button("Duplicate") { var copy = project; copy.id = newID(); copy.name = localized("\(project.name) copy"); do { try store.save(copy) } catch { store.error = error.localizedDescription } }
+                                            Button("Delete",role:.destructive) { deleting = project }
+                                        } label: { Image(systemName:"ellipsis").rotationEffect(.degrees(90)).font(.system(size:18)).foregroundStyle(Palette.text).frame(width:48,height:48) }
+                                            .accessibilityLabel("More")
+                                    }.padding(.leading,10).padding(.vertical,6)
+                                }.background(Palette.surface).clipShape(RoundedRectangle(cornerRadius:14)).contentShape(Rectangle()).onTapGesture { selected = project }
                             }
-                            if importing { ProgressView("Importing…") }
-                            if store.projects.isEmpty { Text("Your projects appear here. Everything stays on this device.").font(.subheadline).foregroundStyle(Palette.dim).padding(8) }
-                        }.padding(.bottom,12)
-                    }
-                }.padding(16).frame(maxWidth:1400).frame(maxWidth:.infinity)
-            }.background(Palette.bg).navigationTitle("").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement:.topBarLeading) { BrandMark() }; ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape").overlay(alignment:.topTrailing) {if updates.hasUpdate {Circle().fill(.red).frame(width:8,height:8).offset(x:3,y:-3)}} }.accessibilityLabel("Settings") } }
+                        }
+                    }.padding(16).frame(maxWidth:1400).frame(maxWidth:.infinity)
+                }
+            }.background(Palette.bg).toolbar(.hidden,for:.navigationBar)
                 .navigationDestination(isPresented:Binding(get:{selected != nil},set:{if !$0 {selected = nil}})) { if let project = selected { EditorView(project:project,store:store) } }
         }
         }
+        // A new language rebuilds the screen so every string is looked up again; the sheets stay open.
+        .id(language)
         .confirmationDialog("New project",isPresented:$mediaSources,titleVisibility:.visible) {
             Button("Files…") {files = true}
             Button("Photos…") {picker = true}
@@ -129,9 +162,9 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented:Binding(get:{ !pending.isEmpty },set:{ if !$0 { pending = [] } })) {
-            NavigationStack { CanvasControls(canvas:$canvas).navigationTitle("New project").toolbar {
+            NavigationStack { ScrollView {CanvasControls(canvas:$canvas).padding(.horizontal,16).padding(.bottom,24)}.background(Palette.surface).navigationTitle("New project").navigationBarTitleDisplayMode(.inline).toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("Cancel") { pending = [] } }
-                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:String(localized: "Project \(Date().formatted(date:.abbreviated,time:.omitted))"),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
+                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:localized("Project \(Date().formatted(date:.abbreviated,time:.omitted))"),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
             } }.presentationDetents([.medium,.large])
         }
         .task {await updates.check()}
@@ -170,57 +203,76 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.openURL) private var openURL
     @ObservedObject var updates: AppStoreUpdates
-    @AppStorage("appLanguage") private var language = "system"
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system
     @AppStorage("developerToolsVersion") private var developerVersion = ""
     @ViewState<Int> private var taps = 0
     @ViewState<Bool> private var logs = false
     @ViewState<Bool> private var shareLogs = false
+    @ViewState<Bool> private var licensesExpanded = false
     private var version:String {Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"}
     private var build:String {Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"}
     private var unlocked:Bool {developerVersion == version+"-"+build}
     private var updateStatus:String {
         switch updates.phase {
-        case .idle:return String(localized:"Check for a newer version")
-        case .checking:return String(localized:"Checking for updates…")
-        case .current:return String(localized:"You're up to date")
-        case .available(let version):return String(localized:"Version \(version) is available")
-        case .notListed:return String(localized:"This build isn't on the App Store, so it doesn't check for updates.")
-        case .failed(let message):return String(localized:"Could not check for updates: \(message)")
+        case .idle:return loc("Check for a newer version")
+        case .checking:return loc("Checking for updates…")
+        case .current:return loc("You're up to date")
+        case .available(let version):return localized("Version \(version) is available")
+        case .notListed:return loc("This build isn't on the App Store, so it doesn't check for updates.")
+        case .failed(let message):return localized("Could not check for updates: \(message)")
         }
     }
-    var body: some View {NavigationStack {Form {
-        Text("Version \(version) (\(build))").onTapGesture {taps += 1; if taps >= 10 {developerVersion = version+"-"+build}}
-        Text("Projects and imported media stay on this device.")
-        Section {
-            Picker("Language",selection:$language) {
-                Text("System default").tag("system")
-                Text("English").tag("en")
-                Text("繁體中文").tag("zh-Hant")
-            }.onChange(of:language) {_,tag in
-                // The language the app starts in comes from the system's list for it; this puts the choice first.
-                if tag == "system" {UserDefaults.standard.removeObject(forKey:"AppleLanguages")} else {UserDefaults.standard.set([tag],forKey:"AppleLanguages")}
-            }
-        } footer: {Text("The language changes the next time FrameNova opens.")}
-        Section("Updates · App Store") {
-            Text(updateStatus).font(.footnote).foregroundStyle(Palette.dim)
-            if updates.hasUpdate {Button("Update now") {if let url = updates.storeURL {openURL(url)}}}
-            else {Button("Check for updates") {Task {await updates.check(manual:true)}}.disabled(updates.phase == .checking)}
+    /// The bundled and downloadable fonts, all under the SIL Open Font License, as Android lists them.
+    private var fontNames:String {
+        struct Entry:Decodable {let name:String;let group:String?}
+        func names(_ file:String,skipping:Set<String> = []) -> [String] {
+            Bundle.main.url(forResource:file,withExtension:"json").flatMap {try? Data(contentsOf:$0)}.flatMap {try? JSONDecoder().decode([Entry].self,from:$0)}?.filter {!skipping.contains($0.group ?? "")}.map(\.name) ?? []
         }
-        if unlocked {
-            Section("Developer tools") {
-                Toggle("Enabled",isOn:Binding(get:{unlocked},set:{if !$0 {developerVersion = ""; taps = 0}}))
-                Button("Developer logs") {logs = true}
-                Button("Save logs") {if !FileManager.default.fileExists(atPath:AppLog.url.path) {AppLog.record("Developer tools enabled")}; shareLogs = true}
+        return (names("BundledFonts")+names("DownloadFonts")).joined(separator:", ")
+    }
+    private func label(_ text:String,medium:Bool = false) -> some View {Text(loc(text)).font(.system(size:16,weight:medium ? .medium:.regular)).foregroundStyle(Palette.text)}
+    private func dim(_ text:String,size:CGFloat = 13) -> some View {Text(text).font(.system(size:size)).foregroundStyle(Palette.dim).fixedSize(horizontal:false,vertical:true)}
+    /// The same content and order as Android's settings dialog.
+    var body: some View {
+        VStack(alignment:.leading,spacing:0) {
+            Text("FrameNova").font(.system(size:24)).foregroundStyle(Palette.text).padding(.bottom,16)
+            ScrollView {
+                VStack(alignment:.leading,spacing:0) {
+                    dim(localized("Version \(version) (\(build))")).onTapGesture {taps += 1; if taps >= 10 {developerVersion = version+"-"+build}}
+                    label("Language",medium:true).padding(.top,12)
+                    // The language changes at once, as on Android.
+                    FlowLayout {
+                        Chip(title:loc("System default"),selected:language == AppLanguage.system) {language = AppLanguage.system}
+                        Chip(title:"English",selected:language == AppLanguage.english) {language = AppLanguage.english}
+                        Chip(title:"繁體中文",selected:language == AppLanguage.traditionalChinese) {language = AppLanguage.traditionalChinese}
+                    }.padding(.top,-4)
+                    label(localized("Updates · App Store"),medium:true).padding(.top,12)
+                    dim(updateStatus)
+                    if updates.hasUpdate {TextAction(title:loc("Update now")) {if let url = updates.storeURL {openURL(url)}}.padding(.top,8)}
+                    else {TextAction(title:loc("Check for updates"),enabled:updates.phase != .checking) {Task {await updates.check(manual:true)}}.padding(.top,8)}
+                    if unlocked {
+                        Divider().overlay(Palette.dim.opacity(0.4)).padding(.top,16)
+                        HStack {
+                            label("Developer tools",medium:true); Spacer()
+                            // Turning them off locks them again; ten taps on the version unlock them.
+                            Toggle("",isOn:Binding(get:{true},set:{if !$0 {developerVersion = ""; taps = 0}})).labelsHidden()
+                        }.padding(.top,8)
+                        OutlinedAction(title:loc("Developer logs")) {logs = true}
+                        OutlinedAction(title:loc("Save logs")) {if !FileManager.default.fileExists(atPath:AppLog.url.path) {AppLog.record("Developer tools enabled")}; shareLogs = true}
+                    }
+                    Button {licensesExpanded.toggle()} label: {
+                        HStack {label("Licenses",medium:true); Spacer(); Image(systemName:licensesExpanded ? "arrowtriangle.up.fill":"arrowtriangle.down.fill").font(.system(size:10)).foregroundStyle(Palette.text)}
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain).padding(.top,16)
+                    .accessibilityLabel(licensesExpanded ? loc("Hide license details"):loc("Show license details"))
+                    dim(loc("FrameNova is source-available under the PolyForm Strict License 1.0.0."),size:12)
+                    if licensesExpanded {
+                        dim(loc("Uses only Apple's system frameworks: SwiftUI, AVFoundation and Core Image.")+"\n"+localized("Fonts, all under the SIL Open Font License 1.1: \(fontNames)."),size:12)
+                    }
+                }.frame(maxWidth:.infinity,alignment:.leading)
             }
-        }
-        Section("Licenses") {
-            Text("FrameNova is source-available under the PolyForm Strict License 1.0.0.")
-            DisclosureGroup("License details") {
-                Text(Bundle.main.url(forResource:"LICENSE",withExtension:nil).flatMap {try? String(contentsOf:$0,encoding:.utf8)} ?? loc("License unavailable.")).font(.caption)
-            }
-            Text("Bundled and downloadable fonts use the SIL Open Font License 1.1.").font(.footnote)
-        }
-    }.navigationTitle("FrameNova").toolbar {Button("Close") {dismiss()}}}
+            HStack {Spacer(); TextAction(title:loc("Close")) {dismiss()}}.padding(.top,24)
+        }.padding(24).background(Palette.surface3.ignoresSafeArea()).presentationDetents([.medium,.large])
         .sheet(isPresented:$logs) {NavigationStack {ScrollView {Text(AppLog.text).font(.caption.monospaced()).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding()}.navigationTitle("Developer logs").toolbar {Button("Close") {logs = false}}}}
         .sheet(isPresented:$shareLogs) {ShareSheet(url:AppLog.url)}
     }

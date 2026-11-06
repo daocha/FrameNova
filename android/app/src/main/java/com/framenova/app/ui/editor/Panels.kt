@@ -383,24 +383,29 @@ fun LayoutPanel(vm: EditorViewModel) {
 @UnstableApi
 @Composable
 fun CanvasPanel(vm: EditorViewModel) {
-    val c = vm.project.canvas
-    var blur by remember { mutableFloatStateOf(c.background.blur) }
     PanelScaffold(stringResource(R.string.panel_project_format), { vm.panel = Panel.NONE }) {
-        Text(stringResource(R.string.home_ratio), color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = c.aspect == a, onClick = { vm.updateCanvas { it.copy(aspect = a) } }, label = { Text(a.label) }) } }
-        Text(stringResource(R.string.home_resolution), color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = c.tier == r, onClick = { vm.updateCanvas { it.copy(tier = r) } }, label = { Text(r.label) }) } }
-        Text(stringResource(R.string.home_frame_rate), color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = c.fps == f, onClick = { vm.updateCanvas { it.copy(fps = f) } }, label = { Text(stringResource(R.string.home_fps, f)) }) } }
-        Text(stringResource(R.string.panel_background), color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow {
-            FilterChip(selected = c.background.mode == BackgroundMode.COLOR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.COLOR)) } }, label = { Text(stringResource(R.string.panel_color)) })
-            FilterChip(selected = c.background.mode == BackgroundMode.BLUR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.BLUR)) } }, label = { Text(stringResource(R.string.panel_blur)) })
-        }
-        if (c.background.mode == BackgroundMode.COLOR) ColorRow(textColors, c.background.color, { col -> vm.updateCanvas { it.copy(background = it.background.copy(color = col)) } })
-        else LabeledSlider(stringResource(R.string.panel_blur), blur, 0f..1f, ::pct, { blur = it }, { vm.updateCanvas { it.copy(background = it.background.copy(blur = blur)) } })
-        Text("${c.size.width} × ${c.size.height}", color = Palette.TextDim, fontSize = 12.sp)
+        CanvasControls(vm.project.canvas) { change -> vm.updateCanvas(change) }
     }
+}
+
+/** Ratio, resolution, frame rate and background: shared by the project format panel and the new project sheet. */
+@Composable
+fun CanvasControls(c: com.framenova.app.model.CanvasSettings, update: ((com.framenova.app.model.CanvasSettings) -> com.framenova.app.model.CanvasSettings) -> Unit) {
+    var blur by remember { mutableFloatStateOf(c.background.blur) }
+    Text(stringResource(R.string.home_ratio), color = Palette.TextDim, fontSize = 12.sp)
+    ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = c.aspect == a, onClick = { update { it.copy(aspect = a) } }, label = { Text(a.label) }) } }
+    Text(stringResource(R.string.home_resolution), color = Palette.TextDim, fontSize = 12.sp)
+    ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = c.tier == r, onClick = { update { it.copy(tier = r) } }, label = { Text(r.label) }) } }
+    Text(stringResource(R.string.home_frame_rate), color = Palette.TextDim, fontSize = 12.sp)
+    ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = c.fps == f, onClick = { update { it.copy(fps = f) } }, label = { Text(stringResource(R.string.home_fps, f)) }) } }
+    Text(stringResource(R.string.panel_background), color = Palette.TextDim, fontSize = 12.sp)
+    ChipRow {
+        FilterChip(selected = c.background.mode == BackgroundMode.COLOR, onClick = { update { it.copy(background = it.background.copy(mode = BackgroundMode.COLOR)) } }, label = { Text(stringResource(R.string.panel_color)) })
+        FilterChip(selected = c.background.mode == BackgroundMode.BLUR, onClick = { update { it.copy(background = it.background.copy(mode = BackgroundMode.BLUR)) } }, label = { Text(stringResource(R.string.panel_blur)) })
+    }
+    if (c.background.mode == BackgroundMode.COLOR) ColorRow(textColors, c.background.color, { col -> update { it.copy(background = it.background.copy(color = col)) } })
+    else LabeledSlider(stringResource(R.string.panel_blur), blur, 0f..1f, ::pct, { blur = it }, { update { it.copy(background = it.background.copy(blur = blur)) } })
+    Text("${c.size.width} × ${c.size.height}", color = Palette.TextDim, fontSize = 12.sp)
 }
 
 // ---------------------------------------------------------------------------------------------------------------

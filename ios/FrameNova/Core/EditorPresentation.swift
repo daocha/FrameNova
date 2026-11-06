@@ -16,7 +16,8 @@ enum EditorPresentation {
     }
     static func projectColumns(width:Double)->Int {
         let available = max(0,min(1400,width)-32)
-        return max(width>=320 ? 2:1,Int((available+12)/182))
+        // Android's adaptive grid: as many 170 wide columns with 12 gaps as fit, and at least one.
+        return max(1,Int((available+12)/182))
     }
 }
 

@@ -85,6 +85,8 @@ final class ProjectStore: ObservableObject {
                 let size = try await video.load(.naturalSize), transform = try await video.load(.preferredTransform)
                 let rect = CGRect(origin: .zero,size: size).applying(transform)
                 result.width = Int(abs(rect.width)); result.height = Int(abs(rect.height)); result.frameRate = Double(try await video.load(.nominalFrameRate))
+                let characteristics = try await video.load(.mediaCharacteristics)
+                result.isHDR = characteristics.contains(.containsHDRVideo)
             }
             return result
         } catch { try? FileManager.default.removeItem(at: destination); throw error }
@@ -92,5 +94,5 @@ final class ProjectStore: ObservableObject {
 }
 enum MediaError: LocalizedError {
     case invalid, export, missing(String)
-    var errorDescription: String? { switch self { case .invalid: return String(localized: "This media cannot be opened."); case .export: return String(localized: "The export could not be created."); case .missing(let name): return String(localized: "Missing media: \(name)") } }
+    var errorDescription: String? { switch self { case .invalid: return localized("This media cannot be opened."); case .export: return localized("The export could not be created."); case .missing(let name): return localized("Missing media: \(name)") } }
 }

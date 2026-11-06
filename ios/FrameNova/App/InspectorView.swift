@@ -2,39 +2,49 @@ import SwiftUI
 import AVFoundation
 import CoreText
 
+/// Android's labelled slider: the name, the slider and the value on one line.
 struct ValueSlider: View {
     var title:String
     @Environment(\.editGestureActions) private var editing
     @Binding var value:Double
     var range:ClosedRange<Double> = 0...1
-    var body: some View {VStack(alignment:.leading,spacing:4) {HStack {Text(loc(title)); Spacer(); Text(value.formatted(.number.precision(.fractionLength(2)))).foregroundStyle(Palette.dim).monospacedDigit()}; EditorSlider(value:$value,range:range,label:loc(title),onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})}.font(.caption)}
+    var format:(Double)->String = percentText
+    var body: some View {
+        HStack(spacing:0) {
+            Text(loc(title)).font(.system(size:12)).foregroundStyle(Palette.dim).frame(width:84,alignment:.leading)
+            EditorSlider(value:Binding(get:{min(max(value,range.lowerBound),range.upperBound)},set:{value = $0}),range:range,label:loc(title),onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})
+            Text(format(value)).font(.system(size:12)).foregroundStyle(Palette.text).lineLimit(1).frame(width:52,alignment:.leading)
+        }
+    }
 }
+/// Ratio, resolution, frame rate and background, as Android's project format panel and new project sheet show them.
 struct CanvasControls: View {
     @Binding var canvas:CanvasSettings
-    var body:some View {ScrollView {VStack(alignment:.leading,spacing:12) {
-        Text("Aspect ratio").font(.caption).foregroundStyle(Palette.dim)
-        LazyVGrid(columns:[GridItem(.adaptive(minimum:64))]) {ForEach(Aspect.allCases,id:\.self) {aspect in
-            Button(aspect.rawValue) {canvas.aspect = aspect}.buttonStyle(.bordered).tint(canvas.aspect == aspect ? Palette.accent:Palette.dim)
-        }}
-        Text("Resolution").font(.caption).foregroundStyle(Palette.dim)
-        LazyVGrid(columns:[GridItem(.adaptive(minimum:60),spacing:4)],spacing:4) {ForEach(Resolution.allCases.reversed(),id:\.self) {tier in
-            Button {canvas.tier = tier} label: {Text(tier.label).font(.caption).lineLimit(1).fixedSize(horizontal:true,vertical:false).frame(maxWidth:.infinity)}.buttonStyle(.bordered).controlSize(.small).tint(canvas.tier == tier ? Palette.accent:Palette.dim)
-        }}
-        Text("Frame rate").font(.caption).foregroundStyle(Palette.dim)
-        LazyVGrid(columns:[GridItem(.adaptive(minimum:72))]) {ForEach([60,50,30,25,24],id:\.self) {fps in
-            Button("\(fps) fps") {canvas.fps = fps}.buttonStyle(.bordered).tint(canvas.fps == fps ? Palette.accent:Palette.dim)
-        }}
-        Text("Background").font(.caption).foregroundStyle(Palette.dim)
-        HStack {Button("Color") {canvas.blurred = false}.tint(canvas.blurred ? Palette.dim:Palette.accent);Button("Blur") {canvas.blurred = true}.tint(canvas.blurred ? Palette.accent:Palette.dim)}.buttonStyle(.bordered)
+    var body:some View {VStack(alignment:.leading,spacing:0) {
+        PanelLabel("Aspect ratio")
+        FlowLayout {ForEach(Aspect.allCases,id:\.self) {aspect in Chip(title:aspect.rawValue,selected:canvas.aspect == aspect) {canvas.aspect = aspect}}}
+        PanelLabel("Resolution")
+        FlowLayout {ForEach(Resolution.allCases.reversed(),id:\.self) {tier in Chip(title:tier.label,selected:canvas.tier == tier) {canvas.tier = tier}}}
+        PanelLabel("Frame rate")
+        FlowLayout {ForEach([60,50,30,25,24],id:\.self) {fps in Chip(title:localized("\(fps) fps"),selected:canvas.fps == fps) {canvas.fps = fps}}}
+        PanelLabel("Background")
+        FlowLayout {Chip(title:loc("Color"),selected:!canvas.blurred) {canvas.blurred = false};Chip(title:loc("Blur"),selected:canvas.blurred) {canvas.blurred = true}}
         if canvas.blurred {ValueSlider(title:"Blur",value:$canvas.blur)} else {ColorStrip(value:$canvas.background,allowNone:false)}
-        Text("\(canvas.size.width) × \(canvas.size.height)").font(.caption).foregroundStyle(Palette.dim)
-    }.padding()}.background(Palette.surface).accessibilityIdentifier("editor.canvasSettings")}
+        Text("\(canvas.size.width) × \(canvas.size.height)").font(.system(size:12)).foregroundStyle(Palette.dim)
+    }.frame(maxWidth:.infinity,alignment:.leading).accessibilityIdentifier("editor.canvasSettings")}
 }
 struct ColorStrip: View {
     @Binding var value:UInt32
     var allowNone = false
     var colors:[UInt32] = [0xFFFFFFFF,0xFF000000,0xFFFFD54F,0xFFFF7043,0xFFE53935,0xFFEC407A,0xFFAB47BC,0xFF7E57C2,0xFF42A5F5,0xFF26C6DA,0xFF66BB6A,0xFF9CCC65,0xFF8D6E63,0xFF9E9E9E]
-    var body: some View {ScrollView(.horizontal,showsIndicators:false) {HStack {ForEach((allowNone ? [0]:[])+colors,id:\.self) {color in Button {value = color} label:{Circle().fill(Color(argb:color)).frame(width:28,height:28).overlay(Circle().stroke(value == color ? Color.white:Palette.dim,lineWidth:value == color ? 3:1)).overlay {if color == 0 {Image(systemName:"nosign").foregroundStyle(Palette.dim)}}.padding(3)}.buttonStyle(.plain)}}}}
+    var body: some View {ScrollView(.horizontal,showsIndicators:false) {HStack(spacing:8) {ForEach((allowNone ? [0]:[])+colors,id:\.self) {color in
+        Button {value = color} label:{
+            Group {
+                if color == 0 {Circle().fill(Palette.surface3).overlay(Text("⌀").font(.system(size:14)).foregroundStyle(Palette.text))}
+                else {Circle().fill(Color(argb:color))}
+            }.frame(width:30,height:30).overlay(Circle().stroke(value == color ? Palette.accent:(color == 0 ? .clear:Color.white.opacity(0.25)),lineWidth:2))
+        }.buttonStyle(.plain)
+    }}.padding(.vertical,6)}}
 }
 struct InspectorView: View {
     @ObservedObject var model:EditorModel
@@ -44,6 +54,8 @@ struct InspectorView: View {
     var onHeaderDrag:((DragGesture.Value,Bool)->Void)? = nil
     @ViewState<String?> private var childPanel:String?
     private var page:String {childPanel ?? panel}
+    /// The names Android gives its panels.
+    private var title:String {page == "Ratio" ? "Project format":page == "Volume" ? "Volume & fades":page == "Position" ? "Position & size":page}
     func value(_ key:WritableKeyPath<Clip,Double>) -> Binding<Double> {Binding(get:{model.clip?[keyPath:key] ?? 0},set:{v in model.edit {$0[keyPath:key] = v}})}
     func adjust(_ key:WritableKeyPath<Adjust,Double>) -> Binding<Double> {Binding(get:{model.clip?.adjust[keyPath:key] ?? 0},set:{v in model.liveVisualEdit {$0.adjust[keyPath:key] = v}})}
     func transform(_ key:WritableKeyPath<Transform,Double>) -> Binding<Double> {
@@ -57,107 +69,171 @@ struct InspectorView: View {
         VStack(alignment:.leading,spacing:0) {
             VStack(spacing:0) {
                 if onHeaderDrag != nil {Capsule().fill(Palette.dim.opacity(0.5)).frame(width:36,height:4).padding(.top,8).accessibilityHidden(true)}
-                HStack {if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left")}.accessibilityLabel("Back")};Text(loc(page == "Ratio" ? "Project format":page)).font(.headline);Spacer();if let onDone {Button("Done") {model.endGesture();onDone()}}}.padding()
+                // Android's panel header: the title, the panel's own actions, then a check mark in the accent colour.
+                HStack(spacing:0) {
+                    if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left").frame(width:32,height:48)}.accessibilityLabel("Back")}
+                    Text(loc(title)).font(.system(size:16,weight:.semibold)).foregroundStyle(Palette.text)
+                    Spacer()
+                    headerActions
+                    if let onDone {Button {model.endGesture();onDone()} label:{Image(systemName:"checkmark").font(.system(size:20)).foregroundStyle(Palette.accent).frame(width:48,height:48)}.accessibilityLabel("Done")}
+                }.padding(.leading,16).padding(.trailing,4).frame(minHeight:48)
             }.frame(maxWidth:.infinity).contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance:6,coordinateSpace:.global).onChanged {onHeaderDrag?($0,false)}.onEnded {onHeaderDrag?($0,true)},isEnabled:onHeaderDrag != nil)
-            Divider()
-            if page == "Ratio" {CanvasControls(canvas:Binding(get:{model.project.canvas},set:{v in model.change {$0.canvas = v}}))}
-            else {ScrollView {VStack(alignment:.leading,spacing:18) {content}.padding()}}
+            ScrollView {VStack(alignment:.leading,spacing:8) {content}.frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,16).padding(.vertical,4)}
         }.background(Palette.surface)
             .environment(\.editGestureActions,EditGestureActions(begin:model.beginGesture,end:model.endGesture))
             .onChange(of:panel) {_,_ in childPanel = nil}
             .onDisappear {model.endGesture();if page == "Voiceover" && model.recording {model.toggleRecording()}}
     }
+    @ViewBuilder private var headerActions:some View {
+        switch page {
+        case "Adjust":
+            TextAction(title:loc("Reset")) {model.edit {$0.adjust = Adjust()}}
+            TextAction(title:loc("Apply to all")) {if let a = model.clip?.adjust {model.change {p in for t in p.tracks.indices {for c in p.tracks[t].clips.indices {if p.tracks[t].kind != .audio && p.tracks[t].clips[c].text == nil {p.tracks[t].clips[c].adjust = a}}}}}}
+        case "Filters":
+            TextAction(title:loc("Apply to all")) {let f = model.clip?.filter; model.change {p in for t in p.tracks.indices {for c in p.tracks[t].clips.indices {if p.tracks[t].kind != .audio && p.tracks[t].clips[c].text == nil {p.tracks[t].clips[c].filter = f}}}}}
+        case "Crop":
+            TextAction(title:loc("Reset")) {model.edit {$0.crop = CropRect()}}
+        case "Transition":
+            TextAction(title:loc("Apply to all")) {
+                let transition = model.clip?.transitionIn
+                model.change {p in let ids = p.tracks[p.mainIndex].clips.dropFirst().map(\.id);for id in ids {p.setTransition(id,transition:transition)}}
+            }
+        default: EmptyView()
+        }
+    }
+    private static let cropRatios:[(label:String,ratio:Double)] = [("Original",0),("1:1",1),("16:9",16.0/9),("9:16",9.0/16),("4:5",0.8),("4:3",4.0/3),("21:9",21.0/9)]
+    private func speedText(_ speed:Double) -> String {let text = String(format:"%g",speed);return (text.contains(".") ? text:text+".0")+"×"}
+    private func setSpeed(_ speed:Double) {if let id = model.selected {model.change {$0.setSpeed(id,speed:speed)}}}
     @ViewBuilder var content:some View {
         switch page {
         case "Cover":
             CoverPanel(model:model)
+        case "Ratio":
+            CanvasControls(canvas:Binding(get:{model.project.canvas},set:{v in model.change {$0.canvas = v}}))
         case "Speed":
-            ValueSlider(title:"Speed",value:Binding(get:{model.clip?.speed ?? 1},set:{v in if let id = model.selected {model.change {$0.setSpeed(id,speed:v)}}}),range:0.25...4)
-            HStack {ForEach([0.25,0.5,1,2,4],id:\.self) {s in Button("\(s.formatted())×") {if let id = model.selected {model.change {$0.setSpeed(id,speed:s)}}}.buttonStyle(.bordered)}}
-            Text("Pitch is preserved.").font(.caption).foregroundStyle(Palette.dim)
-        case "Volume":
-            ValueSlider(title:"Volume",value:value(\.volume),range:0...2)
-            audioFades
-            Button(model.clip?.volume == 0 ? loc("Unmute"):loc("Mute")) {model.edit {$0.volume = $0.volume == 0 ? 1:0}}
-        case "Position":
-            ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
-            ValueSlider(title:"Scale",value:transform(\.scale),range:0.05...4); ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180); ValueSlider(title:"Opacity",value:transform(\.opacity))
-            HStack {Button("Fit") {setTransform { $0.cx = 0.5;$0.cy = 0.5;$0.scale = 1 }}
-                Button("Fill") {
-                    guard let clip = model.clip,let asset = model.project.asset(clip.assetID),asset.width>0,asset.height>0 else {return}
-                    let w = Double(asset.width)*max(0.01,1-clip.crop.left-clip.crop.right),h = Double(asset.height)*max(0.01,1-clip.crop.top-clip.crop.bottom),size = model.project.canvas.size
-                    let fit = min(Double(size.width)/w,Double(size.height)/h),fill = max(Double(size.width)/w,Double(size.height)/h)
-                    setTransform {$0.cx = 0.5;$0.cy = 0.5;$0.scale = fill/fit}
-                }
-                Button("Rotate 90°") {setTransform {$0.rotation = (floor($0.rotation/90)+1)*90}}}.buttonStyle(.bordered)
-            HStack {Button("Flip ↔") {model.edit {$0.flipH.toggle()}}; Button("Flip ↕") {model.edit {$0.flipV.toggle()}}}.buttonStyle(.bordered)
-            Button("Reset") {model.edit {$0.transform = Transform();$0.keyframes = []}}
-        case "Adjust":
-            ValueSlider(title:"Brightness",value:adjust(\.brightness),range:-1...1); ValueSlider(title:"Contrast",value:adjust(\.contrast),range:-1...1)
-            ValueSlider(title:"Saturation",value:adjust(\.saturation),range:-1...1); ValueSlider(title:"Warmth",value:adjust(\.warmth),range:-1...1); ValueSlider(title:"Tint",value:adjust(\.tint),range:-1...1)
-            ValueSlider(title:"Hue",value:adjust(\.hue),range:-180...180); ValueSlider(title:"Vignette",value:adjust(\.vignette)); ValueSlider(title:"Sharpen",value:adjust(\.sharpen))
-            Button("Reset") {model.edit {$0.adjust = Adjust()}}
-            Button("Apply to all") {if let a = model.clip?.adjust {model.change {p in for t in p.tracks.indices {for c in p.tracks[t].clips.indices {if p.tracks[t].kind != .audio && p.tracks[t].clips[c].text == nil {p.tracks[t].clips[c].adjust = a}}}}}}
-        case "Filters":
-            LazyVGrid(columns:[GridItem(.adaptive(minimum:64))],spacing:10) {
-                FilterPreview(id:nil,selected:model.clip?.filter == nil) {model.edit {$0.filter = nil}}
-                ForEach(FilterCube.ids,id:\.self) {id in FilterPreview(id:id,selected:model.clip?.filter?.id == id) {model.edit {$0.filter = FilterSetting(id:id)}}}
+            if model.project.asset(model.clip?.assetID)?.type == .image {
+                Text("Photos don't have a speed. Trim them to change their duration.").foregroundStyle(Palette.dim)
+            } else {
+                let speed = model.clip?.speed ?? 1
+                ValueSlider(title:"Speed",value:Binding(get:{log(speed)/log(4)},set:{setSpeed(pow(4,$0))}),range:-1...1,format:{String(format:"%.2f×",pow(4,$0))})
+                FlowLayout {ForEach([0.25,0.5,0.75,1,1.5,2,3,4],id:\.self) {s in Chip(title:speedText(s),selected:abs(speed-s)<0.01) {setSpeed(s)}}}
+                Text(String(format:loc("New duration %@. Pitch is preserved."),secondsText(Double(model.clip?.durationUs ?? 0)/1_000_000))).font(.system(size:12)).foregroundStyle(Palette.dim)
             }
-            ValueSlider(title:"Intensity",value:Binding(get:{model.clip?.filter?.intensity ?? 1},set:{v in model.liveVisualEdit {$0.filter?.intensity = v}}))
-            Button("Apply to all") {let f = model.clip?.filter; model.change {p in for t in p.tracks.indices {for c in p.tracks[t].clips.indices {if p.tracks[t].kind != .audio && p.tracks[t].clips[c].text == nil {p.tracks[t].clips[c].filter = f}}}}}
+        case "Volume":
+            let maxFade = max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000))
+            ValueSlider(title:"Volume",value:value(\.volume),range:0...2)
+            ValueSlider(title:"Fade in",value:Binding(get:{Double(model.clip?.fadeInUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeInUs = Int64(v*1_000_000)}}),range:0...maxFade,format:secondsText)
+            ValueSlider(title:"Fade out",value:Binding(get:{Double(model.clip?.fadeOutUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeOutUs = Int64(v*1_000_000)}}),range:0...maxFade,format:secondsText)
+            FlowLayout {Chip(title:model.clip?.volume == 0 ? loc("Unmute"):loc("Mute"),selected:model.clip?.volume == 0) {model.edit {$0.volume = $0.volume == 0 ? 1:0}}}
+        case "Position":
+            FlowLayout(spacing:8) {
+                OutlinedAction(title:loc("Fit")) {setTransform { $0.cx = 0.5;$0.cy = 0.5;$0.scale = 1 }}
+                if let clip = model.clip,let asset = model.project.asset(clip.assetID),asset.width>0,asset.height>0 {
+                    OutlinedAction(title:loc("Fill")) {
+                        let w = Double(asset.width)*max(0.01,1-clip.crop.left-clip.crop.right),h = Double(asset.height)*max(0.01,1-clip.crop.top-clip.crop.bottom),size = model.project.canvas.size
+                        let fit = min(Double(size.width)/w,Double(size.height)/h),fill = max(Double(size.width)/w,Double(size.height)/h)
+                        setTransform {$0.cx = 0.5;$0.cy = 0.5;$0.scale = fill/fit}
+                    }
+                }
+                OutlinedAction(title:loc("Rotate 90°")) {setTransform {$0.rotation = ((($0.rotation/90).rounded()+1)*90).truncatingRemainder(dividingBy:360)}}
+                if model.clip?.text == nil {
+                    OutlinedAction(title:loc("Flip ↔")) {model.edit {$0.flipH.toggle()}}
+                    OutlinedAction(title:loc("Flip ↕")) {model.edit {$0.flipV.toggle()}}
+                }
+                OutlinedAction(title:loc("Reset")) {model.edit {$0.transform = Transform();$0.keyframes = []}}
+            }
+            ValueSlider(title:"Scale",value:transform(\.scale),range:0.05...4)
+            ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180,format:{"\(Int($0.rounded()))°"})
+            ValueSlider(title:"Opacity",value:transform(\.opacity))
+            ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
+            if model.clip?.keyframes.isEmpty == false {Text("Keyframed: changes apply to the keyframe at the playhead.").font(.system(size:12)).foregroundStyle(Palette.dim)}
+        case "Adjust":
+            ValueSlider(title:"Brightness",value:adjust(\.brightness),range:-1...1,format:signedText); ValueSlider(title:"Contrast",value:adjust(\.contrast),range:-1...1,format:signedText)
+            ValueSlider(title:"Saturation",value:adjust(\.saturation),range:-1...1,format:signedText); ValueSlider(title:"Warmth",value:adjust(\.warmth),range:-1...1,format:signedText)
+            ValueSlider(title:"Tint",value:adjust(\.tint),range:-1...1,format:signedText)
+            ValueSlider(title:"Hue",value:adjust(\.hue),range:-180...180,format:{"\(Int($0.rounded()))°"})
+            ValueSlider(title:"Sharpen",value:adjust(\.sharpen)); ValueSlider(title:"Vignette",value:adjust(\.vignette))
+        case "Filters":
+            ScrollView(.horizontal,showsIndicators:false) {HStack(spacing:10) {
+                FilterPreview(id:nil,selected:model.clip?.filter == nil) {model.edit {$0.filter = nil}}.frame(width:64)
+                ForEach(FilterCube.ids,id:\.self) {id in FilterPreview(id:id,selected:model.clip?.filter?.id == id) {model.edit {$0.filter = FilterSetting(id:id,intensity:model.clip?.filter?.intensity ?? 1)}}.frame(width:64)}
+            }.padding(.vertical,8)}
+            if model.clip?.filter != nil {ValueSlider(title:"Intensity",value:Binding(get:{model.clip?.filter?.intensity ?? 1},set:{v in model.liveVisualEdit {$0.filter?.intensity = v}}))}
         case "Crop":
-            ScrollView(.horizontal) {HStack {
-                Button("Original") {model.edit {$0.crop = CropRect()}}
-                ForEach([Aspect.square,.wide,.portrait,.social,.classic,.cinema],id:\.self) {aspect in Button(aspect.rawValue) {
+            FlowLayout {ForEach(Self.cropRatios,id:\.label) {crop in
+                let label = crop.label,ratio = crop.ratio
+                
+                Chip(title:label == "Original" ? loc(label):label) {
                     guard let asset = model.project.asset(model.clip?.assetID),asset.width>0,asset.height>0 else {return}
-                    let source = Double(asset.width)/Double(asset.height),ratio = aspect.ratio
-                    model.edit {$0.crop = source>ratio ? CropRect(left:(1-ratio/source)/2,right:(1-ratio/source)/2):CropRect(top:(1-source/ratio)/2,bottom:(1-source/ratio)/2)}
-                }}
-            }.buttonStyle(.bordered)}
+                    let source = Double(asset.width)/Double(asset.height)
+                    model.edit {$0.crop = ratio == 0 ? CropRect():source>ratio ? CropRect(left:(1-ratio/source)/2,right:(1-ratio/source)/2):CropRect(top:(1-source/ratio)/2,bottom:(1-source/ratio)/2)}
+                }
+            }}
             cropSlider("Left",\.left); cropSlider("Right",\.right); cropSlider("Top",\.top); cropSlider("Bottom",\.bottom)
-            Button("Reset") {model.edit {$0.crop = CropRect()}}
         case "Transition":
-            Button("None") {if let id = model.selected {model.change {$0.setTransition(id,transition:nil)}}}
-            ForEach(TransitionType.allCases,id:\.self) {type in Button(loc(type.rawValue)) {if let id = model.selected {model.change {$0.setTransition(id,transition:Transition(type:type))}}}.buttonStyle(.bordered)}
-            ValueSlider(title:"Duration (seconds)",value:Binding(get:{Double(model.clip?.transitionIn?.durationUs ?? 500_000)/1_000_000},set:{v in if let id = model.selected, var tr = model.clip?.transitionIn {tr.durationUs = Int64(v*1_000_000); model.change {$0.setTransition(id,transition:tr)}}}),range:0.1...maxTransitionDuration)
-            Button("Apply to all") {
-                let transition = model.clip?.transitionIn
-                model.change {p in let ids = p.tracks[p.mainIndex].clips.dropFirst().map(\.id);for id in ids {p.setTransition(id,transition:transition)}}
+            let current = model.clip?.transitionIn
+            FlowLayout {
+                Chip(title:loc("None"),selected:current == nil) {if let id = model.selected {model.change {$0.setTransition(id,transition:nil)}}}
+                ForEach(TransitionType.allCases,id:\.self) {type in Chip(title:loc(type.rawValue),selected:current?.type == type) {if let id = model.selected {model.change {$0.setTransition(id,transition:Transition(type:type,durationUs:Int64(min(Double(current?.durationUs ?? 500_000)/1_000_000,maxTransitionDuration)*1_000_000)))}}}}
+            }
+            if current != nil {
+                ValueSlider(title:"Duration",value:Binding(get:{min(Double(current?.durationUs ?? 500_000)/1_000_000,maxTransitionDuration)},set:{v in if let id = model.selected, var tr = model.clip?.transitionIn {tr.durationUs = Int64(v*1_000_000); model.change {$0.setTransition(id,transition:tr)}}}),range:0.1...maxTransitionDuration,format:secondsText)
             }
         case "Layout":
             LayoutPanel(model:model)
         case "Text":
             TextField("Text",text:text(\.text,fallback:"Text"),axis:.vertical).textFieldStyle(.roundedBorder)
-            HStack {Button("Font") {childPanel = "Font"};Button("Style") {childPanel = "Style"};Button("Animation") {childPanel = "Animation"}}.buttonStyle(.bordered)
+            FlowLayout {
+                ForEach([("Top",0.14),("Center",0.5),("Bottom",0.86)],id:\.0) {label,y in OutlinedAction(title:loc(label)) {setTransform {$0.cy = y;$0.cx = 0.5}}}
+                OutlinedAction(title:loc("Font")) {childPanel = "Font"};OutlinedAction(title:loc("Style")) {childPanel = "Style"};OutlinedAction(title:loc("Animation")) {childPanel = "Animation"}
+            }
         case "Font":
             FontPickerPanel(model:model)
         case "Style":
-            ValueSlider(title:"Size",value:text(\.size,fallback:0.07),range:0.02...0.4)
-            Toggle("Bold",isOn:text(\.bold,fallback:true));Toggle("Italic",isOn:text(\.italic,fallback:false));Toggle("Shadow",isOn:text(\.shadow,fallback:true))
-            Picker("Alignment",selection:text(\.alignment,fallback:"Center")) {ForEach(["Left","Center","Right"],id:\.self) {Text(loc("Align "+$0.lowercased())).tag($0)}}
-            Text("Color").font(.caption);ColorStrip(value:text(\.color,fallback:0xFFFFFFFF),allowNone:false)
-            Text("Background").font(.caption);ColorStrip(value:text(\.backgroundColor,fallback:0),allowNone:true,colors:[0xCC000000,0x99000000,0xCCFFFFFF,0xE6FFD54F,0xE6E53935,0xE642A5F5,0xE666BB6A,0xE67E57C2])
-            Text("Outline").font(.caption);ColorStrip(value:text(\.strokeColor,fallback:0xFF000000),allowNone:false)
-            ValueSlider(title:"Outline width",value:text(\.strokeWidth,fallback:0),range:0...0.15)
-            ValueSlider(title:"Letter spacing",value:text(\.letterSpacing,fallback:0),range:0...0.5)
-            ValueSlider(title:"Line spacing",value:text(\.lineSpacing,fallback:1.1),range:0.8...2)
+            HStack(spacing:0) {
+                toggleIcon("bold",on:text(\.bold,fallback:true),label:"Bold"); toggleIcon("italic",on:text(\.italic,fallback:false),label:"Italic")
+                Spacer().frame(width:12)
+                ForEach([("Left","text.alignleft"),("Center","text.aligncenter"),("Right","text.alignright")],id:\.0) {name,icon in
+                    Button {model.edit {$0.text?.alignment = name}} label:{Image(systemName:icon).font(.system(size:20)).foregroundStyle(model.clip?.text?.alignment == name ? Palette.accent:Palette.dim).frame(width:48,height:48)}.accessibilityLabel(loc("Align "+name.lowercased()))
+                }
+                Spacer()
+                Text("Shadow").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.trailing,8)
+                Toggle("Shadow",isOn:text(\.shadow,fallback:true)).labelsHidden()
+            }
+            ValueSlider(title:"Size",value:text(\.size,fallback:0.07),range:0.02...0.35,format:{String(format:"%.1f",($0*1000).rounded()/10)})
+            PanelLabel("Color"); ColorStrip(value:text(\.color,fallback:0xFFFFFFFF),allowNone:false)
+            ValueSlider(title:"Outline",value:text(\.strokeWidth,fallback:0),range:0...0.25)
+            if (model.clip?.text?.strokeWidth ?? 0)>0 {ColorStrip(value:text(\.strokeColor,fallback:0xFF000000),allowNone:false)}
+            PanelLabel("Background"); ColorStrip(value:text(\.backgroundColor,fallback:0),allowNone:true,colors:[0xCC000000,0x99000000,0xCCFFFFFF,0xE6FFD54F,0xE6E53935,0xE642A5F5,0xE666BB6A,0xE67E57C2])
+            ValueSlider(title:"Letters",value:text(\.letterSpacing,fallback:0),range:-0.05...0.5,format:{String(format:"%.2f",$0)})
+            ValueSlider(title:"Lines",value:text(\.lineSpacing,fallback:1.1),range:0.8...2,format:{String(format:"%.1f",$0)})
         case "Animation":
-            Picker("In",selection:text(\.animIn,fallback:.none)) {ForEach(TextAnimation.allCases,id:\.self) {Text(loc($0.rawValue)).tag($0)}}
-            Picker("Out",selection:text(\.animOut,fallback:.none)) {ForEach(TextAnimation.allCases.filter {$0 != .typewriter},id:\.self) {Text(loc($0.rawValue)).tag($0)}}
-            ValueSlider(title:"Duration",value:Binding(get:{Double(model.clip?.text?.animDurationUs ?? 400_000)/1_000_000},set:{value in model.edit {$0.text?.animDurationUs = Int64(value*1_000_000)}}),range:0.1...2)
+            PanelLabel("In")
+            FlowLayout {ForEach(TextAnimation.allCases,id:\.self) {a in Chip(title:loc(a.rawValue),selected:model.clip?.text?.animIn == a) {model.edit {$0.text?.animIn = a}}}}
+            PanelLabel("Out")
+            FlowLayout {ForEach(TextAnimation.allCases.filter {$0 != .typewriter},id:\.self) {a in Chip(title:loc(a.rawValue),selected:model.clip?.text?.animOut == a) {model.edit {$0.text?.animOut = a}}}}
+            ValueSlider(title:"Duration",value:Binding(get:{Double(model.clip?.text?.animDurationUs ?? 400_000)/1_000_000},set:{value in model.edit {$0.text?.animDurationUs = Int64(value*1_000_000)}}),range:0.1...2,format:secondsText)
         case "Stickers":
-            LazyVGrid(columns:[GridItem(.adaptive(minimum:48))]) {ForEach(["⭐","✨","🔥","❤️","💖","😂","😍","🥰","😎","🤩","😭","🥺","👍","👏","🙌","🎉","🎂","🎵","🎬","📸","🌸","🌈","☀️","🌙","⚡","💯","✅","❌","➡️","⬅️","⬆️","⬇️","💬","💭","🐶","🐱","🍜","☕","✈️","🏝️"],id:\.self) {s in Button(s) {model.addText("Sticker",content:s)}.font(.largeTitle).padding(8)}}
+            FlowLayout(spacing:8) {ForEach(["⭐","✨","🔥","❤️","💖","😂","😍","🥰","😎","🤩","😭","🥺","👍","👏","🙌","🎉","🎂","🎵","🎬","📸","🌸","🌈","☀️","🌙","⚡","💯","✅","❌","➡️","⬅️","⬆️","⬇️","💬","💭","🐶","🐱","🍜","☕","✈️","🏝️"],id:\.self) {s in
+                Button {model.addText("Sticker",content:s)} label:{Text(s).font(.system(size:26)).frame(width:48,height:48).background(Palette.surface2,in:RoundedRectangle(cornerRadius:10))}.buttonStyle(.plain)
+            }}
+            Text("Tip: use Overlay to add your own PNG stickers with transparency.").font(.system(size:12)).foregroundStyle(Palette.dim).padding(.top,8)
         case "Voiceover":
-            Text(model.recording ? String(localized: "Recording… \(formatTime(Int64(model.recordingElapsed*1_000_000)))"):String(localized: "Records from the playhead while the video plays.")).foregroundStyle(Palette.dim)
-            Button(model.recording ? loc("Stop recording"):loc("Record"),systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill") {model.toggleRecording()}.buttonStyle(.borderedProminent).tint(model.recording ? .red:Palette.accent)
-            ProgressView(value:model.recordingLevel).tint(Palette.teal)
+            HStack(spacing:16) {
+                Button {model.toggleRecording()} label:{
+                    Image(systemName:model.recording ? "stop.fill":"circle.fill").font(.system(size:28)).foregroundStyle(.white).frame(width:72,height:72).background(model.recording ? Palette.danger:Palette.accent,in:Circle())
+                }.buttonStyle(.plain).accessibilityLabel(model.recording ? loc("Stop recording"):loc("Record"))
+                VStack(alignment:.leading,spacing:8) {
+                    Text(model.recording ? String(format:loc("Recording… %@"),formatTime(Int64(model.recordingElapsed*1_000_000))):loc("Records from the playhead while the video plays.")).foregroundStyle(Palette.dim)
+                    GeometryReader {geometry in ZStack(alignment:.leading) {Capsule().fill(Palette.surface3);Capsule().fill(Palette.teal).frame(width:geometry.size.width*min(1,max(0,model.recordingLevel)))}}.frame(height:8)
+                }
+            }.padding(.vertical,8)
         default: Text("Select a clip to edit it.").foregroundStyle(Palette.dim)
         }
     }
-    @ViewBuilder private var audioFades:some View {
-        ValueSlider(title:"Fade in (seconds)",value:Binding(get:{Double(model.clip?.fadeInUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeInUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
-        ValueSlider(title:"Fade out (seconds)",value:Binding(get:{Double(model.clip?.fadeOutUs ?? 0)/1_000_000},set:{v in model.edit {$0.fadeOutUs = Int64(v*1_000_000)}}),range:0...max(0.1,min(10,Double(model.clip?.durationUs ?? 0)/2_000_000)))
+    private func toggleIcon(_ icon:String,on:Binding<Bool>,label:String) -> some View {
+        Button {on.wrappedValue.toggle()} label:{Image(systemName:icon).font(.system(size:20)).foregroundStyle(on.wrappedValue ? Palette.accent:Palette.dim).frame(width:48,height:48)}.accessibilityLabel(loc(label))
     }
     private var maxTransitionDuration:Double {
         let clips = model.project.tracks[model.project.mainIndex].clips
@@ -183,6 +259,7 @@ struct ShareSheet: UIViewControllerRepresentable {
     func makeUIViewController(context:Context) -> UIActivityViewController {UIActivityViewController(activityItems:[url],applicationActivities:nil)}
     func updateUIViewController(_ controller:UIActivityViewController,context:Context) {}
 }
+/// Android's export dialog: chips for resolution, frame rate, codec and quality, the size estimate, then progress and the result.
 struct ExportView: View {
     let project:Project
     @ObservedObject var exporter:Exporter
@@ -190,24 +267,62 @@ struct ExportView: View {
     @ViewState<ExportSettings> private var settings = ExportSettings()
     @ViewState<Bool> private var share = false
     @ViewState<Bool> private var saved = false
-    var body: some View {NavigationStack {Form {
-        if exporter.running {ProgressView(value:exporter.progress); Text("Exporting… \(Int(exporter.progress*100))%"); Button("Cancel",role:.destructive) {exporter.cancel()}}
-        else if let url = exporter.url {
-            Text("Export complete").font(.headline)
-            Text(url.lastPathComponent).font(.caption)
-            Button("Share") {share = true}
-            Button(saved ? loc("Saved"):loc("Save video")) {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}.disabled(saved)
+    private var canvas:CanvasSettings {var c = project.canvas;c.tier = settings.tier;return c}
+    private var bitrate:Int {ExportEstimate.bitrate(width:canvas.size.width,height:canvas.size.height,fps:settings.fps,hevc:settings.hevc,quality:settings.quality)}
+    private var fileSize:String? {
+        guard let url = exporter.url,let bytes = (try? url.resourceValues(forKeys:[.fileSizeKey]))?.fileSize else {return nil}
+        return String(format:"%.1f MB",Double(bytes)/1_000_000)
+    }
+    private var title:String {
+        if exporter.running {return loc("Exporting…")}
+        if exporter.url != nil {return saved ? loc("Video saved"):loc("Export complete")}
+        if exporter.error != nil {return loc("Export failed")}
+        return loc("Export")
+    }
+    private func line(_ text:String,size:CGFloat = 12) -> some View {Text(text).font(.system(size:size)).foregroundStyle(Palette.dim).fixedSize(horizontal:false,vertical:true)}
+    @ViewBuilder private var content:some View {
+        if exporter.running {
+            Text(project.name).font(.system(size:16)).foregroundStyle(Palette.text).lineLimit(1)
+            ProgressView(value:Double(exporter.progress)).padding(.top,12)
+            line(String(format:loc("%lld%% · keeps running if you leave the app"),Int(exporter.progress*100))).padding(.top,6)
+        } else if let url = exporter.url {
+            Text(url.lastPathComponent+(fileSize.map {"\n"+$0} ?? "")).font(.system(size:16)).foregroundStyle(Palette.text)
+            if let error = exporter.error {Text(error).font(.system(size:14)).foregroundStyle(Palette.danger).padding(.top,8)}
+        } else if let error = exporter.error {
+            Text(error).font(.system(size:16)).foregroundStyle(Palette.text)
         } else {
-            Picker("Resolution",selection:$settings.tier) {ForEach(Resolution.allCases.reversed(),id:\.self) {Text($0.label).tag($0)}}
-            Picker("Frame rate",selection:$settings.fps) {ForEach([60,50,30,25,24],id:\.self) {Text("\($0) fps").tag($0)}}
-            Toggle("HEVC",isOn:$settings.hevc)
-            Picker("Quality",selection:$settings.quality) {ForEach(["Standard","High","Maximum"],id:\.self) {Text(loc($0)).tag($0)}}
-            Button("Export") {exporter.start(project,settings:settings)}.buttonStyle(.borderedProminent)
+            PanelLabel("Resolution")
+            FlowLayout {ForEach(Resolution.allCases.reversed(),id:\.self) {tier in Chip(title:tier.label,selected:settings.tier == tier) {settings.tier = tier}}}
+            PanelLabel("Frame rate")
+            FlowLayout {ForEach([60,50,30,25,24],id:\.self) {fps in Chip(title:"\(fps)",selected:settings.fps == fps) {settings.fps = fps}}}
+            PanelLabel("Codec")
+            FlowLayout {Chip(title:loc("HEVC (smaller)"),selected:settings.hevc) {settings.hevc = true};Chip(title:loc("H.264 (compatible)"),selected:!settings.hevc) {settings.hevc = false}}
+            PanelLabel("Quality")
+            FlowLayout {ForEach(["Standard","High","Maximum"],id:\.self) {quality in Chip(title:loc(quality),selected:settings.quality == quality) {settings.quality = quality}}}
+            line(String(format:loc("%lld × %lld · %@ Mbps · about %@ MB"),canvas.size.width,canvas.size.height,String(format:"%.0f",Double(bitrate)/1_000_000),String(format:"%.0f",Double(ExportEstimate.bytes(bitrate:bitrate,durationUs:project.durationUs))/1_000_000))).padding(.top,8)
+            if project.assets.contains(where:{$0.isHDR == true}) {line(loc("HDR clips are converted to SDR."))}
         }
-        if let error = exporter.error {Text(error).foregroundStyle(.red)}
-    }.navigationTitle("Export").toolbar {Button("Done") {dismiss()}}}
-        .onAppear {settings.tier = project.canvas.tier; settings.fps = project.canvas.fps}
-        .sheet(isPresented:$share) {if let url = exporter.url {ShareSheet(url:url)}}
-        .interactiveDismissDisabled(exporter.running)
+    }
+    @ViewBuilder private var buttons:some View {
+        if exporter.running {TextAction(title:loc("Cancel")) {exporter.cancel()}}
+        else if exporter.url != nil {
+            TextAction(title:loc("Share")) {share = true}
+            TextAction(title:saved ? loc("Saved"):loc("Save video"),enabled:!saved) {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}
+            TextAction(title:loc("Done"),prominent:true) {dismiss()}
+        } else if exporter.error != nil {TextAction(title:loc("OK"),prominent:true) {exporter.error = nil}}
+        else {
+            TextAction(title:loc("Cancel")) {dismiss()}
+            FilledAction(title:loc("Export")) {exporter.start(project,settings:settings)}
+        }
+    }
+    var body: some View {
+        VStack(alignment:.leading,spacing:0) {
+            Text(title).font(.system(size:24)).foregroundStyle(Palette.text).padding(.bottom,16)
+            ScrollView {VStack(alignment:.leading,spacing:0) {content}.frame(maxWidth:.infinity,alignment:.leading)}
+            HStack(spacing:8) {Spacer(); buttons}.padding(.top,24)
+        }.padding(24).background(Palette.surface3.ignoresSafeArea()).presentationDetents([.medium,.large])
+            .onAppear {settings.tier = project.canvas.tier; settings.fps = project.canvas.fps}
+            .sheet(isPresented:$share) {if let url = exporter.url {ShareSheet(url:url)}}
+            .interactiveDismissDisabled(exporter.running)
     }
 }

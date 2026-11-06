@@ -102,7 +102,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(model.selectedIDs.count>1 ? String(localized: "\(model.selectedIDs.count) clips selected"):model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? loc("Project settings"))
+                Text(model.selectedIDs.count>1 ? localized("\(model.selectedIDs.count) clips selected"):model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? loc("Project settings"))
                     .font(.caption.bold()).lineLimit(2)
                 Picker("Inspector", selection: $panel) {
                     ForEach(panels.contains(panel) ? panels : panels + [panel], id: \.self) { Text(loc($0)).tag($0) }

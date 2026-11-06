@@ -38,6 +38,8 @@ struct MediaAsset: Codable, Equatable, Identifiable {
     var height = 0
     var hasAudio = false
     var frameRate: Double = 0
+    /// Set when the video is HDR (PQ or HLG); projects saved before this existed leave it out.
+    var isHDR: Bool?
 }
 enum TrackKind: String, Codable, CaseIterable { case text, overlay, main, audio }
 struct Track: Codable, Equatable, Identifiable {
@@ -159,3 +161,8 @@ struct Project: Codable, Equatable, Identifiable {
     func track(_ clipID: String) -> Track? { tracks.first { $0.clips.contains { $0.id == clipID } } }
 }
 func formatTime(_ us: Int64) -> String { let s = max(0, us)/1_000_000; return String(format: "%02lld:%02lld", s/60, s%60) }
+/// Minutes, seconds and the frame within the second, as Android's transport bar shows the playhead.
+func formatTimecode(_ us: Int64, fps: Int) -> String {
+    let ms = max(0, us)/1000
+    return String(format: "%02lld:%02lld.%02lld", ms/60_000, ms/1000%60, (ms%1000)*Int64(fps)/1000)
+}
