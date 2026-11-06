@@ -1,12 +1,27 @@
 # Working in this repository
 
-FrameNova is a multi-track video editor for Android (`android/`), built with Kotlin, Jetpack Compose and AndroidX
-Media3. It is source-available under the PolyForm Strict License 1.0.0 (`LICENSE`).
+FrameNova is a multi-track video editor for Android (`android/`, Kotlin, Jetpack Compose and AndroidX Media3) and for
+iPhone, iPad and Mac (`ios/`, Swift and SwiftUI; the Mac app is Mac Catalyst, built from the same sources). It is
+source-available under the PolyForm Strict License 1.0.0 (`LICENSE`).
 
 ## Branches and pull requests
 
 Never commit to `main` (the default branch). Make every change on a branch and open a pull request for it; leave
 merging to the maintainer. Commit or push only when the user asks for it.
+
+## Android and iOS parity
+
+- By default, apply every requested change to both Android and iOS. Limit a change to one platform only when the user
+  explicitly asks for that or the feature is intentionally available on one platform only.
+- iPhone, iPad and Android are the phone and tablet editors and must look and behave the same: layout, gestures, panels,
+  wording and export output. Mac has its own desktop workspace (`DesktopWorkspace.swift`, with a media panel); keep its
+  behaviour unless the user asks to change it, but still apply changes to the code it shares with iOS (the model in
+  `ios/FrameNova/Core`, the renderer, the exporter).
+- For each change, compare the Android and iOS implementations and tests in the affected feature, including
+  discrepancies that were already there, and keep shared behaviour consistent. Persisted project data must stay
+  compatible between the two: a new field is optional or has a default, so older projects still load.
+- Tell the user about every discrepancy found: which platform differs, what the user would notice, and whether it was
+  fixed, remains or is intentional. If parity could not be verified, say what remains unchecked and why.
 
 ## Rules for content
 
@@ -18,12 +33,20 @@ merging to the maintainer. Commit or push only when the user asks for it.
 
 ## Building and testing
 
-- `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` in `android/`; all three must pass.
+Every change is built and tested on both platforms, unless it touches only one.
+
+- Android: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` in `android/`; all three must pass.
+- iOS and Mac: `swift test` in `ios/` runs the shared model tests (`ios/Tests/FrameNovaCoreTests`) and needs only the
+  command line tools. The app, its app tests and its UI tests need full Xcode: `scripts/build-ios-debug.sh` (add `--mac`
+  for the Mac build; it needs XcodeGen and installs nothing). Without Xcode the app target cannot be compiled, so say so
+  in the final report instead of calling the iOS change verified.
 - Engine tests run on a device or emulator: `./gradlew :app:connectedDebugAndroidTest`. Run them after any change
   to `engine/` (preview, composition, export). The task uninstalls the app afterwards, which deletes its projects.
 - The preview works around several Media3 1.9 problems (`docs/PLAN.md`, "Preview player"), including two modified
   Media3 files in `android/app/src/main/java/androidx/media3/effect/`. Read that section before changing
   `PreviewEngine`, `CompositionFactory` or those files, and keep the Apache 2.0 notices in them.
+- Keep the Android unit tests and the iOS `FrameNovaCoreTests` equivalent for shared behaviour (timeline operations,
+  cover and asset handling, presentation).
 - Icons are generated from `art/FrameNova-appicon.png` by `python3 scripts/make-icons.py` (needs Pillow and numpy).
 
 ## Building the debug APK on the maintainer's Mac
@@ -59,6 +82,8 @@ After a successful build, copy the APK to `android/dist/FrameNova-debug.apk`. Wh
 `FRAMENOVA_DEV_UPDATE_HOST` (see `.env.example`), the build has already written `android/dist/dev-update/`. Run
 `scripts/serve-dev-update.sh`: it starts the server in the background and returns, and does nothing if one is already
 running, because a running server picks up the new build by itself.
+
+After a build, tell the user which of the Android and iOS checks ran and passed, and which could not run.
 
 ## Releases
 

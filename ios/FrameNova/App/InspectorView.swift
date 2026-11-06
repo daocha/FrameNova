@@ -7,7 +7,7 @@ struct ValueSlider: View {
     @Environment(\.editGestureActions) private var editing
     @Binding var value:Double
     var range:ClosedRange<Double> = 0...1
-    var body: some View {VStack(alignment:.leading,spacing:4) {HStack {Text(title); Spacer(); Text(value.formatted(.number.precision(.fractionLength(2)))).foregroundStyle(Palette.dim).monospacedDigit()}; EditorSlider(value:$value,range:range,label:title,onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})}.font(.caption)}
+    var body: some View {VStack(alignment:.leading,spacing:4) {HStack {Text(loc(title)); Spacer(); Text(value.formatted(.number.precision(.fractionLength(2)))).foregroundStyle(Palette.dim).monospacedDigit()}; EditorSlider(value:$value,range:range,label:loc(title),onEditingChanged:{active in if active {editing?.begin()} else {editing?.end()}})}.font(.caption)}
 }
 struct CanvasControls: View {
     @Binding var canvas:CanvasSettings
@@ -40,6 +40,8 @@ struct InspectorView: View {
     @ObservedObject var model:EditorModel
     var panel:String
     var onDone:(()->Void)? = nil
+    /// Set when the panel slides over the editor: dragging its header reports the drag, and whether it has ended.
+    var onHeaderDrag:((DragGesture.Value,Bool)->Void)? = nil
     @ViewState<String?> private var childPanel:String?
     private var page:String {childPanel ?? panel}
     func value(_ key:WritableKeyPath<Clip,Double>) -> Binding<Double> {Binding(get:{model.clip?[keyPath:key] ?? 0},set:{v in model.edit {$0[keyPath:key] = v}})}
@@ -53,7 +55,11 @@ struct InspectorView: View {
     func text<T>(_ key:WritableKeyPath<TextStyle,T>,fallback:T) -> Binding<T> {Binding(get:{model.clip?.text?[keyPath:key] ?? fallback},set:{v in model.edit {$0.text?[keyPath:key] = v}})}
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
-            HStack {if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left")}.accessibilityLabel("Back")};Text(page == "Ratio" ? "Project format":page).font(.headline);Spacer();if let onDone {Button("Done") {model.endGesture();onDone()}}}.padding()
+            VStack(spacing:0) {
+                if onHeaderDrag != nil {Capsule().fill(Palette.dim.opacity(0.5)).frame(width:36,height:4).padding(.top,8).accessibilityHidden(true)}
+                HStack {if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left")}.accessibilityLabel("Back")};Text(loc(page == "Ratio" ? "Project format":page)).font(.headline);Spacer();if let onDone {Button("Done") {model.endGesture();onDone()}}}.padding()
+            }.frame(maxWidth:.infinity).contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance:6,coordinateSpace:.global).onChanged {onHeaderDrag?($0,false)}.onEnded {onHeaderDrag?($0,true)},isEnabled:onHeaderDrag != nil)
             Divider()
             if page == "Ratio" {CanvasControls(canvas:Binding(get:{model.project.canvas},set:{v in model.change {$0.canvas = v}}))}
             else {ScrollView {VStack(alignment:.leading,spacing:18) {content}.padding()}}
@@ -73,7 +79,7 @@ struct InspectorView: View {
         case "Volume":
             ValueSlider(title:"Volume",value:value(\.volume),range:0...2)
             audioFades
-            Button(model.clip?.volume == 0 ? "Unmute":"Mute") {model.edit {$0.volume = $0.volume == 0 ? 1:0}}
+            Button(model.clip?.volume == 0 ? loc("Unmute"):loc("Mute")) {model.edit {$0.volume = $0.volume == 0 ? 1:0}}
         case "Position":
             ValueSlider(title:"X",value:transform(\.cx),range:-0.5...1.5); ValueSlider(title:"Y",value:transform(\.cy),range:-0.5...1.5)
             ValueSlider(title:"Scale",value:transform(\.scale),range:0.05...4); ValueSlider(title:"Rotation",value:transform(\.rotation),range:-180...180); ValueSlider(title:"Opacity",value:transform(\.opacity))
@@ -113,7 +119,7 @@ struct InspectorView: View {
             Button("Reset") {model.edit {$0.crop = CropRect()}}
         case "Transition":
             Button("None") {if let id = model.selected {model.change {$0.setTransition(id,transition:nil)}}}
-            ForEach(TransitionType.allCases,id:\.self) {type in Button(type.rawValue) {if let id = model.selected {model.change {$0.setTransition(id,transition:Transition(type:type))}}}.buttonStyle(.bordered)}
+            ForEach(TransitionType.allCases,id:\.self) {type in Button(loc(type.rawValue)) {if let id = model.selected {model.change {$0.setTransition(id,transition:Transition(type:type))}}}.buttonStyle(.bordered)}
             ValueSlider(title:"Duration (seconds)",value:Binding(get:{Double(model.clip?.transitionIn?.durationUs ?? 500_000)/1_000_000},set:{v in if let id = model.selected, var tr = model.clip?.transitionIn {tr.durationUs = Int64(v*1_000_000); model.change {$0.setTransition(id,transition:tr)}}}),range:0.1...maxTransitionDuration)
             Button("Apply to all") {
                 let transition = model.clip?.transitionIn
@@ -129,7 +135,7 @@ struct InspectorView: View {
         case "Style":
             ValueSlider(title:"Size",value:text(\.size,fallback:0.07),range:0.02...0.4)
             Toggle("Bold",isOn:text(\.bold,fallback:true));Toggle("Italic",isOn:text(\.italic,fallback:false));Toggle("Shadow",isOn:text(\.shadow,fallback:true))
-            Picker("Alignment",selection:text(\.alignment,fallback:"Center")) {ForEach(["Left","Center","Right"],id:\.self) {Text($0)}}
+            Picker("Alignment",selection:text(\.alignment,fallback:"Center")) {ForEach(["Left","Center","Right"],id:\.self) {Text(loc("Align "+$0.lowercased())).tag($0)}}
             Text("Color").font(.caption);ColorStrip(value:text(\.color,fallback:0xFFFFFFFF),allowNone:false)
             Text("Background").font(.caption);ColorStrip(value:text(\.backgroundColor,fallback:0),allowNone:true,colors:[0xCC000000,0x99000000,0xCCFFFFFF,0xE6FFD54F,0xE6E53935,0xE642A5F5,0xE666BB6A,0xE67E57C2])
             Text("Outline").font(.caption);ColorStrip(value:text(\.strokeColor,fallback:0xFF000000),allowNone:false)
@@ -137,14 +143,14 @@ struct InspectorView: View {
             ValueSlider(title:"Letter spacing",value:text(\.letterSpacing,fallback:0),range:0...0.5)
             ValueSlider(title:"Line spacing",value:text(\.lineSpacing,fallback:1.1),range:0.8...2)
         case "Animation":
-            Picker("In",selection:text(\.animIn,fallback:.none)) {ForEach(TextAnimation.allCases,id:\.self) {Text($0.rawValue).tag($0)}}
-            Picker("Out",selection:text(\.animOut,fallback:.none)) {ForEach(TextAnimation.allCases.filter {$0 != .typewriter},id:\.self) {Text($0.rawValue).tag($0)}}
+            Picker("In",selection:text(\.animIn,fallback:.none)) {ForEach(TextAnimation.allCases,id:\.self) {Text(loc($0.rawValue)).tag($0)}}
+            Picker("Out",selection:text(\.animOut,fallback:.none)) {ForEach(TextAnimation.allCases.filter {$0 != .typewriter},id:\.self) {Text(loc($0.rawValue)).tag($0)}}
             ValueSlider(title:"Duration",value:Binding(get:{Double(model.clip?.text?.animDurationUs ?? 400_000)/1_000_000},set:{value in model.edit {$0.text?.animDurationUs = Int64(value*1_000_000)}}),range:0.1...2)
         case "Stickers":
             LazyVGrid(columns:[GridItem(.adaptive(minimum:48))]) {ForEach(["⭐","✨","🔥","❤️","💖","😂","😍","🥰","😎","🤩","😭","🥺","👍","👏","🙌","🎉","🎂","🎵","🎬","📸","🌸","🌈","☀️","🌙","⚡","💯","✅","❌","➡️","⬅️","⬆️","⬇️","💬","💭","🐶","🐱","🍜","☕","✈️","🏝️"],id:\.self) {s in Button(s) {model.addText("Sticker",content:s)}.font(.largeTitle).padding(8)}}
         case "Voiceover":
-            Text(model.recording ? "Recording… \(formatTime(Int64(model.recordingElapsed*1_000_000)))":"Records from the playhead while the video plays.").foregroundStyle(Palette.dim)
-            Button(model.recording ? "Stop recording":"Record",systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill") {model.toggleRecording()}.buttonStyle(.borderedProminent).tint(model.recording ? .red:Palette.accent)
+            Text(model.recording ? String(localized: "Recording… \(formatTime(Int64(model.recordingElapsed*1_000_000)))"):String(localized: "Records from the playhead while the video plays.")).foregroundStyle(Palette.dim)
+            Button(model.recording ? loc("Stop recording"):loc("Record"),systemImage:model.recording ? "stop.circle.fill":"mic.circle.fill") {model.toggleRecording()}.buttonStyle(.borderedProminent).tint(model.recording ? .red:Palette.accent)
             ProgressView(value:model.recordingLevel).tint(Palette.teal)
         default: Text("Select a clip to edit it.").foregroundStyle(Palette.dim)
         }
@@ -190,12 +196,12 @@ struct ExportView: View {
             Text("Export complete").font(.headline)
             Text(url.lastPathComponent).font(.caption)
             Button("Share") {share = true}
-            Button(saved ? "Saved":"Save video") {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}.disabled(saved)
+            Button(saved ? loc("Saved"):loc("Save video")) {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}.disabled(saved)
         } else {
             Picker("Resolution",selection:$settings.tier) {ForEach(Resolution.allCases.reversed(),id:\.self) {Text($0.label).tag($0)}}
             Picker("Frame rate",selection:$settings.fps) {ForEach([60,50,30,25,24],id:\.self) {Text("\($0) fps").tag($0)}}
             Toggle("HEVC",isOn:$settings.hevc)
-            Picker("Quality",selection:$settings.quality) {ForEach(["High","Medium","Low"],id:\.self) {Text($0)}}
+            Picker("Quality",selection:$settings.quality) {ForEach(["High","Medium","Low"],id:\.self) {Text(loc($0)).tag($0)}}
             Button("Export") {exporter.start(project,settings:settings)}.buttonStyle(.borderedProminent)
         }
         if let error = exporter.error {Text(error).foregroundStyle(.red)}

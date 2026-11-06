@@ -6,6 +6,7 @@ struct TouchTimeline: UIViewRepresentable {
     @ObservedObject var display:TimelineDisplay
     @ObservedObject private var thumbnails = TimelineThumbnails.shared
     @ObservedObject private var waveforms = AudioWaveforms.shared
+    var onCover:()->Void = {}
     var onTransition:(String)->Void
     var onText:(String)->Void
     var onTrack:(Track)->Void
@@ -14,7 +15,7 @@ struct TouchTimeline: UIViewRepresentable {
     }
     func updateUIView(_ view:TouchTimelineCanvas,context:Context) {
         view.model = model;view.display = display
-        view.onTransition = onTransition;view.onText = onText;view.onTrack = onTrack
+        view.onTransition = onTransition;view.onText = onText;view.onTrack = onTrack;view.onCover = onCover
         view.setNeedsDisplay()
     }
     static func dismantleUIView(_ view:TouchTimelineCanvas,coordinator:()) {view.stopFling()}
@@ -26,8 +27,11 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     var onTransition:((String)->Void)?
     var onText:((String)->Void)?
     var onTrack:((Track)->Void)?
+    var onCover:(()->Void)?
+    private var coverImage:UIImage?
+    private var coverKey:String?
     private struct Row {var track:Track;var rect:CGRect}
-    private enum Hit {case clip(Clip,Track),handle(Clip,Bool),transition(String),header(Track),lock(Track),gap(Int64),empty}
+    private enum Hit {case clip(Clip,Track),handle(Clip,Bool),transition(String),header(Track),lock(Track),cover,gap(Int64),empty}
     private enum Mode {case scrub,trim(Clip,Bool),move(Clip,Track)}
     private var mode:Mode?
     private var verticalOffset:CGFloat = 0
@@ -45,6 +49,11 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     private var hold:UILongPressGestureRecognizer!
     private var viewport:TimelineViewport {TimelineViewport(width:bounds.width,playhead:model?.playhead ?? 0,pointsPerSecond:display?.pointsPerSecond ?? 70)}
     private func x(_ time:Int64) -> CGFloat {viewport.position(time)}
+    /// The cover sits in the main layer just before time zero, as wide as a video frame is for the row.
+    private func coverRect(_ row:CGRect) -> CGRect {
+        let width = row.height*CGFloat(model?.project.canvas.aspect.ratio ?? 16.0/9)
+        return CGRect(x:x(0)-5-width,y:row.minY,width:width,height:row.height)
+    }
     private func height(_ kind:TrackKind) -> CGFloat {switch kind {case .main:return 58;case .overlay:return 46;case .text:return 30;case .audio:return 38}}
     private var rows:[Row] {
         guard let project = model?.project else {return []}
@@ -61,7 +70,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target:self,action:#selector(tapped(_:)));tap.require(toFail:pan);tap.require(toFail:hold)
         let pinch = UIPinchGestureRecognizer(target:self,action:#selector(pinched(_:)));pinch.delegate = self
         for recognizer in [pan!,hold!,tap,pinch] {addGestureRecognizer(recognizer)}
-        accessibilityLabel = "Timeline. Swipe to scrub. Hold a clip to move it. Drag the selected clip's white handles to trim."
+        accessibilityLabel = String(localized: "Timeline. Swipe to scrub. Hold a clip to move it. Drag the selected clip's white handles to trim.")
     }
     required init?(coder:NSCoder) {fatalError("init(coder:) is unavailable")}
     override func accessibilityIncrement() {if let model {model.scrub(model.playhead+1_000_000)}}
@@ -92,6 +101,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         guard point.y>=24,let model else {return .empty}
         guard let row = rows.first(where:{$0.rect.contains(point)}) else {return .empty}
         if point.x<60 {return point.x>=30 ? .lock(row.track):.header(row.track)}
+        if row.track.kind == .main && coverRect(row.rect).contains(point) {return .cover}
         guard !row.track.locked else {return .empty}
         if let clip = row.track.clips.first(where:{$0.id == model.selected}),!row.track.locked {
             if abs(point.x-x(clip.startUs))<16 {return .handle(clip,true)}
@@ -111,6 +121,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             else {model.selectedGap = nil;model.selected = model.selected == clip.id ? nil:clip.id;lastTap = (clip.id,now)}
         case .handle(let clip,_):model.selected = clip.id
         case .header(let track):if track.kind != .text {onTrack?(track)}
+        case .cover:onCover?()
         case .lock(let track):model.change {p in if let i = p.tracks.firstIndex(where:{$0.id == track.id}) {p.tracks[i].locked.toggle()}}
         case .transition(let id):model.selected = id;onTransition?(id)
         case .gap(let time):model.selected = nil;model.selectedGap = time
@@ -212,7 +223,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
     override func draw(_ rect:CGRect) {
         guard let context = UIGraphicsGetCurrentContext(),let model else {return}
         UIColor(argb:0xFF0E0E12).setFill();context.fill(bounds)
-        accessibilityValue = "Playhead \(formatTime(model.playhead))"+(model.clip.map {"; Start \(formatTime($0.startUs)); End \(formatTime($0.endUs))"} ?? "")
+        accessibilityValue = String(localized: "Playhead \(formatTime(model.playhead))")+(model.clip.map {String(localized: "; Start \(formatTime($0.startUs)); End \(formatTime($0.endUs))")} ?? "")
         drawRuler(context)
         context.saveGState();context.clip(to:CGRect(x:0,y:24,width:bounds.width,height:max(0,bounds.height-24)))
         for row in rows where row.rect.maxY>=24 && row.rect.minY<bounds.height {
@@ -221,6 +232,7 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
                 let rect = CGRect(x:x(gap.start),y:row.rect.minY,width:x(gap.end)-x(gap.start),height:row.rect.height)
                 UIColor.white.withAlphaComponent(0.15).setFill();context.fill(rect);UIColor.white.setStroke();context.stroke(rect,width:2)
             }
+            if row.track.kind == .main {drawCover(coverRect(row.rect),context:context)}
             let visibleStart = viewport.time(at:-16),visibleEnd = viewport.time(at:bounds.width+16)
             let clips = row.track.clips.filter {$0.endUs>=visibleStart && $0.startUs<=visibleEnd || $0.id == model.selected}
                 .sorted {($0.id == model.selected ? 1:0)<($1.id == model.selected ? 1:0)}
@@ -240,9 +252,10 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
             }
             do {
                 UIColor(argb:row.track.locked ? 0xFF33333B:0xFF202028).setFill();context.fill(CGRect(x:0,y:row.rect.minY,width:60,height:row.rect.height))
+                let iconY = row.rect.midY-8
                 let icon = row.track.kind == .text ? "textformat" : row.track.hidden ? "eye.slash" : row.track.muted ? "speaker.slash" : row.track.kind == .audio ? "waveform":"film"
-                UIImage(systemName:icon)?.withTintColor(.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:7,y:row.rect.midY-8,width:16,height:16))
-                UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? UIColor(argb:0xFF8B6CFF):.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:row.rect.midY-8,width:16,height:16))
+                UIImage(systemName:icon)?.withTintColor(.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:7,y:iconY,width:16,height:16))
+                UIImage(systemName:row.track.locked ? "lock.fill":"lock.open")?.withTintColor(row.track.locked ? UIColor(argb:0xFF8B6CFF):.lightGray,renderingMode:.alwaysOriginal).draw(in:CGRect(x:37,y:iconY,width:16,height:16))
             }
         }
         if case .move(let clip,let track) = mode,let row = rows.first(where:{$0.track.id == track.id}) {
@@ -255,6 +268,35 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         context.restoreGState()
         UIColor.white.setStroke();context.setLineWidth(2);context.move(to:CGPoint(x:bounds.midX,y:0));context.addLine(to:CGPoint(x:bounds.midX,y:bounds.height));context.strokePath()
         UIColor.white.setFill();context.fillEllipse(in:CGRect(x:bounds.midX-4,y:16,width:8,height:8))
+    }
+    private func refreshCover() {
+        let asset = model?.project.asset(model?.project.coverAssetID)
+        let key = asset.map {MediaThumbnailStore.sourceKey($0)}
+        guard key != coverKey else {return}
+        coverKey = key;coverImage = nil
+        guard let asset,asset.type == .image else {return}
+        Task {[weak self] in
+            let image = await MediaThumbnailStore.shared.image(asset,at:0,size:.cover)
+            guard let self,self.coverKey == key else {return}
+            self.coverImage = image;self.setNeedsDisplay()
+        }
+    }
+    /// The video's cover, drawn like a clip in the main layer before its start; a plus marks that none is set yet.
+    private func drawCover(_ rect:CGRect,context:CGContext) {
+        guard rect.maxX>0,rect.minX<bounds.width else {return}
+        refreshCover()
+        let accent = UIColor(argb:0xFF8B6CFF)
+        context.saveGState();UIBezierPath(roundedRect:rect,cornerRadius:6).addClip()
+        UIColor(argb:0xFF2A2A34).setFill();context.fill(rect)
+        if let coverImage {
+            let at = (model?.project.framing ?? CoverFraming()).placement(photo:coverImage.size,frame:rect.size)
+            coverImage.draw(in:at.offsetBy(dx:rect.minX,dy:rect.minY))
+        } else {
+            UIImage(systemName:"plus")?.withTintColor(accent,renderingMode:.alwaysOriginal).draw(in:CGRect(x:rect.midX-9,y:rect.midY-9,width:18,height:18))
+        }
+        context.restoreGState()
+        accent.withAlphaComponent(0.8).setStroke();let outline = UIBezierPath(roundedRect:rect.insetBy(dx:1,dy:1),cornerRadius:6);outline.lineWidth = 2;outline.stroke()
+        text(loc("Cover"),in:CGRect(x:rect.minX+6,y:rect.minY+3,width:rect.width-8,height:14),color:.white,size:10)
     }
     private func drawRuler(_ context:CGContext) {
         guard let display else {return}
@@ -299,26 +341,36 @@ final class TouchTimelineCanvas:UIView,UIGestureRecognizerDelegate {
         }
         if let asset = model.project.asset(clip.assetID),asset.hasAudio,(clip.audioOnly || row.track.kind == .audio || asset.type == .audio),let peaks = AudioWaveforms.shared.peaks(asset,ready:{[weak self] in self?.setNeedsDisplay()}) {
             var position = box.minX+max(0,floor(-box.minX/3))*3
-            (row.track.locked ? UIColor.lightGray:UIColor(argb:0xFF2FD1C1)).setStroke();context.setLineWidth(2)
+            let wave = row.track.locked ? UIColor.lightGray:UIColor(argb:0xFF2FD1C1)
+            // Where a fade turns the sound down, the wave it takes away stays as a faint ghost.
+            var ghost:[(CGFloat,CGFloat)] = []
+            wave.setStroke();context.setLineWidth(2)
             while position<min(box.maxX,bounds.width) {
                 let timeline = clip.startUs+Int64((position-box.minX)/(display?.pointsPerSecond ?? 70)*1_000_000)
                 let index = Int(clip.sourceTime(at:timeline)/AudioWaveforms.stepUs)
                 let value = index>=0 && index<peaks.count ? peaks[index]:0
-                let amplitude = CGFloat(clamp(Double(value)*min(clip.volume,1.5)*clip.audioFadeGain(at:timeline),0,1))*box.height*0.42
+                let gain = clip.audioFadeGain(at:timeline)
+                let amplitude = CGFloat(clamp(Double(value)*min(clip.volume,1.5)*gain,0,1))*box.height*0.42
+                if gain<1 {ghost.append((position,CGFloat(clamp(Double(value)*min(clip.volume,1.5),0,1))*box.height*0.42))}
                 context.move(to:CGPoint(x:position,y:box.midY-amplitude));context.addLine(to:CGPoint(x:position,y:box.midY+amplitude));position += 3
             }
+            context.strokePath()
+            wave.withAlphaComponent(0.22).setStroke()
+            for (x,full) in ghost {context.move(to:CGPoint(x:x,y:box.midY-full));context.addLine(to:CGPoint(x:x,y:box.midY+full))}
             context.strokePath()
         }
         if row.track.locked {UIColor(argb:0xFF505058).withAlphaComponent(0.35).setFill();context.fill(box)}
         var badges:[String] = []
         if clip.speed != 1 {badges.append("\(clip.speed.formatted())×")}
-        if clip.text == nil && clip.volume == 0 {badges.append("muted")}
-        if clip.filter != nil {badges.append("fx")}
-        let title = (clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")+(badges.isEmpty ? "":"  "+badges.joined(separator:" · "))
+        if clip.text == nil && clip.volume == 0 {badges.append(loc("muted"))}
+        if clip.filter != nil {badges.append(loc("fx"))}
+        let title = (clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? loc("Clip"))+(badges.isEmpty ? "":"  "+badges.joined(separator:" · "))
         text(title,in:CGRect(x:max(0,box.minX)+6,y:box.minY+2,width:max(1,min(box.maxX,bounds.width)-max(0,box.minX)-12),height:16),color:.white,size:10)
         UIColor.white.withAlphaComponent(0.7).setStroke();context.setLineWidth(1)
-        if clip.fadeInUs>0 {context.move(to:CGPoint(x:box.minX,y:box.maxY));context.addLine(to:CGPoint(x:box.minX+CGFloat(clip.fadeInUs)/CGFloat(max(1,clip.durationUs))*box.width,y:box.minY));context.strokePath()}
-        if clip.fadeOutUs>0 {context.move(to:CGPoint(x:box.maxX-CGFloat(clip.fadeOutUs)/CGFloat(max(1,clip.durationUs))*box.width,y:box.minY));context.addLine(to:CGPoint(x:box.maxX,y:box.maxY));context.strokePath()}
+        // The sound wave shows fades itself; the filmstrip of a video has no wave, so it gets a line.
+        let showsWave = model.project.asset(clip.assetID).map {$0.hasAudio && (clip.audioOnly || row.track.kind == .audio || $0.type == .audio)} ?? false
+        if !showsWave && clip.fadeInUs>0 {context.move(to:CGPoint(x:box.minX,y:box.maxY));context.addLine(to:CGPoint(x:box.minX+CGFloat(clip.fadeInUs)/CGFloat(max(1,clip.durationUs))*box.width,y:box.minY));context.strokePath()}
+        if !showsWave && clip.fadeOutUs>0 {context.move(to:CGPoint(x:box.maxX-CGFloat(clip.fadeOutUs)/CGFloat(max(1,clip.durationUs))*box.width,y:box.minY));context.addLine(to:CGPoint(x:box.maxX,y:box.maxY));context.strokePath()}
         context.restoreGState()
         for frame in clip.keyframes {UIColor.white.setFill();let center = CGPoint(x:x(clip.startUs+frame.offsetUs),y:box.maxY-5);let diamond = UIBezierPath();diamond.move(to:CGPoint(x:center.x,y:center.y-3));diamond.addLine(to:CGPoint(x:center.x+3,y:center.y));diamond.addLine(to:CGPoint(x:center.x,y:center.y+3));diamond.addLine(to:CGPoint(x:center.x-3,y:center.y));diamond.close();diamond.fill()}
         if selected {

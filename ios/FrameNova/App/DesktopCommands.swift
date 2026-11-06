@@ -61,7 +61,7 @@ struct DesktopEditorCommands: Commands {
             Button("Add text") { editor?.model.addText("Title") }.keyboardShortcut("t", modifiers: [.command, .shift]).disabled(editor == nil)
         }
         CommandMenu("Playback") {
-            Button(editor?.model.playing == true ? "Pause" : "Play") { editor?.model.play() }.disabled(editor == nil || editingText != nil)
+            Button(editor?.model.playing == true ? loc("Pause") : loc("Play")) { editor?.model.play() }.disabled(editor == nil || editingText != nil)
             Button("Seek backward") {editor?.model.seekWithKeyboard(-1)}.keyboardShortcut(.leftArrow,modifiers:[]).disabled(editor == nil || editingText != nil)
             Button("Seek forward") {editor?.model.seekWithKeyboard(1)}.keyboardShortcut(.rightArrow,modifiers:[]).disabled(editor == nil || editingText != nil)
             Button("Seek backward faster") {editor?.model.seekWithKeyboard(-1,largerStep:true)}.keyboardShortcut(.leftArrow,modifiers:.shift).disabled(editor == nil || editingText != nil)

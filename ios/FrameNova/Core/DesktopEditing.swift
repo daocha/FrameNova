@@ -30,6 +30,12 @@ extension Project {
         for asset in media where !assets.contains(where: { $0.id == asset.id }) { assets.append(asset) }
     }
 
+    /// Drops media that no clip uses and that is not the cover. The phone and tablet layouts have no media panel to manage them.
+    mutating func removeUnusedAssets() {
+        let used = Set(tracks.flatMap(\.clips).compactMap(\.assetID)).union([coverAssetID].compactMap {$0})
+        if assets.contains(where:{!used.contains($0.id)}) {assets.removeAll {!used.contains($0.id)}}
+    }
+
     /// Resolves the destination before adding media, so an incompatible drop cannot create orphan assets.
     @discardableResult mutating func insertAsset(_ asset: MediaAsset, kind: TrackKind, trackID: String? = nil, at time: Int64) -> String? {
         guard kind != .text, kind != .main || !tracks[mainIndex].locked else { return nil }

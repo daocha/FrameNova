@@ -10,12 +10,15 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol {
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let renderSize:CGSize
+    /// Export only: the first frame shows the cover, which galleries use as the video's thumbnail.
+    let showsCover:Bool
     private let snapshot:Project
     private let previewState:PreviewProjectState?
     var project:Project {previewState?.project ?? snapshot}
     let sources: [String: CMPersistentTrackID]
     let orientations: [String: CGAffineTransform]
-    init(project: Project, sources: [String: CMPersistentTrackID], orientations: [String: CGAffineTransform],previewState:PreviewProjectState? = nil,renderSize:CGSize? = nil) {
+    init(project: Project, sources: [String: CMPersistentTrackID], orientations: [String: CGAffineTransform],previewState:PreviewProjectState? = nil,renderSize:CGSize? = nil,showsCover:Bool = false) {
+        self.showsCover = showsCover
         self.renderSize = renderSize ?? CGSize(width:project.canvas.size.width,height:project.canvas.size.height)
         self.snapshot = project;self.previewState = previewState; self.sources = sources; self.orientations = orientations
         timeRange = CMTimeRange(start: .zero,duration: mediaTime(project.durationUs))
@@ -29,7 +32,7 @@ struct BuiltComposition {
     func playerItem() -> AVPlayerItem { let item = AVPlayerItem(asset:asset); item.videoComposition = video; item.audioMix = audio; item.audioTimePitchAlgorithm = .spectral; return item }
 }
 enum CompositionFactory {
-    static func build(_ project: Project,previewState:PreviewProjectState? = nil) async throws -> BuiltComposition {
+    static func build(_ project: Project,previewState:PreviewProjectState? = nil,exportCover:Bool = false) async throws -> BuiltComposition {
         let composition = AVMutableComposition()
         var sources: [String:CMPersistentTrackID] = [:], orientations: [String:CGAffineTransform] = [:]
         var audioParams: [AVAudioMixInputParameters] = []
@@ -77,7 +80,7 @@ enum CompositionFactory {
         let size = previewState == nil ? project.canvas.size:CanvasSettings(aspect:project.canvas.aspect,tier:project.canvas.tier.rawValue>1920 ? .fhd:project.canvas.tier).size
         video.renderSize = CGSize(width:size.width,height:size.height)
         video.frameDuration = CMTime(value:1,timescale:Int32(project.canvas.fps))
-        video.instructions = [FrameInstruction(project:project,sources:sources,orientations:orientations,previewState:previewState,renderSize:video.renderSize)]
+        video.instructions = [FrameInstruction(project:project,sources:sources,orientations:orientations,previewState:previewState,renderSize:video.renderSize,showsCover:exportCover)]
         let audio = AVMutableAudioMix(); audio.inputParameters = audioParams
         return BuiltComposition(asset:composition,video:video,audio:audio)
     }

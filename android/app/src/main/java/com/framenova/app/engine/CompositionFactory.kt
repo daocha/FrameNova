@@ -35,6 +35,7 @@ import androidx.media3.transformer.Effects
 import com.framenova.app.model.BackgroundMode
 import com.framenova.app.model.CanvasSettings
 import com.framenova.app.model.Clip
+import com.framenova.app.model.CoverFraming
 import com.framenova.app.model.MediaAsset
 import com.framenova.app.model.MediaType
 import com.framenova.app.model.PixelSize
@@ -63,7 +64,7 @@ enum class SolidRole { BACKGROUND, DIP_BLACK, DIP_WHITE }
 enum class VideoRole { OVERLAY, MAIN, BLUR }
 
 sealed interface LayerSpec
-data class ClockLayer(val width: Int, val height: Int) : LayerSpec
+data class ClockLayer(val width: Int, val height: Int, val cover: Boolean = false) : LayerSpec
 data class SolidLayer(val role: SolidRole) : LayerSpec
 data class VideoLayer(val trackId: String, val role: VideoRole, val clips: List<LayerClip>) : LayerSpec
 
@@ -103,7 +104,7 @@ object CompositionFactory {
      */
     fun structureKey(project: Project, mode: PlanMode, out: PixelSize, fps: Int): String {
         val sb = StringBuilder()
-        sb.append(mode).append(out).append(fps).append(project.canvas.background.mode).append(project.canvas.background.color)
+        sb.append(mode).append(out).append(fps).append(project.coverAssetId).append(project.coverFraming).append(project.canvas.background.mode).append(project.canvas.background.color)
             .append(project.canvas.background.blur)
         for (t in project.tracks) {
             sb.append('|').append(t.id).append(t.kind).append(t.muted)
@@ -117,6 +118,28 @@ object CompositionFactory {
         }
         return sb.toString()
     }
+
+    /** [asset] placed in a [w]×[h] frame as [framing] says, with its EXIF rotation applied; null if it cannot be read. */
+    private fun coverBitmap(context: Context, asset: MediaAsset, framing: CoverFraming, w: Int, h: Int): Bitmap? = try {
+        val uri = Uri.parse(asset.uri)
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        // Zooming in needs more pixels than the frame has.
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= w * 2 && bounds.outHeight / (sample * 2) >= h * 2) sample *= 2
+        val decoded = context.contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        }
+        val rotation = try { context.contentResolver.openInputStream(uri)?.use { androidx.exifinterface.media.ExifInterface(it).rotationDegrees } ?: 0 } catch (_: Exception) { 0 }
+        decoded?.let { raw ->
+            val src = if (rotation == 0) raw else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }, true)
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val at = framing.placement(src.width.toFloat(), src.height.toFloat(), w.toFloat(), h.toFloat())
+            android.graphics.Canvas(out).drawBitmap(src, null, android.graphics.RectF(at[0], at[1], at[0] + at[2], at[1] + at[3]),
+                android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+            out
+        }
+    } catch (_: Exception) { null }
 
     /** The project with every speed-changed clip that has a finished render replaced by that render at normal speed. */
     fun resolve(context: Context, model: Project): Project {
@@ -144,7 +167,11 @@ object CompositionFactory {
         // Built before the holder exists; the overlays read the holder lazily.
         lateinit var holder: PlanHolder
 
-        val textOverlays: List<TextureOverlay> = textTracks.map { id -> TextTrackOverlay(id) { holder } }
+        // The exported video opens on the cover: its first frame, which galleries show as the video's thumbnail.
+        val coverAsset = if (mode == PlanMode.EXPORT) project.asset(project.coverAssetId)?.takeIf { it.type == MediaType.IMAGE } else null
+        val coverBitmap = coverAsset?.let { coverBitmap(context, it, project.coverFraming, out.width, out.height) }
+        val textOverlays: List<TextureOverlay> = textTracks.map { id -> TextTrackOverlay(id) { holder } } +
+            listOfNotNull(coverBitmap?.let { CoverOverlay(it, fps) })
         // Export carries the sound of video clips on separate audio-only layers (see clipAudioSequence).
         val separateAudio = mode == PlanMode.EXPORT
         val clipAudio = mutableListOf<EditedMediaItemSequence>()
@@ -157,7 +184,7 @@ object CompositionFactory {
         sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO))
             .addItem(stillItem(clockUri, duration, fps, clockEffects))
             .build()
-        layers += ClockLayer(clockSize.width, clockSize.height)
+        layers += ClockLayer(clockSize.width, clockSize.height, cover = coverBitmap != null)
 
         // Overlay tracks, top-most first.
         for (track in project.tracks.filter { it.kind == TrackKind.OVERLAY && it.clips.isNotEmpty() }) {
@@ -494,7 +521,7 @@ private class PlanCompositorSettings(private val holder: PlanHolder) : VideoComp
         val hot = holder.hot
         val t = presentationTimeUs
         return when (val layer = plan.layers.getOrNull(inputId) ?: return HIDDEN) {
-            is ClockLayer -> if (plan.textTrackIds.isEmpty()) HIDDEN else StaticOverlaySettings.Builder()
+            is ClockLayer -> if (plan.textTrackIds.isEmpty() && !layer.cover) HIDDEN else StaticOverlaySettings.Builder()
                 .setScale(plan.outW.toFloat() / layer.width, plan.outH.toFloat() / layer.height).build()
             is SolidLayer -> {
                 val alpha = when (layer.role) {
@@ -577,4 +604,13 @@ private class TextTrackOverlay(private val trackId: String, private val holderRe
             .setAlphaScale(alpha)
             .build()
     }
+}
+
+/** Shows the cover over the first frame of an export and nothing afterwards. */
+@UnstableApi
+private class CoverOverlay(private val bitmap: Bitmap, fps: Int) : BitmapOverlay() {
+    private val windowUs = 1_000_000L / max(1, fps) * 3 / 4
+    override fun getBitmap(presentationTimeUs: Long): Bitmap = bitmap
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings =
+        if (presentationTimeUs < windowUs) StaticOverlaySettings.Builder().build() else HIDDEN
 }

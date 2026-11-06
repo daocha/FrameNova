@@ -24,7 +24,7 @@ struct ExportSettings {
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent("FrameNova-\(newID()).mp4")
             do {
                 var p = project; p.canvas.tier = settings.tier; p.canvas.fps = settings.fps
-                let built = try await CompositionFactory.build(p)
+                let built = try await CompositionFactory.build(p,exportCover:true)
                 try await Self.write(built,project:p,settings:settings,to:destination) { [weak self] value in Task { @MainActor in self?.progress = value } }
                 self.url = destination; progress = 1
             } catch {
@@ -82,7 +82,7 @@ struct ExportSettings {
     func saveToPhotos() async {
         guard let url else { return }
         let status = await PHPhotoLibrary.requestAuthorization(for:.addOnly)
-        guard status == .authorized || status == .limited else { error = "Allow saving videos in Settings."; return }
+        guard status == .authorized || status == .limited else { error = String(localized: "Allow saving videos in Settings."); return }
         do { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL:url) } }
         catch { self.error = error.localizedDescription }
     }

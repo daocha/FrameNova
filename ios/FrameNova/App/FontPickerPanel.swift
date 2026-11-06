@@ -10,7 +10,7 @@ struct FontPickerPanel:View {
             Text("System").font(.caption).foregroundStyle(Palette.dim)
             choice("System Sans",id:"system");choice("System Serif",id:"system_serif");choice("System Mono",id:"system_mono")
             ForEach(["English","Art & display"],id:\.self) {group in
-                Text(group).font(.caption).foregroundStyle(Palette.dim).padding(.top,8)
+                Text(loc(group)).font(.caption).foregroundStyle(Palette.dim).padding(.top,8)
                 ForEach(fonts.filter {$0.group == group}) {font in
                     if let id = postscript(font.file) {choice(font.name,id:id)}
                 }
@@ -25,7 +25,7 @@ struct FontPickerPanel:View {
     }
     private func choice(_ name:String,id:String)->some View {
         Button {model.edit {$0.text?.fontID = id}} label:{HStack {
-            Text(name).font(id.hasPrefix("system") ? .system(size:16):.custom(id,size:16)).foregroundStyle(.white)
+            Text(id.hasPrefix("system") ? loc(name) : name).font(id.hasPrefix("system") ? .system(size:16):.custom(id,size:16)).foregroundStyle(.white)
             Spacer();Text("Aa").font(id.hasPrefix("system") ? .system(size:16):.custom(id,size:16)).foregroundStyle(Palette.dim)
             if model.clip?.text?.fontID == id {Image(systemName:"checkmark").foregroundStyle(Palette.accent)}
         }.padding(10).background(model.clip?.text?.fontID == id ? Palette.accent.opacity(0.18):Palette.surface2,in:RoundedRectangle(cornerRadius:8))}.buttonStyle(.plain)

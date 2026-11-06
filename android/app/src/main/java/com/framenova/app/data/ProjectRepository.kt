@@ -1,5 +1,6 @@
 package com.framenova.app.data
 
+import com.framenova.app.R
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -53,7 +54,7 @@ class ProjectRepository(context: Context) {
 
     fun duplicate(id: String, now: Long): Project? {
         val p = load(id) ?: return null
-        val copy = p.copy(id = newId(), name = p.name + " copy", createdAt = now, modifiedAt = now)
+        val copy = p.copy(id = newId(), name = app.getString(R.string.home_copy_name, p.name), createdAt = now, modifiedAt = now)
         File(root, id).copyRecursively(dir(copy.id), overwrite = true)
         // Internal files (stills, voiceovers) moved with the folder: point their URIs at the copy.
         val fixed = copy.copy(assets = copy.assets.map { a ->
@@ -69,8 +70,26 @@ class ProjectRepository(context: Context) {
         val cover = project.asset(project.coverAssetId)?.takeIf { it.type == MediaType.IMAGE }
         val clip = project.mainTrack.clips.firstOrNull() ?: project.tracks.flatMap { it.clips }.firstOrNull { project.asset(it.assetId)?.type?.let { type -> type != MediaType.AUDIO } == true }
         val asset = cover ?: project.asset(clip?.assetId) ?: return@withContext
-        val bmp = try { frame(asset, if (cover != null) 0 else clip?.srcInUs ?: 0, 360) } catch (_: Exception) { null } ?: return@withContext
+        val bmp = try {
+            if (cover != null) framedCover(cover, project) else frame(asset, clip?.srcInUs ?: 0, 360)
+        } catch (_: Exception) { null } ?: return@withContext
         FileOutputStream(File(dir(project.id), "cover.jpg")).use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+    }
+
+    /** The cover photo placed in a video-shaped frame as the project's cover framing says, so the home screen matches the export. */
+    private fun framedCover(asset: MediaAsset, project: Project): Bitmap? {
+        val uri = Uri.parse(asset.uri)
+        val source = app.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return null
+        val rotation = try { app.contentResolver.openInputStream(uri)?.use { androidx.exifinterface.media.ExifInterface(it).rotationDegrees } ?: 0 } catch (_: Exception) { 0 }
+        val upright = if (rotation == 0) source else Bitmap.createBitmap(source, 0, 0, source.width, source.height, android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }, true)
+        val size = project.canvas.size
+        val h = 360
+        val w = (h * size.width / size.height.coerceAtLeast(1)).coerceAtLeast(1)
+        val at = project.coverFraming.placement(upright.width.toFloat(), upright.height.toFloat(), w.toFloat(), h.toFloat())
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(out).drawBitmap(upright, null, android.graphics.RectF(at[0], at[1], at[0] + at[2], at[1] + at[3]),
+            android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+        return out
     }
 
     private fun frame(asset: MediaAsset, timeUs: Long, height: Int): Bitmap? = when (asset.type) {
@@ -96,7 +115,7 @@ class ProjectRepository(context: Context) {
         } ?: return@withContext null
         val file = File(File(dir(projectId), "stills").apply { mkdirs() }, "still_${newId()}.png")
         FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        MediaProbe.probe(app, Uri.fromFile(file), "image/png")?.copy(name = "Freeze frame")
+        MediaProbe.probe(app, Uri.fromFile(file), "image/png")?.copy(name = app.getString(R.string.editor_freeze_frame))
     }
 
     fun voiceFile(projectId: String): File = File(File(dir(projectId), "voice").apply { mkdirs() }, "voice_${newId()}.m4a")

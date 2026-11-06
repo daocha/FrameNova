@@ -27,7 +27,7 @@ struct DesktopMediaBrowser: View {
                 Button(action: onImport) { Image(systemName: "plus") }.help("Import media (⌘I)").disabled(model.busy)
             }.padding(12)
             TextField("Search media", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal, 10)
-            Picker("Show", selection: $filter) { ForEach(["All", "Video", "Photos", "Audio"], id: \.self) { Text($0) } }
+            Picker("Show", selection: $filter) { ForEach(["All", "Video", "Photos", "Audio"], id: \.self) { Text(loc($0)).tag($0) } }
                 .pickerStyle(.menu).padding(.horizontal, 10).padding(.vertical, 8)
             if let status = model.importStatus {Text(status).font(.caption2).foregroundStyle(Palette.dim).textSelection(.enabled).padding(.horizontal,10).padding(.bottom,8)}
             Divider()
@@ -35,7 +35,7 @@ struct DesktopMediaBrowser: View {
                 if media.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "photo.on.rectangle.angled").font(.system(size: 32)).foregroundStyle(Palette.dim)
-                        Text(query.isEmpty && filter == "All" ? "Drop media files here" : "No matching media").font(.callout)
+                        Text(query.isEmpty && filter == "All" ? loc("Drop media files here") : loc("No matching media")).font(.callout)
                         if query.isEmpty && filter == "All" {
                             Text("Import once, then drag onto the timeline or double-click to add at the playhead.")
                                 .font(.caption).foregroundStyle(Palette.dim).multilineTextAlignment(.center)
@@ -56,7 +56,7 @@ struct DesktopMediaBrowser: View {
             if let asset = selection {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(asset.name).font(.caption.bold()).lineLimit(2)
-                    Text(asset.type == .audio ? formatTime(asset.durationUs) : "\(asset.width) × \(asset.height) · \(asset.type == .image ? "Photo" : formatTime(asset.durationUs))")
+                    Text(asset.type == .audio ? formatTime(asset.durationUs) : "\(asset.width) × \(asset.height) · \(asset.type == .image ? loc("Photo") : formatTime(asset.durationUs))")
                         .font(.caption2).foregroundStyle(Palette.dim)
                     HStack {
                         Button("Add to timeline") { model.insert(asset) }.buttonStyle(.borderedProminent)
@@ -94,11 +94,11 @@ struct DesktopMediaBrowser: View {
         .onDrag { selectedID = asset.id; return NSItemProvider(object: (WorkspaceDrop.assetPrefix + asset.id) as NSString) }
         .contextMenu {
             Button("Add to timeline") { model.insert(asset) }
-            if asset.type == .image {Button("Use as cover") {model.change {$0.coverAssetID = asset.id}}}
+            if asset.type == .image {Button("Use as cover") {model.change {if $0.coverAssetID != asset.id {$0.coverFraming = nil};$0.coverAssetID = asset.id}}}
             Button("Add as layer") { model.insert(asset, kind: .overlay) }.disabled(asset.type == .audio)
             Button("Add audio") { model.insert(asset, kind: .audio) }.disabled(!asset.hasAudio)
         }
-        .help(asset.name + " — double-click to add, or drag onto a track")
+        .help(String(localized: "\(asset.name) — double-click to add, or drag onto a track"))
     }
 }
 

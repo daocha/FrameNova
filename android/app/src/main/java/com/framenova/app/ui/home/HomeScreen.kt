@@ -1,5 +1,6 @@
 package com.framenova.app.ui.home
 
+import androidx.compose.ui.res.stringResource
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -65,6 +66,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import com.framenova.app.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,6 +116,7 @@ import kotlin.math.abs
 @Composable
 fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
     val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val repo = remember { ProjectRepository(context) }
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
@@ -134,16 +144,16 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
         }
     }
     if (library) MediaLibrary(
-        kind = LibraryKind.VISUAL, title = "New project", multiple = true,
+        kind = LibraryKind.VISUAL, title = stringResource(R.string.home_new_project), multiple = true,
         onDismiss = { library = false },
     ) { uris -> startProject(uris) }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("FrameNova", fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            BrandMark(Modifier.weight(1f))
             IconButton(onClick = { settings = true }) {
                 Box {
-                    Icon(Icons.Default.Settings, "Settings")
+                    Icon(Icons.Default.Settings, stringResource(R.string.home_settings))
                     if (updates.ui.hasUpdate) Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(Palette.Danger).align(Alignment.TopEnd))
                 }
             }
@@ -155,8 +165,8 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.SystemUpdate, null, tint = Palette.Accent)
                         Spacer(Modifier.width(10.dp))
-                        Text("Version ${updates.ui.version} is available", modifier = Modifier.weight(1f))
-                        TextButton(onClick = { updates.update() }) { Text("Update") }
+                        Text(stringResource(R.string.update_version_available, updates.ui.version.orEmpty()), modifier = Modifier.weight(1f))
+                        TextButton(onClick = { updates.update() }) { Text(stringResource(R.string.update_action)) }
                     }
                 }
             }
@@ -172,14 +182,14 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
                         Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(34.dp))
                         Spacer(Modifier.width(8.dp))
                         Column {
-                            Text("New project", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Pick videos and photos to start", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                            Text(stringResource(R.string.home_new_project), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.home_pick_to_start), color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
                         }
                     }
                 }
             }
             if (projects.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("Your projects appear here. Everything stays on this device.", color = Palette.TextDim, modifier = Modifier.padding(8.dp))
+                Text(stringResource(R.string.home_empty), color = Palette.TextDim, modifier = Modifier.padding(8.dp))
             }
             items(projects, key = { it.id }) { p ->
                 ProjectCard(p, onOpen = { onOpen(p.id) }, onRename = { renaming = p }, onDuplicate = {
@@ -193,7 +203,7 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
         NewProjectDialog(assets, onDismiss = { pending = null }) { canvas ->
             pending = null
             val now = System.currentTimeMillis()
-            val name = "Project " + DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(now))
+            val name = resources.getString(R.string.home_default_project_name, DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(now)))
             val project = Project(id = newId(), name = name, createdAt = now, modifiedAt = now, canvas = canvas).addToMainAt(assets, 0)
             scope.launch {
                 withContext(Dispatchers.IO) { repo.save(project); repo.writeCover(project) }
@@ -205,10 +215,10 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
     deleting?.let { p ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("Delete \"${p.name}\"?") },
-            text = { Text("The project is removed. Your original videos and photos are not touched.") },
-            confirmButton = { TextButton(onClick = { scope.launch { withContext(Dispatchers.IO) { repo.delete(p.id) }; deleting = null; refresh++ } }) { Text("Delete", color = Palette.Danger) } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.home_delete_title, p.name)) },
+            text = { Text(stringResource(R.string.home_delete_message)) },
+            confirmButton = { TextButton(onClick = { scope.launch { withContext(Dispatchers.IO) { repo.delete(p.id) }; deleting = null; refresh++ } }) { Text(stringResource(R.string.common_delete), color = Palette.Danger) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
     if (settings) SettingsDialog(updates, onDismiss = { settings = false })
@@ -234,11 +244,11 @@ private fun ProjectCard(p: ProjectSummary, onOpen: () -> Unit, onRename: () -> U
                 Text("${p.aspect} · ${DateFormat.getDateInstance(DateFormat.SHORT).format(Date(p.modifiedAt))}", color = Palette.TextDim, fontSize = 11.sp)
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.home_more)) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-                    DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; onDuplicate() })
-                    DropdownMenuItem(text = { Text("Delete", color = Palette.Danger) }, onClick = { menu = false; onDelete() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.common_rename)) }, onClick = { menu = false; onRename() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.home_duplicate)) }, onClick = { menu = false; onDuplicate() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.common_delete), color = Palette.Danger) }, onClick = { menu = false; onDelete() })
                 }
             }
         }
@@ -261,22 +271,22 @@ private fun NewProjectDialog(assets: List<MediaAsset>, onDismiss: () -> Unit, on
     var canvas by remember { mutableStateOf(suggestCanvas(assets)) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New project") },
+        title = { Text(stringResource(R.string.home_new_project)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("${assets.size} item(s) selected. Settings are suggested from your first clip.", color = Palette.TextDim, fontSize = 12.sp)
+                Text(pluralStringResource(R.plurals.home_items_selected_hint, assets.size, assets.size), color = Palette.TextDim, fontSize = 12.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("Ratio", color = Palette.TextDim, fontSize = 12.sp)
+                Text(stringResource(R.string.home_ratio), color = Palette.TextDim, fontSize = 12.sp)
                 ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = canvas.aspect == a, onClick = { canvas = canvas.copy(aspect = a) }, label = { Text(a.label) }) } }
-                Text("Resolution", color = Palette.TextDim, fontSize = 12.sp)
+                Text(stringResource(R.string.home_resolution), color = Palette.TextDim, fontSize = 12.sp)
                 ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = canvas.tier == r, onClick = { canvas = canvas.copy(tier = r) }, label = { Text(r.label) }) } }
-                Text("Frame rate", color = Palette.TextDim, fontSize = 12.sp)
-                ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = canvas.fps == f, onClick = { canvas = canvas.copy(fps = f) }, label = { Text("$f fps") }) } }
+                Text(stringResource(R.string.home_frame_rate), color = Palette.TextDim, fontSize = 12.sp)
+                ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = canvas.fps == f, onClick = { canvas = canvas.copy(fps = f) }, label = { Text(stringResource(R.string.home_fps, f)) }) } }
                 Text("${canvas.size.width} × ${canvas.size.height}", color = Palette.TextDim, fontSize = 12.sp)
             }
         },
-        confirmButton = { Button(onClick = { onCreate(canvas) }) { Text("Create") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { Button(onClick = { onCreate(canvas) }) { Text(stringResource(R.string.home_create)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -284,6 +294,7 @@ private fun NewProjectDialog(assets: List<MediaAsset>, onDismiss: () -> Unit, on
 private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
     val ui = updates.ui
     val context = LocalContext.current
+    val devEnabledMessage = stringResource(R.string.home_dev_enabled)
     var devTools by remember { mutableStateOf(DevTools.enabled(context)) }
     var versionTaps by remember { mutableIntStateOf(0) }
     var showLog by remember { mutableStateOf(false) }
@@ -295,7 +306,7 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
         if (++versionTaps >= DevTools.UNLOCK_TAPS) {
             DevTools.enable(context)
             devTools = true
-            android.widget.Toast.makeText(context, "Developer tools enabled", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, devEnabledMessage, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     if (showLog) DevLogPanel { showLog = false }
@@ -304,20 +315,20 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
         title = { Text("FrameNova") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", versionModifier, color = Palette.TextDim, fontSize = 13.sp)
+                Text(stringResource(R.string.home_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE), versionModifier, color = Palette.TextDim, fontSize = 13.sp)
                 Spacer(Modifier.height(12.dp))
                 if (updates.enabled) {
-                    Text("Updates · " + when (ui.source) { UpdateSource.LAN -> "local network"; UpdateSource.PLAY -> "Google Play"; UpdateSource.GITHUB -> "GitHub releases"; UpdateSource.NONE -> "" }, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.update_heading, when (ui.source) { UpdateSource.LAN -> stringResource(R.string.update_source_lan); UpdateSource.PLAY -> stringResource(R.string.update_source_play); UpdateSource.GITHUB -> stringResource(R.string.update_source_github); UpdateSource.NONE -> "" }), fontWeight = FontWeight.Medium)
                     Text(
                         when (ui.phase) {
-                            UpdatePhase.IDLE -> "Check for a newer version"
-                            UpdatePhase.CHECKING -> "Checking for updates…"
-                            UpdatePhase.CURRENT -> "You're up to date"
-                            UpdatePhase.AVAILABLE -> "Version ${ui.version} is available"
-                            UpdatePhase.DOWNLOADING -> "Downloading update… ${ui.percent}%"
-                            UpdatePhase.PERMISSION -> "Allow installs from FrameNova, then return here."
-                            UpdatePhase.INSTALLING -> "Confirm the installation in Android."
-                            UpdatePhase.ERROR -> "Could not check or install the update: ${ui.error ?: "unknown error"}"
+                            UpdatePhase.IDLE -> stringResource(R.string.update_idle)
+                            UpdatePhase.CHECKING -> stringResource(R.string.update_checking)
+                            UpdatePhase.CURRENT -> stringResource(R.string.update_current)
+                            UpdatePhase.AVAILABLE -> stringResource(R.string.update_version_available, ui.version.orEmpty())
+                            UpdatePhase.DOWNLOADING -> stringResource(R.string.update_downloading, ui.percent)
+                            UpdatePhase.PERMISSION -> stringResource(R.string.update_permission)
+                            UpdatePhase.INSTALLING -> stringResource(R.string.update_installing)
+                            UpdatePhase.ERROR -> stringResource(R.string.update_error, ui.error ?: stringResource(R.string.update_unknown_error))
                         },
                         color = Palette.TextDim, fontSize = 13.sp,
                     )
@@ -325,51 +336,73 @@ private fun SettingsDialog(updates: AppUpdates, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Row {
                         if (ui.hasUpdate) Button(onClick = { updates.update() }, enabled = ui.phase != UpdatePhase.DOWNLOADING) {
-                            Text(if (ui.phase == UpdatePhase.PERMISSION || ui.phase == UpdatePhase.INSTALLING) "Continue installation" else "Update now")
+                            Text(stringResource(if (ui.phase == UpdatePhase.PERMISSION || ui.phase == UpdatePhase.INSTALLING) R.string.update_continue_install else R.string.update_now))
                         }
-                        else TextButton(onClick = { updates.check(true) }, enabled = ui.phase != UpdatePhase.CHECKING) { Text("Check for updates") }
+                        else TextButton(onClick = { updates.check(true) }, enabled = ui.phase != UpdatePhase.CHECKING) { Text(stringResource(R.string.update_check)) }
                     }
                 } else {
-                    Text("This build doesn't update itself. Debug builds update over the local network when built with a LAN update host.", color = Palette.TextDim, fontSize = 13.sp)
+                    Text(stringResource(R.string.update_unsupported), color = Palette.TextDim, fontSize = 13.sp)
                 }
                 if (devTools) {
                     Spacer(Modifier.height(16.dp))
                     HorizontalDivider()
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Developer tools", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.home_dev_tools), Modifier.weight(1f), fontWeight = FontWeight.Medium)
                         // Turning them off locks them again; ten taps on the version unlock them.
                         Switch(true, { DevTools.disable(context); devTools = false; versionTaps = 0 })
                     }
-                    OutlinedButton(onClick = { showLog = true }) { Text("Developer logs") }
-                    OutlinedButton(onClick = { scope.launch { saveLogToast(context) } }) { Text("Save logs") }
+                    OutlinedButton(onClick = { showLog = true }) { Text(stringResource(R.string.home_dev_logs)) }
+                    OutlinedButton(onClick = { scope.launch { saveLogToast(context) } }) { Text(stringResource(R.string.home_save_logs)) }
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { licensesExpanded = !licensesExpanded },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Licenses", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.home_licenses), Modifier.weight(1f), fontWeight = FontWeight.Medium)
                     Icon(
                         if (licensesExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                        if (licensesExpanded) "Hide license details" else "Show license details",
+                        stringResource(if (licensesExpanded) R.string.home_licenses_hide else R.string.home_licenses_show),
                     )
                 }
                 Text(
-                    "FrameNova is source-available under the PolyForm Strict License 1.0.0.",
+                    stringResource(R.string.home_license_summary),
                     color = Palette.TextDim, fontSize = 12.sp,
                 )
                 if (licensesExpanded) {
                     Text(
-                        "Uses AndroidX Media3, Jetpack Compose and Kotlin libraries (Apache License 2.0).\n" +
-                            "Fonts, all under the SIL Open Font License 1.1: " +
-                            com.framenova.app.engine.FontCatalog.all.filter { it.group != com.framenova.app.engine.FontGroup.SYSTEM }
-                                .joinToString(", ") { it.name } + ".",
+                        stringResource(R.string.home_license_libraries) + "\n" +
+                            stringResource(
+                                R.string.home_license_fonts,
+                                com.framenova.app.engine.FontCatalog.all.filter { it.group != com.framenova.app.engine.FontGroup.SYSTEM }
+                                    .joinToString(", ") { it.name },
+                            ),
                         color = Palette.TextDim, fontSize = 12.sp,
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) } },
     )
+}
+
+/** The app icon followed by the FrameNova wordmark: heavy, tightly spaced letters, with "Nova" in the icon's gradient. */
+@Composable
+fun BrandMark(modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            painterResource(R.drawable.brand_icon), null,
+            Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            buildAnnotatedString {
+                append("Frame")
+                withStyle(SpanStyle(brush = Brush.linearGradient(listOf(Palette.Accent, Color(0xFF4F7CFF), Palette.Teal)))) { append("Nova") }
+            },
+            fontSize = 27.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.8).sp,
+            modifier = Modifier.semantics { contentDescription = "FrameNova" },
+        )
+    }
 }

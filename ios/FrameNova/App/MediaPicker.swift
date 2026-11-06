@@ -7,7 +7,7 @@ struct LibraryAlbum:Identifiable {
     let cover:PHAsset
     let count:Int
     var id:String {collection.localIdentifier}
-    var name:String {collection.localizedTitle ?? "Album"}
+    var name:String {collection.localizedTitle ?? String(localized: "Album")}
 }
 
 @MainActor final class PhotoLibraryModel:NSObject,ObservableObject,PHPhotoLibraryChangeObserver {
@@ -73,7 +73,7 @@ struct LibraryAlbum:Identifiable {
             let assets = PHAsset.fetchAssets(withLocalIdentifiers:ids,options:nil)
             var index:[String:PHAsset] = [:];assets.enumerateObjects {asset,_,_ in index[asset.localIdentifier] = asset}
             for (offset,id) in ids.enumerated() {
-                guard let asset = index[id] else {failures.append("An item is no longer available in the library.");continue}
+                guard let asset = index[id] else {failures.append(String(localized: "An item is no longer available in the library."));continue}
                 do {
                     let resources = PHAssetResource.assetResources(for:asset)
                     let type:PHAssetResourceType = asset.mediaType == .video ? .video:.photo
@@ -114,7 +114,7 @@ struct MediaPicker:View {
         NavigationStack {
             VStack(spacing:8) {
                 if !imagesOnly {
-                    Picker("Media type",selection:$filter) {ForEach(["Library","Photos","Videos"],id:\.self) {Text($0)}}
+                    Picker("Media type",selection:$filter) {ForEach(["Library","Photos","Videos"],id:\.self) {Text(loc($0)).tag($0)}}
                         .pickerStyle(.segmented).padding(.horizontal).accessibilityIdentifier("media.filters")
                 }
                 HStack {
@@ -122,7 +122,7 @@ struct MediaPicker:View {
                     Menu {
                         Button("Recent") {section = "recent";album = ""}
                         Button("Albums") {section = "albums";album = ""}
-                    } label:{Label(section == "recent" ? "Recent" : library.albums.first(where:{$0.id == album})?.name ?? "Albums",systemImage:"chevron.down")}
+                    } label:{Label(section == "recent" ? loc("Recent") : library.albums.first(where:{$0.id == album})?.name ?? loc("Albums"),systemImage:"chevron.down")}
                     Spacer()
                     if !chosen.ids.isEmpty {Button("Clear") {chosen.clear()}}
                     Menu {
@@ -137,7 +137,7 @@ struct MediaPicker:View {
                 }
                 if !library.allowed {
                     Spacer();Text("Allow access to your videos and photos to browse them here.").multilineTextAlignment(.center).padding()
-                    Button(library.access == .denied ? "Open Settings":"Allow access") {
+                    Button(library.access == .denied ? loc("Open Settings"):loc("Allow access")) {
                         if library.access == .denied,let url = URL(string:UIApplication.openSettingsURLString) {UIApplication.shared.open(url)}
                         else {Task {await library.request()}}
                     }.buttonStyle(.borderedProminent);Spacer()
@@ -154,7 +154,7 @@ struct MediaPicker:View {
                 HStack {
                     Text("\(chosen.ids.count) selected").font(.caption).foregroundStyle(Palette.dim)
                     Spacer()
-                    Button("Add\(chosen.ids.isEmpty ? "" : " (\(chosen.ids.count))")") {
+                    Button(chosen.ids.isEmpty ? loc("Add") : String(localized: "Add (\(chosen.ids.count))")) {
                         library.choose(chosen.ids) {media,error in completion(media,error);dismiss()}
                     }.buttonStyle(.borderedProminent).disabled(chosen.ids.isEmpty)
                 }.padding()

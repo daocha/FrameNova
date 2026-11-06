@@ -13,6 +13,7 @@ final class FrameRenderer {
     func render(_ instruction: FrameInstruction, at time: Int64, frame: (Int32) -> CIImage?) throws -> CIImage {
         let p = instruction.project, bounds = CGRect(origin:.zero,size:instruction.renderSize)
         var result = CIImage(color:CIColor(color:UIColor(argb:p.canvas.background))).cropped(to:bounds)
+        if instruction.showsCover,time < 1_000_000/Int64(max(1,p.canvas.fps))*3/4,let cover = coverImage(p,bounds:bounds) {return cover.composited(over:result).cropped(to:bounds)}
         for track in p.tracks.reversed() where !track.hidden && track.kind != .audio {
             var clips = track.clips.filter { $0.contains(time) }
             if track.kind == .main {clips.sort {a,b in
@@ -71,6 +72,16 @@ final class FrameRenderer {
             }
         }
         return result
+    }
+    /// The cover photo placed in the frame as the project's cover framing says, or nil if there is no cover photo.
+    private func coverImage(_ p: Project, bounds: CGRect) -> CIImage? {
+        guard let media = p.asset(p.coverAssetID),media.type == .image,
+              let photo = CIImage(contentsOf:ProjectStore.mediaURL(media.path),options:[.applyOrientationProperty:true]) else {return nil}
+        let source = photo.transformed(by:CGAffineTransform(translationX:-photo.extent.minX,y:-photo.extent.minY))
+        let at = p.framing.placement(photo:source.extent.size,frame:bounds.size)
+        // Core Image's origin is the bottom left, the placement's the top left.
+        return source.transformed(by:CGAffineTransform(scaleX:at.width/source.extent.width,y:at.height/source.extent.height))
+            .transformed(by:CGAffineTransform(translationX:at.minX,y:bounds.height-at.maxY))
     }
     private func grade(_ source: CIImage, clip: Clip) -> CIImage {
         let a = clip.adjust

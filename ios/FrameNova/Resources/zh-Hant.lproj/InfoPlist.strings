@@ -1,0 +1,5 @@
+/* Traditional Chinese (Taiwan). Permission texts shown by the system; the app name is not translated. */
+"CFBundleDisplayName" = "FrameNova";
+"NSMicrophoneUsageDescription" = "錄製旁白，加入你的專案。";
+"NSPhotoLibraryAddUsageDescription" = "將匯出的影片儲存到你的照片圖庫。";
+"NSPhotoLibraryUsageDescription" = "瀏覽並選取要在專案中編輯的影片與照片。";

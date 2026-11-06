@@ -6,6 +6,18 @@ typealias ViewState<Value> = SwiftUI.State<Value>
 typealias EditorFocus<Value: Hashable> = SwiftUI.FocusState<Value>
 
 extension Color { init(argb:UInt32) { self.init(uiColor:UIColor(argb:argb)) } }
+/// The app icon followed by the FrameNova wordmark: heavy, rounded letters, with "Nova" in the icon's gradient.
+struct BrandMark: View {
+    var body: some View {
+        HStack(spacing:9) {
+            Image("BrandIcon").resizable().frame(width:30,height:30).clipShape(RoundedRectangle(cornerRadius:7,style:.continuous))
+            (Text("Frame").foregroundStyle(.white)
+                + Text("Nova").foregroundStyle(LinearGradient(colors:[Palette.accent,Color(argb:0xFF4F7CFF),Palette.teal],startPoint:.leading,endPoint:.trailing)))
+                .font(.system(size:24,weight:.black,design:.rounded)).tracking(-0.6)
+        }.accessibilityElement(children:.ignore).accessibilityLabel("FrameNova")
+    }
+}
+
 enum Palette {
     static let accent = Color(argb:0xFF8B6CFF), teal = Color(argb:0xFF2FD1C1), bg = Color(argb:0xFF0E0E12)
     static let surface = Color(argb:0xFF17171D), surface2 = Color(argb:0xFF202028), dim = Color(argb:0xFF9B9BA8)
@@ -65,7 +77,7 @@ struct HomeView: View {
                                     Spacer(minLength:0)
                                     Menu {
                                         Button("Rename") { name = project.name; renaming = project }
-                                        Button("Duplicate") { var copy = project; copy.id = newID(); copy.name += " copy"; do { try store.save(copy) } catch { store.error = error.localizedDescription } }
+                                        Button("Duplicate") { var copy = project; copy.id = newID(); copy.name = String(localized: "\(project.name) copy"); do { try store.save(copy) } catch { store.error = error.localizedDescription } }
                                         Button("Delete",role:.destructive) { deleting = project }
                                     } label: { Image(systemName:"ellipsis").padding(8) }
                                 }.padding(10)
@@ -87,8 +99,8 @@ struct HomeView: View {
                         }.padding(.bottom,12)
                     }
                 }.padding(16).frame(maxWidth:1400).frame(maxWidth:.infinity)
-            }.background(Palette.bg).navigationTitle("FrameNova").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape") }.accessibilityLabel("Settings") } }
+            }.background(Palette.bg).navigationTitle("").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement:.topBarLeading) { BrandMark() }; ToolbarItem(placement:.primaryAction) { Button { settings = true } label: { Image(systemName:"gearshape") }.accessibilityLabel("Settings") } }
                 .navigationDestination(isPresented:Binding(get:{selected != nil},set:{if !$0 {selected = nil}})) { if let project = selected { EditorView(project:project,store:store) } }
         }
         }
@@ -108,7 +120,7 @@ struct HomeView: View {
         .sheet(isPresented:Binding(get:{ !pending.isEmpty },set:{ if !$0 { pending = [] } })) {
             NavigationStack { CanvasControls(canvas:$canvas).navigationTitle("New project").toolbar {
                 ToolbarItem(placement:.cancellationAction) { Button("Cancel") { pending = [] } }
-                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:"Project "+Date().formatted(date:.abbreviated,time:.omitted),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
+                ToolbarItem(placement:.confirmationAction) { Button("Create") { var p = Project(name:String(localized: "Project \(Date().formatted(date:.abbreviated,time:.omitted))"),canvas:canvas); p.add(pending,kind:.main,at:0); do { try store.save(p);Task {_ = await store.cover(p)}; pending = []; selected = p } catch { store.error = error.localizedDescription } } }
             } }.presentationDetents([.medium,.large])
         }
         .sheet(isPresented:$settings) { SettingsView() }
@@ -164,7 +176,7 @@ struct SettingsView: View {
         Section("Licenses") {
             Text("FrameNova is source-available under the PolyForm Strict License 1.0.0.")
             DisclosureGroup("License details") {
-                Text(Bundle.main.url(forResource:"LICENSE",withExtension:nil).flatMap {try? String(contentsOf:$0,encoding:.utf8)} ?? "License unavailable.").font(.caption)
+                Text(Bundle.main.url(forResource:"LICENSE",withExtension:nil).flatMap {try? String(contentsOf:$0,encoding:.utf8)} ?? loc("License unavailable.")).font(.caption)
             }
             Text("Bundled and downloadable fonts use the SIL Open Font License 1.1.").font(.footnote)
         }
