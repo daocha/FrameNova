@@ -52,6 +52,8 @@ struct InspectorView: View {
     var onDone:(()->Void)? = nil
     /// Set when the panel slides over the editor: dragging its header reports the drag, and whether it has ended.
     var onHeaderDrag:((DragGesture.Value,Bool)->Void)? = nil
+    /// Asks the cover panel to open its photo choice (the Mac timeline's empty cover tile).
+    var choosePhoto:Binding<Bool>? = nil
     @ViewState<String?> private var childPanel:String?
     private var page:String {childPanel ?? panel}
     /// The names Android gives its panels.
@@ -68,7 +70,8 @@ struct InspectorView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
             VStack(spacing:0) {
-                if onHeaderDrag != nil {Capsule().fill(Palette.dim.opacity(0.5)).frame(width:36,height:4).padding(.top,8).accessibilityHidden(true)}
+                // The handle's area is generous, so the top of the panel is easy to grab.
+                if onHeaderDrag != nil {Capsule().fill(Palette.dim.opacity(0.5)).frame(width:36,height:4).padding(.top,8).frame(maxWidth:.infinity,minHeight:28,alignment:.top).contentShape(Rectangle()).accessibilityHidden(true)}
                 // Android's panel header: the title, the panel's own actions, then a check mark in the accent colour.
                 HStack(spacing:0) {
                     if childPanel != nil {Button {childPanel = nil} label:{Image(systemName:"chevron.left").frame(width:32,height:48)}.accessibilityLabel("Back")}
@@ -81,6 +84,8 @@ struct InspectorView: View {
                 .gesture(DragGesture(minimumDistance:6,coordinateSpace:.global).onChanged {onHeaderDrag?($0,false)}.onEnded {onHeaderDrag?($0,true)},isEnabled:onHeaderDrag != nil)
             ScrollView {VStack(alignment:.leading,spacing:8) {content}.frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,16).padding(.vertical,4)}
         }.background(Palette.surface)
+            // Takes every touch on the panel when it slides over the editor, so nothing underneath reacts to a drag here.
+            .contentShape(Rectangle()).onTapGesture {}
             .environment(\.editGestureActions,EditGestureActions(begin:model.beginGesture,end:model.endGesture))
             .onChange(of:panel) {_,_ in childPanel = nil}
             .onDisappear {model.endGesture();if page == "Voiceover" && model.recording {model.toggleRecording()}}
@@ -108,7 +113,7 @@ struct InspectorView: View {
     @ViewBuilder var content:some View {
         switch page {
         case "Cover":
-            CoverPanel(model:model)
+            CoverPanel(model:model,choosePhoto:choosePhoto)
         case "Ratio":
             CanvasControls(canvas:Binding(get:{model.project.canvas},set:{v in model.change {$0.canvas = v}}))
         case "Speed":
@@ -311,7 +316,7 @@ struct ExportView: View {
             TextAction(title:loc("Done"),prominent:true) {dismiss()}
         } else if exporter.error != nil {TextAction(title:loc("OK"),prominent:true) {exporter.error = nil}}
         else {
-            TextAction(title:loc("Cancel")) {dismiss()}
+            TextAction(title:loc("Cancel")) {dismiss()}.keyboardShortcut(.cancelAction)
             FilledAction(title:loc("Export")) {exporter.start(project,settings:settings)}
         }
     }

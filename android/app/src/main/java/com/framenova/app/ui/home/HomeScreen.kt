@@ -167,7 +167,8 @@ fun HomeScreen(updates: AppUpdates, onOpen: (String) -> Unit) {
                         Icon(Icons.Default.SystemUpdate, null, tint = Palette.Accent)
                         Spacer(Modifier.width(10.dp))
                         Text(stringResource(R.string.update_version_available, updates.ui.version.orEmpty()), modifier = Modifier.weight(1f))
-                        TextButton(onClick = { updates.update() }) { Text(stringResource(R.string.update_action)) }
+                        // The settings panel shows the download progress and the install steps, so it opens with the update.
+                        TextButton(onClick = { settings = true; updates.update() }) { Text(stringResource(R.string.update_action)) }
                     }
                 }
             }

@@ -100,8 +100,11 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+/** What the slide-up panel gives its header, so dragging the title row down hides the panel. */
+val LocalPanelHeaderModifier = androidx.compose.runtime.compositionLocalOf<Modifier> { Modifier }
+
 @Composable
-fun PanelScaffold(title: String, onDone: () -> Unit, modifier: Modifier = Modifier, headerModifier: Modifier = Modifier, actions: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+fun PanelScaffold(title: String, onDone: () -> Unit, modifier: Modifier = Modifier, headerModifier: Modifier = LocalPanelHeaderModifier.current, actions: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxWidth().background(Palette.Surface)) {
         Row(headerModifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

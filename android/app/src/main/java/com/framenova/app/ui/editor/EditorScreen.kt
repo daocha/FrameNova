@@ -63,6 +63,8 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -204,8 +206,8 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
         }
     }
 
-    val panelContent: @Composable () -> Unit = {
-        when (vm.panel) {
+    val panelContent: @Composable (Panel) -> Unit = { shown ->
+        when (shown) {
             Panel.COVER -> CoverPanel(vm) { pickMedia(ImportTarget.COVER) }
             Panel.SPEED -> SpeedPanel(vm)
             Panel.VOLUME -> VolumePanel(vm)
@@ -230,8 +232,8 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
         val needsClip = vm.panel in setOf(Panel.SPEED, Panel.VOLUME, Panel.ADJUST, Panel.FILTER, Panel.CROP, Panel.TRANSFORM, Panel.TEXT_EDIT, Panel.TEXT_FONT, Panel.TEXT_STYLE, Panel.TEXT_ANIM)
         if (needsClip && vm.selectedClip == null) vm.panel = Panel.NONE
     }
-    // The cover panel slides over the editor instead of sharing the screen with it.
-    val showPanel = vm.panel != Panel.NONE && vm.panel != Panel.EXPORT && vm.panel != Panel.COVER
+    // Every panel slides up over the editor instead of sharing the screen with it, so the preview keeps its size.
+    val showPanel = vm.panel != Panel.NONE && vm.panel != Panel.EXPORT
 
     // One preview for every layout: moving it between layouts keeps its view, where a new one starts out blank.
     val preview = remember(vm) { movableContentOf { m: Modifier -> PreviewPane(vm, m) } }
@@ -269,26 +271,13 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 }
                 vm.panel = Panel.EXPORT
             })
-            // While text is edited (words, font, style, animation, stickers), the preview takes the whole space above the
-            // panel, so the result is easy to see.
-            val textFocus = vm.panel in setOf(Panel.TEXT_EDIT, Panel.TEXT_FONT, Panel.TEXT_STYLE, Panel.TEXT_ANIM, Panel.STICKER)
             if (vm.fullscreen) {
                 preview(Modifier.fillMaxWidth().weight(1f))
                 TransportBar(vm)
-            } else if (textFocus && landscape) {
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    preview(Modifier.weight(1f).fillMaxHeight())
-                    Box(Modifier.width(380.dp).fillMaxHeight().background(Palette.Surface)) { panelContent() }
-                }
-            } else if (textFocus) {
-                preview(Modifier.fillMaxWidth().weight(1f))
-                Box(Modifier.fillMaxWidth().heightIn(min = 76.dp, max = screenH * 0.42f)) { panelContent() }
             } else if (landscape) {
                 Row(Modifier.fillMaxWidth().weight(0.56f)) {
                     preview(Modifier.weight(1f).fillMaxHeight())
-                    Box(Modifier.width(380.dp).fillMaxHeight().background(Palette.Surface)) {
-                        if (showPanel) panelContent() else ToolGrid(tools)
-                    }
+                    Box(Modifier.width(380.dp).fillMaxHeight().background(Palette.Surface)) { ToolGrid(tools) }
                 }
                 TransportBar(vm)
                 timeline(Modifier.fillMaxWidth().weight(0.44f))
@@ -296,17 +285,18 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                 preview(Modifier.fillMaxWidth().weight(1f))
                 TransportBar(vm)
                 timeline(Modifier.fillMaxWidth().height((screenH * 0.3f).coerceIn(180.dp, 320.dp)))
-                Box(Modifier.fillMaxWidth().heightIn(min = 76.dp, max = screenH * 0.34f)) {
-                    if (showPanel) panelContent() else ToolRow(tools)
-                }
+                Box(Modifier.fillMaxWidth().heightIn(min = 76.dp, max = screenH * 0.34f)) { ToolRow(tools) }
             }
         }
 
-        // How far the cover panel has been dragged down; it starts at rest each time the panel opens.
+        // How far the panel has been dragged down; it starts at rest each time a panel opens.
         var coverDrag by remember { mutableFloatStateOf(0f) }
-        LaunchedEffect(vm.panel) { if (vm.panel == Panel.COVER) coverDrag = 0f }
+        // The panel last shown, kept while it slides away.
+        var shownPanel by remember { mutableStateOf(Panel.COVER) }
+        LaunchedEffect(vm.panel) { if (vm.panel != Panel.NONE && vm.panel != Panel.EXPORT) shownPanel = vm.panel }
+        LaunchedEffect(showPanel) { if (showPanel) coverDrag = 0f }
         AnimatedVisibility(
-            visible = vm.panel == Panel.COVER,
+            visible = showPanel && !vm.fullscreen,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = slideInVertically(tween(260)) { it } + fadeIn(tween(200)),
             exit = slideOutVertically(tween(220)) { it } + fadeOut(tween(180)),
@@ -315,19 +305,26 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
             val hideThreshold = with(LocalDensity.current) { (screenH * 0.12f).toPx() }
             val swipeDown = Modifier.pointerInput(Unit) {
                 detectVerticalDragGestures(
-                    onDragEnd = { if (coverDrag > hideThreshold) vm.panel = Panel.NONE else coverDrag = 0f },
+                    onDragEnd = {
+                        if (coverDrag > hideThreshold) { if (vm.recording) vm.stopRecording(); vm.endGesture(); vm.panel = Panel.NONE } else coverDrag = 0f
+                    },
                     onDragCancel = { coverDrag = 0f },
                 ) { change, amount -> change.consume(); coverDrag = (coverDrag + amount).coerceAtLeast(0f) }
             }
             Column(
                 Modifier.fillMaxWidth().height(screenH * 0.6f).offset { IntOffset(0, coverDrag.roundToInt()) }
                     .shadow(16.dp, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Palette.Surface),
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Palette.Surface)
+                    // Takes every touch on the panel, so a drag here never reaches the preview or timeline underneath.
+                    .pointerInput(Unit) { detectTapGestures { } },
             ) {
-                Box(swipeDown.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Palette.TextDim.copy(alpha = 0.5f)))
+                // The handle and the header both swipe the panel down; the handle's area is generous, so the top is easy to grab.
+                Box(swipeDown.fillMaxWidth().height(28.dp), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.padding(top = 8.dp).width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Palette.TextDim.copy(alpha = 0.5f)))
                 }
-                CoverPanel(vm, swipeDown) { pickMedia(ImportTarget.COVER) }
+                CompositionLocalProvider(LocalPanelHeaderModifier provides swipeDown) {
+                    if (shownPanel == Panel.COVER) CoverPanel(vm, swipeDown) { pickMedia(ImportTarget.COVER) } else panelContent(shownPanel)
+                }
             }
         }
 

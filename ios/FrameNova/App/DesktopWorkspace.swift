@@ -21,6 +21,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @AppStorage("desktop.timelineHeight") private var timelineHeight = 540.0
     @AppStorage("desktop.timelineHeightDefaultVersion") private var timelineHeightDefaultVersion = 0
     @ViewState<Double> private var availableWidth = 1000
+    @ViewState<Bool> private var chooseCoverPhoto = false
 
     private var panels: [String] {
         guard let clip = model.clip else { return ["Ratio", "Cover", "Layout", "Stickers", "Voiceover"] }
@@ -61,6 +62,8 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                     timelineToolbar
                     TimelineView(model: model, display: timeline, desktop: true,onCover:{
                         model.selected = nil;model.selectedGap = nil;panel = "Cover";showInspector = true
+                        // An empty tile (the plus) goes straight to choosing a photo.
+                        if model.project.asset(model.project.coverAssetID)?.type != .image {chooseCoverPhoto = true}
                     })
                 }.frame(height: clamp(timelineHeight, 160, timelineLimit))
             }
@@ -113,7 +116,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 Text("Command-click to add or remove clips. Use Delete, Duplicate or To new layer for the selected clips.")
                     .font(.caption).foregroundStyle(Palette.dim).padding(12)
                 Spacer()
-            } else {InspectorView(model: model, panel: panel).id(panel)
+            } else {InspectorView(model: model, panel: panel, choosePhoto: $chooseCoverPhoto).id(panel)
                 .disabled(model.selected.map { model.project.track($0)?.locked == true } == true && panel != "Ratio" && panel != "Cover")
             }
         }.background(Palette.surface).accessibilityIdentifier("desktop.inspector")
