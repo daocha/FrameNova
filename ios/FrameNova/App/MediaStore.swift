@@ -35,7 +35,8 @@ final class ProjectStore: ObservableObject {
     }
     func coverKey(_ project:Project)->String {
         guard let source = coverSource(project) else {return "empty"}
-        return MediaThumbnailStore.sourceKey(source.asset)+"-\(source.time)"
+        let framing = project.asset(project.coverAssetID)?.type == .image ? "-\(project.framing.zoom)-\(project.framing.panX)-\(project.framing.panY)-\(project.canvas.aspect.rawValue)":""
+        return MediaThumbnailStore.sourceKey(source.asset)+"-\(source.time)"+framing
     }
     func coverURL(_ project:Project)->URL {
         directory.appendingPathComponent("Covers").appendingPathComponent(project.id,isDirectory:true).appendingPathComponent(coverKey(project)+".jpg")
@@ -44,7 +45,13 @@ final class ProjectStore: ObservableObject {
         guard let source = coverSource(project) else {return nil}
         let file = coverURL(project)
         if let image = await Task.detached(priority:.utility,operation:{UIImage(contentsOfFile:file.path)}).value {return image}
-        guard let image = await MediaThumbnailStore.shared.image(source.asset,at:source.time,size:.cover) else {return nil}
+        guard var image = await MediaThumbnailStore.shared.image(source.asset,at:source.time,size:.cover) else {return nil}
+        if source.asset.type == .image {
+            // Shaped like the video and placed as the cover framing says, as in the export.
+            let ratio = project.canvas.aspect.ratio,frame = CGSize(width:360*ratio,height:360),at = project.framing.placement(photo:image.size,frame:frame)
+            let format = UIGraphicsImageRendererFormat();format.scale = 1
+            image = UIGraphicsImageRenderer(size:frame,format:format).image {_ in image.draw(in:at)}
+        }
         guard FileManager.default.fileExists(atPath:directory.appendingPathComponent(project.id+".json").path) else {return image}
         await Task.detached(priority:.utility) {
             let folder = file.deletingLastPathComponent()
@@ -85,5 +92,5 @@ final class ProjectStore: ObservableObject {
 }
 enum MediaError: LocalizedError {
     case invalid, export, missing(String)
-    var errorDescription: String? { switch self { case .invalid: return "This media cannot be opened."; case .export: return "The export could not be created."; case .missing(let name): return "Missing media: \(name)" } }
+    var errorDescription: String? { switch self { case .invalid: return String(localized: "This media cannot be opened."); case .export: return String(localized: "The export could not be created."); case .missing(let name): return String(localized: "Missing media: \(name)") } }
 }

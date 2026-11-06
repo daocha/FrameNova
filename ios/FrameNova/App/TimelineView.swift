@@ -48,15 +48,18 @@ struct TimelineView: View {
                     headers
                     ScrollViewReader { reader in
                         ScrollView(.horizontal) {
-                            VStack(alignment: .leading, spacing: 5) {
-                                ForEach(model.project.tracks) { track in trackRow(track, width: width) }
-                                if desktop {
-                                    newTrackRow(.overlay, width: width)
-                                    newTrackRow(.audio, width: width)
+                            HStack(alignment:.top,spacing:0) {
+                                coverColumn
+                                VStack(alignment: .leading, spacing: 5) {
+                                    ForEach(model.project.tracks) { track in trackRow(track, width: width) }
+                                    if desktop {
+                                        newTrackRow(.overlay, width: width)
+                                        newTrackRow(.audio, width: width)
+                                    }
                                 }
+                                .overlay(alignment: .topLeading) { playhead }
+                                .background(GeometryReader {proxy in Color.clear.preference(key:TimelineOffsetKey.self,value:-proxy.frame(in:.named("timeline.scrollViewport")).minX)})
                             }
-                            .overlay(alignment: .topLeading) { playhead }
-                            .background(GeometryReader {proxy in Color.clear.preference(key:TimelineOffsetKey.self,value:-proxy.frame(in:.named("timeline.scrollViewport")).minX)})
                         }
                         .coordinateSpace(name:"timeline.scrollViewport")
                         .onPreferenceChange(TimelineOffsetKey.self) {horizontalOffset = $0}
@@ -102,19 +105,12 @@ struct TimelineView: View {
             ForEach(model.project.tracks) { track in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing:6) {
-                        Text(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized).font(.caption2.bold())
-                        if desktop && track.kind == .main {
-                            Spacer(minLength:0)
-                            Button(action:onCover) {Label("Cover",systemImage:"plus").font(.system(size:10,weight:.semibold))}
-                                .buttonStyle(.plain).foregroundStyle(Palette.accent)
-                                .accessibilityLabel("Add or edit cover").accessibilityIdentifier("desktop.mainCover")
-                                .help("Choose a cover image")
-                        }
+                        Text(loc(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized)).font(.caption2.bold())
                     }
                     HStack(spacing: desktop ? 16 : 8) {
-                        trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: "Mute track")
-                        trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: "Hide track")
-                        trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: track.locked ? "Unlock track" : "Lock track")
+                        trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: loc("Mute track"))
+                        trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: loc("Hide track"))
+                        trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: track.locked ? loc("Unlock track") : loc("Lock track"))
                     }.font(.system(size: desktop ? 12 : 10))
                 }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(track.locked ? Color.gray.opacity(0.2):Palette.surface2)
             }
@@ -167,6 +163,28 @@ struct TimelineView: View {
         }.frame(width:width,height:desktop ? 64:28)
     }
 
+    private var coverWidth: Double {rowHeight*model.project.canvas.aspect.ratio+6}
+    /// The video's cover, shown like a clip in the main layer just before time zero; a plus marks that none is set yet.
+    private var coverColumn: some View {
+        VStack(spacing:5) {
+            ForEach(model.project.tracks) {track in
+                if track.kind == .main {
+                    Button(action:onCover) {
+                        ZStack {
+                            if let asset = model.project.asset(model.project.coverAssetID),asset.type == .image {FramedCover(asset:asset,framing:model.project.framing)}
+                            else {Palette.surface2;Image(systemName:"plus").font(.title3).foregroundStyle(Palette.accent)}
+                        }
+                        .frame(width:coverWidth-6,height:rowHeight).clipShape(RoundedRectangle(cornerRadius:6))
+                        .overlay {RoundedRectangle(cornerRadius:6).stroke(Palette.accent.opacity(0.8),lineWidth:2)}
+                        .overlay(alignment:.topLeading) {Text("Cover").font(.system(size:10)).foregroundStyle(.white).shadow(radius:2).padding(4)}
+                    }.buttonStyle(.plain).padding(.trailing,6)
+                        .accessibilityLabel("Add or edit cover").accessibilityIdentifier("desktop.mainCover")
+                        .help("Choose the cover image of the exported video")
+                } else {Color.clear.frame(width:coverWidth,height:rowHeight)}
+            }
+        }.frame(width:coverWidth)
+    }
+
     private var playhead: some View {
         HStack(spacing:0) {
             Color.clear.frame(width:x(model.playhead))
@@ -206,7 +224,7 @@ struct TimelineView: View {
         let id = "new-" + kind.rawValue
         return ZStack(alignment: .leading) {
             Palette.surface2.opacity(0.4)
-            Text(kind == .audio ? "Drop sound here to add an audio track" : "Drop video or a photo here to add a layer")
+            Text(kind == .audio ? loc("Drop sound here to add an audio track") : loc("Drop video or a photo here to add a layer"))
                 .font(.caption2).foregroundStyle(Palette.dim).padding(.leading, 12)
             if hoveredTrack == id, let dropTime { dropMarker(dropTime) }
         }.frame(width: width, height: 36)
@@ -228,7 +246,7 @@ struct TimelineView: View {
         return HStack(spacing: 0) {
             if selected && model.selectedIDs.count == 1 && !track.locked && slice.showsStart { handle(clip, start: true) }
             VStack(alignment: .leading, spacing: 4) {
-                Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip").font(.caption2).lineLimit(1)
+                Text(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? loc("Clip")).font(.caption2).lineLimit(1)
                 if desktop && rowHeight >= 64 {
                     Text("\(formatTime(clip.durationUs))\(clip.speed == 1 ? "" : " · \(clip.speed.formatted())×")").font(.system(size: 9)).foregroundStyle(.white.opacity(0.65))
                 }
@@ -286,7 +304,7 @@ struct TimelineView: View {
             Button("Duplicate") { model.selectClip(clip.id); model.duplicateSelected() }.disabled(track.locked)
             Button("Delete", role: .destructive) { model.selectClip(clip.id); model.delete() }.disabled(track.locked)
         }
-        .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? "Clip")
+        .accessibilityLabel(clip.text?.text ?? model.project.asset(clip.assetID)?.name ?? loc("Clip"))
         .allowsHitTesting(!track.locked)
     }
 
@@ -300,7 +318,7 @@ struct TimelineView: View {
 
     private func handle(_ clip: Clip, start: Bool) -> some View {
         RoundedRectangle(cornerRadius: 2).fill(.white).frame(width: desktop ? 7 : 8).padding(.vertical, 8)
-            .contentShape(Rectangle()).help(start ? "Trim start" : "Trim end")
+            .contentShape(Rectangle()).help(start ? loc("Trim start") : loc("Trim end"))
             .highPriorityGesture(DragGesture(coordinateSpace:.named("editor.timelineDrag")).onChanged { value in
                 trimID = clip.id; trimStart = start
                 trimDelta = clamp(value.translation.width, start ? -x(clip.startUs) : -x(clip.durationUs)+x(minimumClip),

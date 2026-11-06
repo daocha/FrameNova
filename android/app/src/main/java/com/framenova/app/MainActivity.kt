@@ -1,6 +1,12 @@
 package com.framenova.app
 
 import android.os.Bundle
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -30,6 +36,8 @@ class MainActivity : ComponentActivity() {
         updates.onPlayResult(result.resultCode)
     }
 
+    override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(AppLanguage.wrap(newBase))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -37,7 +45,15 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         updates = AppUpdates(this, playUpdate)
+        AppLanguage.load(this)
         setContent {
+            // Every screen reads its text through this context, so choosing a language redraws them in place.
+            val language = AppLanguage.current
+            val live = LocalConfiguration.current
+            val configuration = remember(language, live) { AppLanguage.localize(live, language) }
+            val resources = remember(configuration) { createConfigurationContext(configuration).resources }
+            val localized = remember(resources) { object : ContextWrapper(this@MainActivity) { override fun getResources() = resources } }
+            CompositionLocalProvider(LocalContext provides localized, LocalConfiguration provides configuration, LocalResources provides resources) {
             FrameNovaTheme {
                 var openProject by rememberSaveable { mutableStateOf<String?>(null) }
                 Surface(Modifier.fillMaxSize(), color = Palette.Bg, contentColor = Palette.Text) {
@@ -51,6 +67,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 }
+            }
             }
         }
     }

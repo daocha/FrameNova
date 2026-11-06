@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 /** Keeps the app alive and shows progress while an export runs, even if the editor is in the background. */
 @UnstableApi
 class ExportService : Service() {
+    override fun attachBaseContext(newBase: android.content.Context) = super.attachBaseContext(com.framenova.app.AppLanguage.wrap(newBase))
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val manager by lazy { getSystemService(NotificationManager::class.java) }
     private var collector: kotlinx.coroutines.Job? = null
@@ -32,11 +34,11 @@ class ExportService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Exports", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.notif_channel_exports), NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val first = notification("Exporting…", 0, ongoing = true)
+        val first = notification(getString(R.string.editor_exporting), 0, ongoing = true)
         // Called directly: the compat helper masks out types newer than it knows (media processing), and Android then
         // rejects a foreground service with no type.
         if (Build.VERSION.SDK_INT >= 35) startForeground(ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
@@ -45,9 +47,9 @@ class ExportService : Service() {
         collector = scope.launch {
             ExportManager.state.collectLatest { state ->
                 when (state) {
-                    is ExportState.Running -> manager.notify(ID, notification("Exporting ${state.label}", state.progress, ongoing = true))
-                    is ExportState.Done -> { done("Saved ${state.displayName}"); }
-                    is ExportState.Failed -> { done("Export failed: ${state.message}") }
+                    is ExportState.Running -> manager.notify(ID, notification(getString(R.string.notif_exporting, state.label), state.progress, ongoing = true))
+                    is ExportState.Done -> { done(getString(R.string.notif_saved, state.displayName)); }
+                    is ExportState.Failed -> { done(getString(R.string.notif_failed, state.message)) }
                     ExportState.Idle -> { ServiceCompat.stopForeground(this@ExportService, ServiceCompat.STOP_FOREGROUND_REMOVE); stopSelf() }
                 }
             }

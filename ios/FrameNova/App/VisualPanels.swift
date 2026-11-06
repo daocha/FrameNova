@@ -7,7 +7,7 @@ struct LayoutPanel:View {
     private var count:Int {model.project.tracks.filter {!$0.hidden && ($0.kind == .main || $0.kind == .overlay)}.filter {$0.clips.contains(where:{$0.contains(model.playhead)})}.count}
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text(count <= 1 ? "Add overlays at the playhead, then pick a layout to arrange them in one frame." : "Arranges the \(count) clips showing at the playhead. Drag on the preview to fine-tune each one.")
+            Text(count <= 1 ? loc("Add overlays at the playhead, then pick a layout to arrange them in one frame.") : String(localized: "Arranges the \(count) clips showing at the playhead. Drag on the preview to fine-tune each one."))
                 .font(.caption).foregroundStyle(Palette.dim)
             LazyVGrid(columns:[GridItem(.adaptive(minimum:76))],spacing:14) {
                 ForEach(LayoutPreset.all) {preset in
@@ -23,8 +23,8 @@ struct LayoutPanel:View {
                             }
                         }.aspectRatio(clamp(model.project.canvas.aspect.ratio,0.5,2.2),contentMode:.fit).frame(maxHeight:80)
                             .overlay(Rectangle().stroke(chosen == preset.id ? Palette.accent:.white.opacity(0.3),lineWidth:chosen == preset.id ? 2:1))
-                        Text(preset.label).font(.system(size:10)).lineLimit(1).foregroundStyle(match ? Color.white:Palette.dim)
-                    }}.buttonStyle(.plain).accessibilityLabel(preset.label)
+                        Text(loc(preset.label)).font(.system(size:10)).lineLimit(1).foregroundStyle(match ? Color.white:Palette.dim)
+                    }}.buttonStyle(.plain).accessibilityLabel(loc(preset.label))
                 }
             }
             ValueSlider(title:"Spacing",value:$spacing,range:0...0.05)
@@ -46,7 +46,7 @@ struct FilterPreview:View {
     var body:some View {Button(action:onPick) {VStack(spacing:5) {
         RoundedRectangle(cornerRadius:10).fill(LinearGradient(colors:colors,startPoint:.topLeading,endPoint:.bottomTrailing)).frame(height:56)
             .overlay(RoundedRectangle(cornerRadius:10).stroke(selected ? Palette.accent:.clear,lineWidth:2))
-        Text(id.flatMap {FilterCube.names[$0]} ?? "None").font(.system(size:11)).lineLimit(1)
+        Text(filterName(id)).font(.system(size:11)).lineLimit(1)
     }}.buttonStyle(.plain)}
 }
 struct EditGestureActions {var begin:()->Void;var end:()->Void}

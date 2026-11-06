@@ -1,5 +1,7 @@
 package com.framenova.app.ui.editor
 
+import androidx.compose.ui.res.stringResource
+import com.framenova.app.R
 import android.view.TextureView
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
@@ -238,7 +240,7 @@ fun PreviewPane(vm: EditorViewModel, modifier: Modifier = Modifier) {
                 .firstOrNull { it.first.id == sel }?.second?.let { layerOutsideCanvas(it, canvas.width.toFloat(), canvas.height.toFloat()) }
         } == true
         if (selectedOutside) Text(
-            "Partly outside the canvas: only the part inside is in the video",
+            stringResource(R.string.preview_outside_canvas),
             color = Color.Black, fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp)
                 .background(OutsideOrange, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp),

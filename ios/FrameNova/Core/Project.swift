@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 let minimumClip: Int64 = 100_000
 func newID() -> String { String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)) }
@@ -128,12 +129,27 @@ struct Clip: Codable, Equatable, Identifiable {
         keyframes.sort { $0.offsetUs < $1.offsetUs }
     }
 }
+/// How the cover photo sits in the video frame. At zoom 1 the photo just fills the frame; panX and panY pick which part
+/// shows, from -1 (left or top edge) to 1 (right or bottom edge).
+struct CoverFraming: Codable, Equatable {
+    var zoom = 1.0, panX = 0.0, panY = 0.0
+    static let maxZoom = 4.0
+    /// Where a photo of the given size is drawn in a frame of the given size, with the origin at the top left.
+    func placement(photo: CGSize, frame: CGSize) -> CGRect {
+        let scale = max(frame.width/max(1,photo.width),frame.height/max(1,photo.height))*clamp(zoom,1,CoverFraming.maxZoom)
+        let w = photo.width*scale, h = photo.height*scale
+        return CGRect(x:(frame.width-w)/2-clamp(panX,-1,1)*(w-frame.width)/2,y:(frame.height-h)/2-clamp(panY,-1,1)*(h-frame.height)/2,width:w,height:h)
+    }
+}
 struct Project: Codable, Equatable, Identifiable {
     var id = newID()
     var name: String
     var createdAt = Date(), modifiedAt = Date()
     var canvas = CanvasSettings()
     var coverAssetID: String?
+    /// Nil until the cover photo has been moved or zoomed.
+    var coverFraming: CoverFraming?
+    var framing: CoverFraming { coverFraming ?? CoverFraming() }
     var assets: [MediaAsset] = []
     var tracks = [Track(id: "main", kind: .main)]
     var durationUs: Int64 { tracks.reduce(0) {end,track in track.clips.reduce(end) {max($0,$1.endUs)}} }

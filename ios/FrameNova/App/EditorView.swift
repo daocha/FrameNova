@@ -16,6 +16,7 @@ struct EditorView: View {
     @ViewState<Bool> private var showInspector = false
     @ViewState<Int> private var inspectorRequest = 0
     @ViewState<Bool> private var fullscreen = false
+    @ViewState<CGFloat> private var coverDrag = 0
     @ViewState<Bool> private var export = false
     @ViewState<Bool> private var picker = false
     @ViewState<Bool> private var files = false
@@ -37,6 +38,8 @@ struct EditorView: View {
             #else
             let landscape = geo.size.width>geo.size.height
             let textFocus = showInspector && ["Text","Font","Style","Animation","Stickers"].contains(panel)
+            // The cover panel slides over the editor instead of sharing the screen with it.
+            let coverOverlay = showInspector && panel == "Cover"
             VStack(spacing:0) {
                 topBar
                 if fullscreen {
@@ -49,7 +52,7 @@ struct EditorView: View {
                 } else if landscape {
                     HStack(spacing:0) {
                         preview.frame(maxWidth:.infinity,maxHeight:.infinity)
-                        Group {if showInspector {inlinePanel} else {toolGrid}}.frame(width:min(380,geo.size.width*0.5))
+                        Group {if showInspector && !coverOverlay {inlinePanel} else {toolGrid}}.frame(width:min(380,geo.size.width*0.5))
                     }.frame(maxHeight:.infinity)
                     transport
                     touchTimeline.frame(height:max(90,(geo.size.height-102)*0.44))
@@ -57,14 +60,30 @@ struct EditorView: View {
                     preview.frame(maxHeight:.infinity)
                     transport
                     touchTimeline.frame(height:clamp(geo.size.height*0.3,180,320))
-                    if showInspector {inlinePanel.frame(height:min(geo.size.height*0.34,320))} else {tools}
+                    if showInspector && !coverOverlay {inlinePanel.frame(height:min(geo.size.height*0.34,320))} else {tools}
                 }
             }.background(Palette.bg)
+            .overlay(alignment:.bottom) {
+                if coverOverlay {
+                    InspectorView(model:model,panel:panel,onDone:{showInspector = false},onHeaderDrag:{drag,ended in
+                        // Swiping down from the header hides the panel; letting go early lets it spring back.
+                        if !ended {coverDrag = max(0,drag.translation.height)}
+                        else if drag.translation.height>geo.size.height*0.12 || drag.predictedEndTranslation.height>geo.size.height*0.25 {showInspector = false}
+                        else {withAnimation(.easeOut(duration:0.2)) {coverDrag = 0}}
+                    }).frame(height:geo.size.height*0.6)
+                        .clipShape(UnevenRoundedRectangle(topLeadingRadius:18,topTrailingRadius:18))
+                        .shadow(color:.black.opacity(0.4),radius:12)
+                        .offset(y:coverDrag)
+                        .transition(.move(edge:.bottom).combined(with:.opacity))
+                }
+            }
+            .animation(.easeOut(duration:0.26),value:coverOverlay)
+            .onChange(of:coverOverlay) {_,shown in if shown {coverDrag = 0}}
             #endif
         }
         .navigationBarBackButtonHidden().toolbar(.hidden,for:.navigationBar)
         .sheet(isPresented:$picker) { MediaPicker(multiple:!replace) { assets,error in picker = false; model.imported(assets,kind:importKind,replace:replace,libraryOnly:libraryOnly); if let error {model.error = error} } }
-        .mediaFileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace,onCancellation:{model.importStatus = "File selection cancelled. No files imported."}) { result in
+        .mediaFileImporter(isPresented:$files,allowedContentTypes:subtitleFiles ? [.plainText,.data] : libraryOnly ? [.movie,.image,.audio] : importKind == .audio ? [.audio,.movie]:[.movie,.image],allowsMultipleSelection:!replace,onCancellation:{model.importStatus = String(localized: "File selection cancelled. No files imported.")}) { result in
             do { model.ingest(try result.get(),kind:importKind,replace:replace,subtitles:subtitleFiles,libraryOnly:libraryOnly) } catch {model.error = error.localizedDescription}
         }
         .confirmationDialog("Choose media source",isPresented:$mediaSources,titleVisibility:.visible) {
@@ -87,7 +106,7 @@ struct EditorView: View {
         .onDisappear {model.close()}
     }
     private var touchTimeline:some View {
-        TouchTimeline(model:model,display:timelineDisplay,onTransition:{_ in open("Transition")},onText:{_ in open("Text")},onTrack:{track in
+        TouchTimeline(model:model,display:timelineDisplay,onCover:{model.selected = nil;model.selectedGap = nil;open("Cover")},onTransition:{_ in open("Transition")},onText:{_ in open("Text")},onTrack:{track in
             let key:WritableKeyPath<Track,Bool> = track.kind == .overlay ? \.hidden:\.muted
             updateTrack(track,key)
         })
@@ -115,16 +134,16 @@ struct EditorView: View {
             Text("\(formatTime(model.playhead)) / \(formatTime(model.project.durationUs))").font(.caption.monospacedDigit()).foregroundStyle(Palette.dim)
             Spacer()
             Button {model.seek(0)} label:{Image(systemName:"backward.end.fill")}.accessibilityLabel("Start")
-            Button {model.play()} label:{Image(systemName:model.playing ? "pause.fill":"play.fill").font(.title3)}.disabled(model.project.durationUs == 0).accessibilityLabel(model.playing ? "Pause":"Play")
+            Button {model.play()} label:{Image(systemName:model.playing ? "pause.fill":"play.fill").font(.title3)}.disabled(model.project.durationUs == 0).accessibilityLabel(model.playing ? loc("Pause"):loc("Play"))
             Button {model.seek(model.project.durationUs)} label:{Image(systemName:"forward.end.fill")}.accessibilityLabel("End")
             Spacer()
-            Button {fullscreen.toggle()} label:{Image(systemName:fullscreen ? "arrow.down.right.and.arrow.up.left":"arrow.up.left.and.arrow.down.right")}.accessibilityLabel(fullscreen ? "Exit fullscreen":"Fullscreen")
+            Button {fullscreen.toggle()} label:{Image(systemName:fullscreen ? "arrow.down.right.and.arrow.up.left":"arrow.up.left.and.arrow.down.right")}.accessibilityLabel(fullscreen ? loc("Exit fullscreen"):loc("Fullscreen"))
             #if targetEnvironment(macCatalyst)
             Button {model.selected = nil;model.selectedGap = nil; showInspector = false} label:{Image(systemName:"xmark")}.accessibilityLabel("Deselect")
             #endif
         }.padding(.horizontal,16).padding(.vertical,10)
     }
-    private func tool(_ title:String,_ icon:String,action:@escaping ()->Void) -> some View {
+    private func tool(_ title:LocalizedStringKey,_ icon:String,action:@escaping ()->Void) -> some View {
         Button(action:action) {
             #if targetEnvironment(macCatalyst)
             Label(title,systemImage:icon).font(.system(size:11)).fixedSize().padding(.horizontal,6).frame(minHeight:30)
@@ -198,7 +217,6 @@ struct EditorView: View {
                     tool("Delete gap","trash") {model.change {$0.deleteGap(at:gap)};model.selectedGap = nil}
                     tool("Media","photo.badge.plus") {pick(.main)}
                 } else {
-                    tool("Cover","photo") {open("Cover")}
                     tool("Media","photo.badge.plus") {pick(.main)}
                     tool("Add layer","square.3.layers.3d") {pick(.overlay)}
                     tool("Text","textformat") {model.addText("Title"); open("Text")}; tool("Subtitle","captions.bubble") {model.addText("Subtitle"); open("Text")}
@@ -232,7 +250,7 @@ struct ProjectHeading:View {
                     Text(project.canvas.formatSummary).font(.system(size:11)).lineLimit(1).minimumScaleFactor(0.8)
                     Image(systemName:"arrowtriangle.down.fill").font(.system(size:8)).rotationEffect(.degrees(expanded ? 180:0))
                 }.foregroundStyle(Palette.accent).padding(.vertical,3).contentShape(Rectangle())
-            }.accessibilityLabel(expanded ? "Hide project format":"Show project format")
+            }.accessibilityLabel(expanded ? loc("Hide project format"):loc("Show project format"))
                 .accessibilityValue(project.canvas.formatSummary).accessibilityIdentifier("editor.projectFormat")
         }.buttonStyle(.plain)
     }

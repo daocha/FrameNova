@@ -1,5 +1,6 @@
 package com.framenova.app.ui.editor
 
+import com.framenova.app.R
 import com.framenova.app.LOG_TAG
 import android.app.Application
 import android.content.Intent
@@ -43,11 +44,12 @@ enum class ImportTarget { MAIN, OVERLAY, AUDIO, REPLACE, COVER }
 @UnstableApi
 class EditorViewModel(app: Application, val projectId: String) : AndroidViewModel(app) {
     private val repo = ProjectRepository(app)
+    private fun str(@androidx.annotation.StringRes id: Int, vararg args: Any): String = getApplication<Application>().getString(id, *args)
     val engine = PreviewEngine(app)
     val media = MediaCache(app)
     private val recorder = VoiceRecorder(app)
 
-    var project by mutableStateOf(repo.load(projectId) ?: Project(projectId, "Untitled", System.currentTimeMillis(), System.currentTimeMillis()))
+    var project by mutableStateOf(repo.load(projectId) ?: Project(projectId, app.getString(R.string.editor_untitled), System.currentTimeMillis(), System.currentTimeMillis()))
         private set
     private val undoStack = ArrayDeque<Project>()
     private val redoStack = ArrayDeque<Project>()
@@ -83,7 +85,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     private var tickJob: Job? = null
 
     init {
-        engine.onError = { message = "Preview: $it" }
+        engine.onError = { message = str(R.string.editor_preview_error, it.toString()) }
         engine.onPlayingChanged = { p -> playing = p; if (p) startTicker() }
         engine.onEnded = { playing = false }
         engine.update(project, 0)
@@ -120,13 +122,13 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                 val todo = pendingRenders(project)
                 if (todo.isEmpty()) break
                 val (clip, asset) = todo.first()
-                renderStatus = "Rendering speed change… (${todo.size} left)"
+                renderStatus = str(R.string.editor_rendering_speed, todo.size)
                 try {
                     SpeedRenders.render(getApplication(), clip, asset)
                     engine.update(project, playheadUs)
                 } catch (e: Exception) {
                     android.util.Log.w(LOG_TAG, "Speed render failed", e)
-                    message = e.message ?: "Speed render failed"
+                    message = e.message ?: str(R.string.editor_speed_render_failed)
                     break
                 }
             }
@@ -142,7 +144,8 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     // -----------------------------------------------------------------------------------------------------------
     // History
 
-    fun commit(p: Project) {
+    fun commit(edited: Project) {
+        val p = edited.withoutUnusedAssets()
         if (p == project || !project.preservesLockedClips(p)) return
         undoStack.addLast(project)
         if (undoStack.size > 120) undoStack.removeFirst()
@@ -278,12 +281,12 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun import(uris: List<Uri>, target: ImportTarget) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
-            busy = "Importing…"
+            busy = str(R.string.editor_importing)
             val assets = withContext(Dispatchers.IO) {
                 uris.mapNotNull { persist(it); MediaProbe.probe(getApplication(), it) }
             }
             busy = null
-            if (assets.isEmpty()) { message = "Couldn't read the selected media"; return@launch }
+            if (assets.isEmpty()) { message = str(R.string.editor_cant_read_media); return@launch }
             val before = allClipIds()
             when (target) {
                 ImportTarget.MAIN -> commit(project.addToMainAt(assets.filter { it.type != MediaType.AUDIO }, playheadUs))
@@ -301,8 +304,8 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
                 ImportTarget.REPLACE -> replaceSelected(assets.first())
                 ImportTarget.COVER -> {
                     val image = assets.firstOrNull { it.type == MediaType.IMAGE }
-                    if (image == null) message = "Choose an image for the cover"
-                    else commit(project.withAssets(listOf(image)).copy(coverAssetId = image.id))
+                    if (image == null) message = str(R.string.editor_choose_image_cover)
+                    else commit(project.withAssets(listOf(image)).copy(coverAssetId = image.id, coverFraming = CoverFraming()))
                 }
             }
             (allClipIds() - before).firstOrNull()?.let { selectedId = it }
@@ -310,7 +313,16 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     }
 
     fun chooseCover(id: String?) {
-        if (id == null || project.asset(id)?.type == MediaType.IMAGE) commit(project.copy(coverAssetId = id))
+        if (id == null || project.asset(id)?.type == MediaType.IMAGE) {
+            commit(project.copy(coverAssetId = id, coverFraming = if (id == project.coverAssetId) project.coverFraming else CoverFraming()))
+        }
+    }
+
+    /** Moves or zooms the cover photo; the edit becomes one undo step when [endGesture] runs. */
+    fun liveCover(framing: CoverFraming) {
+        if (framing == project.coverFraming) return
+        beginGesture()
+        project = project.copy(coverFraming = framing)
     }
 
     fun prependCover() {
@@ -337,9 +349,9 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
             val name = MediaProbe.displayName(app, uri)
             val text = withContext(Dispatchers.IO) { runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull() }
             val cues = text?.let { Subtitles.parse(it, name) }.orEmpty()
-            if (cues.isEmpty()) { message = "No subtitles found in $name"; return@launch }
+            if (cues.isEmpty()) { message = str(R.string.editor_no_subtitles, name); return@launch }
             commit(project.addTextCues(cues, TextStyle(text = "", size = 0.055f, role = TextRole.SUBTITLE, shadow = true, strokeWidth = 0.08f, bold = true)))
-            message = "Added ${cues.size} lines"
+            message = getApplication<Application>().resources.getQuantityString(R.plurals.editor_lines_added, cues.size, cues.size)
         }
     }
 
@@ -353,8 +365,8 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
 
     fun addText(role: TextRole = TextRole.TITLE) {
         val style = when (role) {
-            TextRole.TITLE -> TextStyle(text = "Your title", size = 0.09f, role = role)
-            TextRole.SUBTITLE -> TextStyle(text = "Subtitle", size = 0.055f, role = role, strokeWidth = 0.08f)
+            TextRole.TITLE -> TextStyle(text = str(R.string.editor_default_title), size = 0.09f, role = role)
+            TextRole.SUBTITLE -> TextStyle(text = str(R.string.editor_default_subtitle), size = 0.055f, role = role, strokeWidth = 0.08f)
             TextRole.STICKER -> TextStyle(text = "⭐", size = 0.18f, shadow = false, bold = false, role = role)
         }
         val before = allClipIds()
@@ -397,9 +409,9 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     /** Splits the selected clip, or the main clip under the playhead, at the playhead. */
     fun split() {
         val id = selectedId?.takeIf { project.clip(it)?.contains(playheadUs) == true }
-            ?: project.mainTrack.clips.firstOrNull { it.contains(playheadUs) }?.id ?: run { message = "Move the playhead over a clip to split it"; return }
+            ?: project.mainTrack.clips.firstOrNull { it.contains(playheadUs) }?.id ?: run { message = str(R.string.editor_split_hint); return }
         val (p, second) = project.splitClip(id, playheadUs)
-        if (second == null) { message = "Too close to the clip's edge"; return }
+        if (second == null) { message = str(R.string.editor_too_close_edge); return }
         commit(p)
         selectedId = second
     }
@@ -452,7 +464,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
     fun extractAudio() {
         val id = selectedId ?: return
         val (p, audio) = project.extractAudio(id)
-        if (audio == null) { message = "This clip has no audio"; return }
+        if (audio == null) { message = str(R.string.editor_no_audio); return }
         commit(p)
         selectedId = audio
     }
@@ -462,14 +474,14 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
 
     fun freezeFrame() {
         val clip = selectedClip?.takeIf { it.contains(playheadUs) }
-            ?: project.mainTrack.clips.firstOrNull { it.contains(playheadUs) } ?: run { message = "Move the playhead over a video"; return }
+            ?: project.mainTrack.clips.firstOrNull { it.contains(playheadUs) } ?: run { message = str(R.string.editor_move_over_video); return }
         val asset = project.asset(clip.assetId) ?: return
-        if (asset.type != MediaType.VIDEO) { message = "Freeze frame needs a video clip"; return }
+        if (asset.type != MediaType.VIDEO) { message = str(R.string.editor_freeze_needs_video); return }
         viewModelScope.launch {
-            busy = "Capturing frame…"
+            busy = str(R.string.editor_capturing)
             val still = repo.captureStill(projectId, asset, clip.sourceTimeAt(playheadUs))
             busy = null
-            if (still == null) { message = "Couldn't capture the frame"; return@launch }
+            if (still == null) { message = str(R.string.editor_cant_capture); return@launch }
             commit(project.insertFreezeFrame(clip.id, playheadUs, still))
         }
     }
@@ -514,13 +526,13 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
             val todo = pendingRenders(project)
             try {
                 todo.forEachIndexed { i, (clip, asset) ->
-                    busy = "Preparing speed changes ${i + 1}/${todo.size}…"
+                    busy = str(R.string.editor_preparing_speed, i + 1, todo.size)
                     SpeedRenders.render(getApplication(), clip, asset)
                 }
             } catch (e: Exception) {
                 android.util.Log.w(LOG_TAG, "Speed render failed", e)
                 busy = null
-                message = e.message ?: "Speed render failed"
+                message = e.message ?: str(R.string.editor_speed_render_failed)
                 return@launch
             }
             busy = null
@@ -544,7 +556,7 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
             engine.pause()
             try { recorder.stop() } finally { engine.audioMuted = false }
             android.util.Log.w(LOG_TAG, "Recording failed", e)
-            message = "Couldn't start recording: ${e.message}"
+            message = str(R.string.editor_recording_start_failed, e.message.orEmpty())
         }
     }
 
@@ -553,12 +565,12 @@ class EditorViewModel(app: Application, val projectId: String) : AndroidViewMode
         recording = false
         engine.pause()
         val file = try { recorder.stop() } finally { engine.audioMuted = false }
-            ?: run { message = "Recording failed"; return }
+            ?: run { message = str(R.string.editor_recording_failed); return }
         viewModelScope.launch {
             val asset = withContext(Dispatchers.IO) { MediaProbe.probe(getApplication(), Uri.fromFile(file), "audio/mp4") }
-            if (asset == null) { message = "Recording was too short"; return@launch }
+            if (asset == null) { message = str(R.string.editor_recording_short); return@launch }
             val before = allClipIds()
-            commit(project.addAudioAt(asset.copy(name = "Voiceover"), recordingStartUs, audioOnly = false))
+            commit(project.addAudioAt(asset.copy(name = str(R.string.panel_voiceover)), recordingStartUs, audioOnly = false))
             selectedId = (allClipIds() - before).firstOrNull()
         }
     }

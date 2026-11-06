@@ -246,6 +246,22 @@ data class Clip(
     }
 }
 
+/**
+ * How the cover photo sits in the video frame. At [zoom] 1 the photo just fills the frame; [panX] and [panY] pick which
+ * part shows, from -1 (left or top edge) to 1 (right or bottom edge).
+ */
+@Serializable
+data class CoverFraming(val zoom: Float = 1f, val panX: Float = 0f, val panY: Float = 0f) {
+    /** Where a [srcW]×[srcH] photo is drawn in a [w]×[h] frame: left, top, width, height. */
+    fun placement(srcW: Float, srcH: Float, w: Float, h: Float): FloatArray {
+        val scale = maxOf(w / srcW, h / srcH) * zoom.coerceIn(1f, MAX_ZOOM)
+        val dw = srcW * scale
+        val dh = srcH * scale
+        return floatArrayOf((w - dw) / 2 - panX.coerceIn(-1f, 1f) * (dw - w) / 2, (h - dh) / 2 - panY.coerceIn(-1f, 1f) * (dh - h) / 2, dw, dh)
+    }
+    companion object { const val MAX_ZOOM = 4f }
+}
+
 @Serializable
 data class Project(
     val id: String,
@@ -257,6 +273,7 @@ data class Project(
     /** Visual order, top to bottom: text tracks, overlays (top-most first), main, audio. */
     val tracks: List<Track> = listOf(Track(id = "main", kind = TrackKind.MAIN)),
     val coverAssetId: String? = null,
+    val coverFraming: CoverFraming = CoverFraming(),
 ) {
     val durationUs: Long get() = tracks.maxOfOrNull { t -> t.clips.maxOfOrNull { it.endUs } ?: 0L } ?: 0L
     val mainTrack: Track get() = tracks.first { it.kind == TrackKind.MAIN }

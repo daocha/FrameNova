@@ -121,6 +121,12 @@ fun Project.placeOnFreeTrack(kind: TrackKind, clip: Clip, preferTrackId: String?
 fun Project.withAssets(newAssets: List<MediaAsset>): Project =
     copy(assets = assets + newAssets.filter { a -> assets.none { it.id == a.id } })
 
+/** The project without media that no clip uses and that is not the cover; the phone has no media panel to manage them. */
+fun Project.withoutUnusedAssets(): Project {
+    val used = tracks.flatMap { t -> t.clips.mapNotNull { it.assetId } }.toSet() + listOfNotNull(coverAssetId)
+    return if (assets.all { it.id in used }) this else copy(assets = assets.filter { it.id in used })
+}
+
 fun clipForAsset(asset: MediaAsset, startUs: Long, audioOnly: Boolean = false): Clip = when (asset.type) {
     MediaType.IMAGE -> Clip(id = newId(), assetId = asset.id, startUs = startUs, srcInUs = 0, srcOutUs = DEFAULT_STILL_US)
     else -> Clip(id = newId(), assetId = asset.id, startUs = startUs, srcInUs = 0, srcOutUs = max(MIN_CLIP_US, asset.durationUs), audioOnly = audioOnly)

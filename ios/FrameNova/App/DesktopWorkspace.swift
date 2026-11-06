@@ -102,10 +102,10 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(model.selectedIDs.count>1 ? "\(model.selectedIDs.count) clips selected":model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? "Project settings")
+                Text(model.selectedIDs.count>1 ? String(localized: "\(model.selectedIDs.count) clips selected"):model.clip?.text?.text ?? model.project.asset(model.clip?.assetID)?.name ?? loc("Project settings"))
                     .font(.caption.bold()).lineLimit(2)
                 Picker("Inspector", selection: $panel) {
-                    ForEach(panels.contains(panel) ? panels : panels + [panel], id: \.self) { Text($0).tag($0) }
+                    ForEach(panels.contains(panel) ? panels : panels + [panel], id: \.self) { Text(loc($0)).tag($0) }
                 }.pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading).disabled(model.selectedIDs.count>1)
             }.padding(12)
             Divider()
@@ -139,7 +139,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 Button("Large tracks") {timeline.rowHeight = 96}
             } label:{Image(systemName:"line.3.horizontal")}.help("Track height").accessibilityLabel("Track height")
             Button {timeline.zoom(1/1.3)} label:{Image(systemName:"minus.magnifyingglass")}.help("Zoom out (⌘−)")
-            EditorSlider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),range:log2(0.1)...log2(1600),label:"Timeline zoom").frame(width:70)
+            EditorSlider(value:Binding(get:{log2(timeline.pointsPerSecond)},set:{timeline.pointsPerSecond = pow(2,$0)}),range:log2(0.1)...log2(1600),label:loc("Timeline zoom")).frame(width:70)
             Button {timeline.zoom(1.3)} label:{Image(systemName:"plus.magnifyingglass")}.help("Zoom in (⌘+)")
             Button("Fit") {timeline.fit(duration:model.project.durationUs,width:availableWidth)}.help("Fit project to timeline (⇧Z)")
         }.buttonStyle(.borderless).padding(.horizontal,12).frame(height:44).background(Palette.surface)
@@ -178,7 +178,7 @@ struct WorkspaceDivider: View {
                 WorkspacePointerHint(location:$0,symbol:horizontal ? "arrow.up.and.down":"arrow.left.and.right")
             })
             .zIndex(100)
-            .accessibilityLabel(horizontal ? "Resize timeline" : "Resize panel")
+            .accessibilityLabel(horizontal ? loc("Resize timeline") : loc("Resize panel"))
             .accessibilityAdjustableAction { direction in value = clamp(value + (direction == .increment ? 20 : -20), range.lowerBound, range.upperBound) }
             .help("Drag to resize")
     }

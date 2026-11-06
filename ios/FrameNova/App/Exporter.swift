@@ -24,7 +24,7 @@ struct ExportSettings {
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent("FrameNova-\(newID()).mp4")
             do {
                 var p = project; p.canvas.tier = settings.tier; p.canvas.fps = settings.fps
-                let built = try await CompositionFactory.build(p)
+                let built = try await CompositionFactory.build(p,exportCover:true)
                 try await Self.write(built,project:p,settings:settings,to:destination) { [weak self] value in Task { @MainActor in self?.progress = value } }
                 self.url = destination; progress = 1
             } catch {
@@ -41,7 +41,7 @@ struct ExportSettings {
             let video = AVAssetReaderVideoCompositionOutput(videoTracks:built.asset.tracks(withMediaType:.video),videoSettings:[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA])
             video.videoComposition = built.video; video.alwaysCopiesSampleData = false; reader.add(video)
             let size = project.canvas.size
-            let factor = settings.quality == "High" ? 0.16 : settings.quality == "Medium" ? 0.1 : 0.06
+            let factor = settings.quality == "Maximum" ? 0.18 : settings.quality == "High" ? 0.11 : 0.06
             let videoInput = AVAssetWriterInput(mediaType:.video,outputSettings:[AVVideoCodecKey:settings.hevc ? AVVideoCodecType.hevc : AVVideoCodecType.h264,AVVideoWidthKey:size.width,AVVideoHeightKey:size.height,AVVideoCompressionPropertiesKey:[AVVideoAverageBitRateKey:Int(Double(size.width*size.height*project.canvas.fps)*factor),AVVideoExpectedSourceFrameRateKey:project.canvas.fps]])
             guard writer.canAdd(videoInput) else { throw MediaError.export }; writer.add(videoInput)
             var audio: AVAssetReaderAudioMixOutput?, audioInput: AVAssetWriterInput?
@@ -82,7 +82,7 @@ struct ExportSettings {
     func saveToPhotos() async {
         guard let url else { return }
         let status = await PHPhotoLibrary.requestAuthorization(for:.addOnly)
-        guard status == .authorized || status == .limited else { error = "Allow saving videos in Settings."; return }
+        guard status == .authorized || status == .limited else { error = String(localized: "Allow saving videos in Settings."); return }
         do { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL:url) } }
         catch { self.error = error.localizedDescription }
     }

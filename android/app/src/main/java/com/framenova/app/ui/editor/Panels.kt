@@ -1,6 +1,22 @@
 package com.framenova.app.ui.editor
 
+import androidx.compose.ui.res.stringResource
+import com.framenova.app.R
 import androidx.compose.foundation.BorderStroke
+import com.framenova.app.model.MediaAsset
+import com.framenova.app.model.CoverFraming
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -85,12 +101,12 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 @Composable
-fun PanelScaffold(title: String, onDone: () -> Unit, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+fun PanelScaffold(title: String, onDone: () -> Unit, modifier: Modifier = Modifier, headerModifier: Modifier = Modifier, actions: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxWidth().background(Palette.Surface)) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(headerModifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             actions()
-            IconButton(onClick = onDone) { Icon(Icons.Default.Check, "Done", tint = Palette.Accent) }
+            IconButton(onClick = onDone) { Icon(Icons.Default.Check, stringResource(R.string.panel_done), tint = Palette.Accent) }
         }
         Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), content = content)
     }
@@ -148,15 +164,15 @@ fun SpeedPanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     var v by remember(clip.id) { mutableFloatStateOf((ln(clip.speed.toDouble()) / ln(4.0)).toFloat()) }
     val speed = 4.0.pow(v.toDouble()).toFloat()
-    PanelScaffold("Speed", { vm.panel = Panel.NONE }) {
-        if (vm.project.asset(clip.assetId)?.type == MediaType.IMAGE) { Text("Photos don't have a speed. Trim them to change their duration.", color = Palette.TextDim); return@PanelScaffold }
-        LabeledSlider("Speed", v, -1f..1f, { "%.2f×".format(speed) }, { v = it }, { vm.setSpeed(speed) })
+    PanelScaffold(stringResource(R.string.panel_speed), { vm.panel = Panel.NONE }) {
+        if (vm.project.asset(clip.assetId)?.type == MediaType.IMAGE) { Text(stringResource(R.string.panel_photos_no_speed), color = Palette.TextDim); return@PanelScaffold }
+        LabeledSlider(stringResource(R.string.panel_speed), v, -1f..1f, { "%.2f×".format(speed) }, { v = it }, { vm.setSpeed(speed) })
         ChipRow {
             listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f).forEach { s ->
                 FilterChip(selected = abs(clip.speed - s) < 0.01f, onClick = { v = (ln(s.toDouble()) / ln(4.0)).toFloat(); vm.setSpeed(s) }, label = { Text("${s}×") })
             }
         }
-        Text("New duration ${secs(((clip.srcOutUs - clip.srcInUs) / speed).toLong())}. Pitch is preserved.", color = Palette.TextDim, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.panel_new_duration, secs(((clip.srcOutUs - clip.srcInUs) / speed).toLong())), color = Palette.TextDim, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -170,12 +186,12 @@ fun VolumePanel(vm: EditorViewModel) {
     var fin by remember(clip.id, clip.fadeInUs) { mutableFloatStateOf(clip.fadeInUs / 1_000_000f) }
     var fout by remember(clip.id, clip.fadeOutUs) { mutableFloatStateOf(clip.fadeOutUs / 1_000_000f) }
     val maxFade = (clip.durationUs / 2_000_000f).coerceIn(0.1f, 10f)
-    PanelScaffold("Volume & fades", { vm.panel = Panel.NONE }) {
-        LabeledSlider("Volume", vol, 0f..2f, ::pct, { vol = it }, { vm.updateSelected { c -> c.copy(volume = vol) } })
-        LabeledSlider("Fade in", fin, 0f..maxFade, { "%.1fs".format(it) }, { fin = it }, { vm.updateSelected { c -> c.copy(fadeInUs = (fin * 1_000_000).toLong()) } })
-        LabeledSlider("Fade out", fout, 0f..maxFade, { "%.1fs".format(it) }, { fout = it }, { vm.updateSelected { c -> c.copy(fadeOutUs = (fout * 1_000_000).toLong()) } })
+    PanelScaffold(stringResource(R.string.panel_volume_fades), { vm.panel = Panel.NONE }) {
+        LabeledSlider(stringResource(R.string.panel_volume), vol, 0f..2f, ::pct, { vol = it }, { vm.updateSelected { c -> c.copy(volume = vol) } })
+        LabeledSlider(stringResource(R.string.panel_fade_in), fin, 0f..maxFade, { "%.1fs".format(it) }, { fin = it }, { vm.updateSelected { c -> c.copy(fadeInUs = (fin * 1_000_000).toLong()) } })
+        LabeledSlider(stringResource(R.string.panel_fade_out), fout, 0f..maxFade, { "%.1fs".format(it) }, { fout = it }, { vm.updateSelected { c -> c.copy(fadeOutUs = (fout * 1_000_000).toLong()) } })
         ChipRow {
-            FilterChip(selected = clip.volume == 0f, onClick = { vol = if (clip.volume == 0f) 1f else 0f; vm.updateSelected { c -> c.copy(volume = vol) } }, label = { Text(if (clip.volume == 0f) "Unmute" else "Mute") })
+            FilterChip(selected = clip.volume == 0f, onClick = { vol = if (clip.volume == 0f) 1f else 0f; vm.updateSelected { c -> c.copy(volume = vol) } }, label = { Text(stringResource(if (clip.volume == 0f) R.string.panel_unmute else R.string.panel_mute)) })
         }
     }
 }
@@ -186,18 +202,18 @@ fun AdjustPanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     var a by remember(clip.id) { mutableStateOf(clip.adjust) }
     val commit = { vm.updateSelected { c -> c.copy(adjust = a) } }
-    PanelScaffold("Adjust", { vm.panel = Panel.NONE }, actions = {
-        androidx.compose.material3.TextButton(onClick = { a = Adjust(); commit() }) { Text("Reset") }
-        androidx.compose.material3.TextButton(onClick = { vm.applyAdjustToAll(a) }) { Text("Apply to all") }
+    PanelScaffold(stringResource(R.string.panel_adjust), { vm.panel = Panel.NONE }, actions = {
+        androidx.compose.material3.TextButton(onClick = { a = Adjust(); commit() }) { Text(stringResource(R.string.panel_reset)) }
+        androidx.compose.material3.TextButton(onClick = { vm.applyAdjustToAll(a) }) { Text(stringResource(R.string.panel_apply_to_all)) }
     }) {
-        LabeledSlider("Brightness", a.brightness, -1f..1f, ::signed, { a = a.copy(brightness = it) }, commit)
-        LabeledSlider("Contrast", a.contrast, -1f..1f, ::signed, { a = a.copy(contrast = it) }, commit)
-        LabeledSlider("Saturation", a.saturation, -1f..1f, ::signed, { a = a.copy(saturation = it) }, commit)
-        LabeledSlider("Warmth", a.warmth, -1f..1f, ::signed, { a = a.copy(warmth = it) }, commit)
-        LabeledSlider("Tint", a.tint, -1f..1f, ::signed, { a = a.copy(tint = it) }, commit)
-        LabeledSlider("Hue", a.hue, -180f..180f, { "${it.roundToInt()}°" }, { a = a.copy(hue = it) }, commit)
-        LabeledSlider("Sharpen", a.sharpen, 0f..1f, ::pct, { a = a.copy(sharpen = it) }, commit)
-        LabeledSlider("Vignette", a.vignette, 0f..1f, ::pct, { a = a.copy(vignette = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_brightness), a.brightness, -1f..1f, ::signed, { a = a.copy(brightness = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_contrast), a.contrast, -1f..1f, ::signed, { a = a.copy(contrast = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_saturation), a.saturation, -1f..1f, ::signed, { a = a.copy(saturation = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_warmth), a.warmth, -1f..1f, ::signed, { a = a.copy(warmth = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_tint), a.tint, -1f..1f, ::signed, { a = a.copy(tint = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_hue), a.hue, -180f..180f, { "${it.roundToInt()}°" }, { a = a.copy(hue = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_sharpen), a.sharpen, 0f..1f, ::pct, { a = a.copy(sharpen = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_vignette), a.vignette, 0f..1f, ::pct, { a = a.copy(vignette = it) }, commit)
     }
 }
 
@@ -206,17 +222,17 @@ fun AdjustPanel(vm: EditorViewModel) {
 fun FilterPanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     var intensity by remember(clip.id) { mutableFloatStateOf(clip.filter?.intensity ?: 1f) }
-    PanelScaffold("Filters", { vm.panel = Panel.NONE }, actions = {
-        androidx.compose.material3.TextButton(onClick = { vm.applyFilterToAll(clip.filter) }) { Text("Apply to all") }
+    PanelScaffold(stringResource(R.string.panel_filters), { vm.panel = Panel.NONE }, actions = {
+        androidx.compose.material3.TextButton(onClick = { vm.applyFilterToAll(clip.filter) }) { Text(stringResource(R.string.panel_apply_to_all)) }
     }) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-            item { FilterTile("None", null, clip.filter == null) { vm.updateSelected { it.copy(filter = null) } } }
+            item { FilterTile(stringResource(R.string.anim_none), null, clip.filter == null) { vm.updateSelected { it.copy(filter = null) } } }
             items(Filters.all) { def ->
-                FilterTile(def.name, def, clip.filter?.id == def.id) { vm.updateSelected { it.copy(filter = FilterSetting(def.id, intensity)) } }
+                FilterTile(def.displayName(), def, clip.filter?.id == def.id) { vm.updateSelected { it.copy(filter = FilterSetting(def.id, intensity)) } }
             }
         }
         if (clip.filter != null) {
-            LabeledSlider("Intensity", intensity, 0f..1f, ::pct, { intensity = it }, { vm.updateSelected { c -> c.copy(filter = c.filter?.copy(intensity = intensity)) } })
+            LabeledSlider(stringResource(R.string.panel_intensity), intensity, 0f..1f, ::pct, { intensity = it }, { vm.updateSelected { c -> c.copy(filter = c.filter?.copy(intensity = intensity)) } })
         }
     }
 }
@@ -242,11 +258,11 @@ fun CropPanel(vm: EditorViewModel) {
     val asset = vm.project.asset(clip.assetId) ?: return
     var crop by remember(clip.id) { mutableStateOf(clip.crop) }
     val commit = { vm.updateSelected { c -> c.copy(crop = crop) } }
-    PanelScaffold("Crop", { vm.panel = Panel.NONE }, actions = {
-        androidx.compose.material3.TextButton(onClick = { crop = CropRect(); commit() }) { Text("Reset") }
+    PanelScaffold(stringResource(R.string.panel_crop), { vm.panel = Panel.NONE }, actions = {
+        androidx.compose.material3.TextButton(onClick = { crop = CropRect(); commit() }) { Text(stringResource(R.string.panel_reset)) }
     }) {
         ChipRow {
-            listOf("Original" to 0f, "1:1" to 1f, "16:9" to 16f / 9, "9:16" to 9f / 16, "4:5" to 0.8f, "4:3" to 4f / 3, "21:9" to 21f / 9).forEach { (label, ratio) ->
+            listOf(stringResource(R.string.panel_original) to 0f, "1:1" to 1f, "16:9" to 16f / 9, "9:16" to 9f / 16, "4:5" to 0.8f, "4:3" to 4f / 3, "21:9" to 21f / 9).forEach { (label, ratio) ->
                 FilterChip(selected = false, onClick = {
                     crop = if (ratio == 0f) CropRect() else {
                         val src = asset.width.toFloat() / asset.height
@@ -257,10 +273,10 @@ fun CropPanel(vm: EditorViewModel) {
                 }, label = { Text(label) })
             }
         }
-        LabeledSlider("Left", crop.left, 0f..0.45f, ::pct, { crop = crop.copy(left = it) }, commit)
-        LabeledSlider("Right", crop.right, 0f..0.45f, ::pct, { crop = crop.copy(right = it) }, commit)
-        LabeledSlider("Top", crop.top, 0f..0.45f, ::pct, { crop = crop.copy(top = it) }, commit)
-        LabeledSlider("Bottom", crop.bottom, 0f..0.45f, ::pct, { crop = crop.copy(bottom = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_left), crop.left, 0f..0.45f, ::pct, { crop = crop.copy(left = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_right), crop.right, 0f..0.45f, ::pct, { crop = crop.copy(right = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_top), crop.top, 0f..0.45f, ::pct, { crop = crop.copy(top = it) }, commit)
+        LabeledSlider(stringResource(R.string.panel_bottom), crop.bottom, 0f..0.45f, ::pct, { crop = crop.copy(bottom = it) }, commit)
     }
 }
 
@@ -272,29 +288,29 @@ fun TransformPanel(vm: EditorViewModel) {
     val frame = vm.frameUs
     fun live(nt: Transform) = vm.liveSelected { it.withTransformAt(vm.playheadUs, nt, frame) }
     val asset = vm.project.asset(clip.assetId)
-    PanelScaffold("Position & size", { vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_position_size), { vm.panel = Panel.NONE }) {
         ChipRow {
-            OutlinedButton(onClick = { vm.updateSelected { it.withTransformAt(vm.playheadUs, t.copy(scale = 1f, cx = 0.5f, cy = 0.5f), frame) } }) { Text("Fit") }
+            OutlinedButton(onClick = { vm.updateSelected { it.withTransformAt(vm.playheadUs, t.copy(scale = 1f, cx = 0.5f, cy = 0.5f), frame) } }) { Text(stringResource(R.string.layout_fit)) }
             if (asset != null && asset.width > 0) OutlinedButton(onClick = {
                 val (cw, ch) = com.framenova.app.engine.LayerMath.croppedSize(asset.width, asset.height, clip.crop)
                 val cs = vm.project.canvas.size
                 val fit = minOf(cs.width / cw, cs.height / ch)
                 val fill = maxOf(cs.width / cw, cs.height / ch)
                 vm.updateSelected { it.withTransformAt(vm.playheadUs, t.copy(scale = fill / fit, cx = 0.5f, cy = 0.5f), frame) }
-            }) { Text("Fill") }
-            OutlinedButton(onClick = { vm.updateSelected { it.withTransformAt(vm.playheadUs, t.copy(rotation = ((t.rotation / 90f).roundToInt() + 1) * 90f % 360f), frame) } }) { Text("Rotate 90°") }
+            }) { Text(stringResource(R.string.panel_fill)) }
+            OutlinedButton(onClick = { vm.updateSelected { it.withTransformAt(vm.playheadUs, t.copy(rotation = ((t.rotation / 90f).roundToInt() + 1) * 90f % 360f), frame) } }) { Text(stringResource(R.string.panel_rotate_90)) }
             if (!clip.isText) {
-                OutlinedButton(onClick = { vm.updateSelected { it.copy(flipH = !it.flipH) } }) { Text("Flip ↔") }
-                OutlinedButton(onClick = { vm.updateSelected { it.copy(flipV = !it.flipV) } }) { Text("Flip ↕") }
+                OutlinedButton(onClick = { vm.updateSelected { it.copy(flipH = !it.flipH) } }) { Text(stringResource(R.string.panel_flip_horizontal)) }
+                OutlinedButton(onClick = { vm.updateSelected { it.copy(flipV = !it.flipV) } }) { Text(stringResource(R.string.panel_flip_vertical)) }
             }
-            OutlinedButton(onClick = { vm.updateSelected { it.copy(transform = Transform(), keyframes = emptyList()) } }) { Text("Reset") }
+            OutlinedButton(onClick = { vm.updateSelected { it.copy(transform = Transform(), keyframes = emptyList()) } }) { Text(stringResource(R.string.panel_reset)) }
         }
-        LabeledSlider("Scale", t.scale, 0.05f..4f, ::pct, { live(t.copy(scale = it)) }, vm::endGesture)
-        LabeledSlider("Rotation", t.rotation, -180f..180f, { "${it.roundToInt()}°" }, { live(t.copy(rotation = it)) }, vm::endGesture)
-        LabeledSlider("Opacity", t.opacity, 0f..1f, ::pct, { live(t.copy(opacity = it)) }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_scale), t.scale, 0.05f..4f, ::pct, { live(t.copy(scale = it)) }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_rotation), t.rotation, -180f..180f, { "${it.roundToInt()}°" }, { live(t.copy(rotation = it)) }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_opacity), t.opacity, 0f..1f, ::pct, { live(t.copy(opacity = it)) }, vm::endGesture)
         LabeledSlider("X", t.cx, -0.5f..1.5f, ::pct, { live(t.copy(cx = it)) }, vm::endGesture)
         LabeledSlider("Y", t.cy, -0.5f..1.5f, ::pct, { live(t.copy(cy = it)) }, vm::endGesture)
-        if (clip.keyframes.isNotEmpty()) Text("Keyframed: changes apply to the keyframe at the playhead.", color = Palette.TextDim, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        if (clip.keyframes.isNotEmpty()) Text(stringResource(R.string.panel_keyframed_changes_apply_to), color = Palette.TextDim, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -309,20 +325,20 @@ fun TransitionPanel(vm: EditorViewModel) {
     val maxD = (minOf(main.clips[index - 1].durationUs, clip.durationUs) / 2_000_000f).coerceAtLeast(0.1f)
     var dur by remember(id) { mutableFloatStateOf((clip.transitionIn?.durationUs ?: 500_000L) / 1_000_000f) }
     val current = clip.transitionIn
-    PanelScaffold("Transition", { vm.panel = Panel.NONE }, actions = {
-        androidx.compose.material3.TextButton(onClick = { vm.setTransitionForAll(current) }) { Text("Apply to all") }
+    PanelScaffold(stringResource(R.string.panel_transition), { vm.panel = Panel.NONE }, actions = {
+        androidx.compose.material3.TextButton(onClick = { vm.setTransitionForAll(current) }) { Text(stringResource(R.string.panel_apply_to_all)) }
     }) {
         ChipRow {
-            FilterChip(selected = current == null, onClick = { vm.setTransition(id, null) }, label = { Text("None") })
+            FilterChip(selected = current == null, onClick = { vm.setTransition(id, null) }, label = { Text(stringResource(R.string.anim_none)) })
             TransitionType.entries.forEach { type ->
                 FilterChip(
                     selected = current?.type == type,
                     onClick = { vm.setTransition(id, Transition(type, (dur.coerceAtMost(maxD) * 1_000_000).toLong())) },
-                    label = { Text(type.label) },
+                    label = { Text(type.displayName()) },
                 )
             }
         }
-        if (current != null) LabeledSlider("Duration", dur.coerceAtMost(maxD), 0.1f..maxD, { "%.1fs".format(it) }, { dur = it }, {
+        if (current != null) LabeledSlider(stringResource(R.string.panel_duration), dur.coerceAtMost(maxD), 0.1f..maxD, { "%.1fs".format(it) }, { dur = it }, {
             vm.setTransition(id, current.copy(durationUs = (dur * 1_000_000).toLong()))
         })
     }
@@ -334,10 +350,10 @@ fun LayoutPanel(vm: EditorViewModel) {
     var gap by remember { mutableFloatStateOf(0f) }
     val count = vm.project.clipsAt(vm.playheadUs, setOf(TrackKind.MAIN, TrackKind.OVERLAY)).size
     val aspect = vm.project.canvas.size.aspect
-    PanelScaffold("Layout", { vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_layout), { vm.panel = Panel.NONE }) {
         Text(
-            if (count <= 1) "Add overlays (picture-in-picture) at the playhead, then pick a layout to arrange them in one frame."
-            else "Arranges the $count clips showing at the playhead. Drag on the preview to fine-tune each one.",
+            if (count <= 1) stringResource(R.string.panel_layout_hint_few)
+            else stringResource(R.string.panel_layout_hint_many, count),
             color = Palette.TextDim, style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 8.dp)) {
@@ -356,11 +372,11 @@ fun LayoutPanel(vm: EditorViewModel) {
                         }
                         drawRect(Color.White.copy(alpha = 0.3f), style = Stroke(1f))
                     }
-                    Text(preset.label, fontSize = 10.sp, maxLines = 1, color = if (match) Palette.Text else Palette.TextDim)
+                    Text(preset.displayName(), fontSize = 10.sp, maxLines = 1, color = if (match) Palette.Text else Palette.TextDim)
                 }
             }
         }
-        LabeledSlider("Spacing", gap, 0f..0.05f, { "${(it * 1000).roundToInt() / 10f}%" }, { gap = it })
+        LabeledSlider(stringResource(R.string.panel_spacing), gap, 0f..0.05f, { "${(it * 1000).roundToInt() / 10f}%" }, { gap = it })
     }
 }
 
@@ -369,20 +385,20 @@ fun LayoutPanel(vm: EditorViewModel) {
 fun CanvasPanel(vm: EditorViewModel) {
     val c = vm.project.canvas
     var blur by remember { mutableFloatStateOf(c.background.blur) }
-    PanelScaffold("Project format", { vm.panel = Panel.NONE }) {
-        Text("Ratio", color = Palette.TextDim, fontSize = 12.sp)
+    PanelScaffold(stringResource(R.string.panel_project_format), { vm.panel = Panel.NONE }) {
+        Text(stringResource(R.string.home_ratio), color = Palette.TextDim, fontSize = 12.sp)
         ChipRow { AspectPreset.entries.forEach { a -> FilterChip(selected = c.aspect == a, onClick = { vm.updateCanvas { it.copy(aspect = a) } }, label = { Text(a.label) }) } }
-        Text("Resolution", color = Palette.TextDim, fontSize = 12.sp)
+        Text(stringResource(R.string.home_resolution), color = Palette.TextDim, fontSize = 12.sp)
         ChipRow { ResolutionTier.highToLow.forEach { r -> FilterChip(selected = c.tier == r, onClick = { vm.updateCanvas { it.copy(tier = r) } }, label = { Text(r.label) }) } }
-        Text("Frame rate", color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = c.fps == f, onClick = { vm.updateCanvas { it.copy(fps = f) } }, label = { Text("$f fps") }) } }
-        Text("Background", color = Palette.TextDim, fontSize = 12.sp)
+        Text(stringResource(R.string.home_frame_rate), color = Palette.TextDim, fontSize = 12.sp)
+        ChipRow { FRAME_RATES.forEach { f -> FilterChip(selected = c.fps == f, onClick = { vm.updateCanvas { it.copy(fps = f) } }, label = { Text(stringResource(R.string.home_fps, f)) }) } }
+        Text(stringResource(R.string.panel_background), color = Palette.TextDim, fontSize = 12.sp)
         ChipRow {
-            FilterChip(selected = c.background.mode == BackgroundMode.COLOR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.COLOR)) } }, label = { Text("Color") })
-            FilterChip(selected = c.background.mode == BackgroundMode.BLUR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.BLUR)) } }, label = { Text("Blur") })
+            FilterChip(selected = c.background.mode == BackgroundMode.COLOR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.COLOR)) } }, label = { Text(stringResource(R.string.panel_color)) })
+            FilterChip(selected = c.background.mode == BackgroundMode.BLUR, onClick = { vm.updateCanvas { it.copy(background = it.background.copy(mode = BackgroundMode.BLUR)) } }, label = { Text(stringResource(R.string.panel_blur)) })
         }
         if (c.background.mode == BackgroundMode.COLOR) ColorRow(textColors, c.background.color, { col -> vm.updateCanvas { it.copy(background = it.background.copy(color = col)) } })
-        else LabeledSlider("Blur", blur, 0f..1f, ::pct, { blur = it }, { vm.updateCanvas { it.copy(background = it.background.copy(blur = blur)) } })
+        else LabeledSlider(stringResource(R.string.panel_blur), blur, 0f..1f, ::pct, { blur = it }, { vm.updateCanvas { it.copy(background = it.background.copy(blur = blur)) } })
         Text("${c.size.width} × ${c.size.height}", color = Palette.TextDim, fontSize = 12.sp)
     }
 }
@@ -395,23 +411,23 @@ fun CanvasPanel(vm: EditorViewModel) {
 fun TextEditPanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     val style = clip.text ?: return
-    PanelScaffold("Text", { vm.endGesture(); vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_text), { vm.endGesture(); vm.panel = Panel.NONE }) {
         OutlinedTextField(
             value = style.text,
             onValueChange = { v -> vm.liveText { it.copy(text = v) } },
             modifier = Modifier.fillMaxWidth(),
             minLines = 2,
             maxLines = 5,
-            label = { Text("Text") },
+            label = { Text(stringResource(R.string.panel_text)) },
         )
         Spacer(Modifier.height(8.dp))
         ChipRow {
-            listOf("Top" to 0.14f, "Center" to 0.5f, "Bottom" to 0.86f).forEach { (label, y) ->
+            listOf(stringResource(R.string.panel_top) to 0.14f, stringResource(R.string.panel_center) to 0.5f, stringResource(R.string.panel_bottom) to 0.86f).forEach { (label, y) ->
                 OutlinedButton(onClick = { vm.updateSelected { c -> c.withTransformAt(vm.playheadUs, c.transformAt(vm.playheadUs).copy(cy = y, cx = 0.5f), vm.frameUs) } }) { Text(label) }
             }
-            OutlinedButton(onClick = { vm.panel = Panel.TEXT_FONT }) { Text("Font") }
-            OutlinedButton(onClick = { vm.panel = Panel.TEXT_STYLE }) { Text("Style") }
-            OutlinedButton(onClick = { vm.panel = Panel.TEXT_ANIM }) { Text("Animation") }
+            OutlinedButton(onClick = { vm.panel = Panel.TEXT_FONT }) { Text(stringResource(R.string.panel_font)) }
+            OutlinedButton(onClick = { vm.panel = Panel.TEXT_STYLE }) { Text(stringResource(R.string.panel_style)) }
+            OutlinedButton(onClick = { vm.panel = Panel.TEXT_ANIM }) { Text(stringResource(R.string.panel_animation)) }
         }
     }
 }
@@ -423,11 +439,13 @@ fun FontPanel(vm: EditorViewModel) {
     val style = clip.text ?: return
     val scope = rememberCoroutineScope()
     val progress = remember { mutableStateMapOf<String, Float>() }
+    val resources = androidx.compose.ui.platform.LocalResources.current
+    val fontFailed = { reason: String? -> resources.getString(R.string.panel_font_download_failed, reason.orEmpty()) }
     var refresh by remember { mutableIntStateOf(0) }
-    PanelScaffold("Font", { vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_font), { vm.panel = Panel.NONE }) {
         @Suppress("UNUSED_EXPRESSION") refresh
         FontGroup.entries.forEach { group ->
-            Text(when (group) { FontGroup.SYSTEM -> "System"; FontGroup.LATIN -> "English"; FontGroup.ART -> "Art & display"; FontGroup.CHINESE -> "繁體中文 (download once)" }, color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text(stringResource(when (group) { FontGroup.SYSTEM -> R.string.panel_font_group_system; FontGroup.LATIN -> R.string.panel_font_group_latin; FontGroup.ART -> R.string.panel_font_group_art; FontGroup.CHINESE -> R.string.panel_font_group_chinese }), color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
             FontCatalog.all.filter { it.group == group }.forEach { def ->
                 val available = FontManager.isAvailable(def.id)
                 val p = progress[def.id]
@@ -442,7 +460,7 @@ fun FontPanel(vm: EditorViewModel) {
                                     FontManager.download(def.id) { v -> progress[def.id] = v }
                                     vm.updateText { it.copy(fontId = def.id) }
                                 } catch (e: Exception) {
-                                    vm.message = "Font download failed: ${e.message}"
+                                    vm.message = fontFailed(e.message)
                                 } finally { progress.remove(def.id); refresh++ }
                             }
                         }
@@ -450,7 +468,7 @@ fun FontPanel(vm: EditorViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val family = remember(def.id, available) { if (available) FontFamily(FontManager.typeface(def.id)) else FontFamily.Default }
-                    Text(def.name, fontFamily = family, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Text(def.displayName(), fontFamily = family, fontSize = 16.sp, modifier = Modifier.weight(1f))
                     Text(def.sample, fontFamily = family, fontSize = 16.sp, color = Palette.TextDim)
                     Spacer(Modifier.width(8.dp))
                     when {
@@ -471,27 +489,27 @@ fun FontPanel(vm: EditorViewModel) {
 fun TextStylePanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     val s = clip.text ?: return
-    PanelScaffold("Style", { vm.endGesture(); vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_style), { vm.endGesture(); vm.panel = Panel.NONE }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconToggleButton(checked = s.bold, onCheckedChange = { b -> vm.updateText { it.copy(bold = b) } }) { Icon(Icons.Default.FormatBold, "Bold", tint = if (s.bold) Palette.Accent else Palette.TextDim) }
-            IconToggleButton(checked = s.italic, onCheckedChange = { b -> vm.updateText { it.copy(italic = b) } }) { Icon(Icons.Default.FormatItalic, "Italic", tint = if (s.italic) Palette.Accent else Palette.TextDim) }
+            IconToggleButton(checked = s.bold, onCheckedChange = { b -> vm.updateText { it.copy(bold = b) } }) { Icon(Icons.Default.FormatBold, stringResource(R.string.panel_bold), tint = if (s.bold) Palette.Accent else Palette.TextDim) }
+            IconToggleButton(checked = s.italic, onCheckedChange = { b -> vm.updateText { it.copy(italic = b) } }) { Icon(Icons.Default.FormatItalic, stringResource(R.string.panel_italic), tint = if (s.italic) Palette.Accent else Palette.TextDim) }
             Spacer(Modifier.width(12.dp))
             listOf(TextAlign.LEFT to Icons.AutoMirrored.Filled.FormatAlignLeft, TextAlign.CENTER to Icons.Default.FormatAlignCenter, TextAlign.RIGHT to Icons.AutoMirrored.Filled.FormatAlignRight).forEach { (a, icon) ->
-                IconButton(onClick = { vm.updateText { it.copy(align = a) } }) { Icon(icon, a.name, tint = if (s.align == a) Palette.Accent else Palette.TextDim) }
+                IconButton(onClick = { vm.updateText { it.copy(align = a) } }) { Icon(icon, stringResource(when (a) { TextAlign.LEFT -> R.string.panel_align_left; TextAlign.CENTER -> R.string.panel_align_center; TextAlign.RIGHT -> R.string.panel_align_right }), tint = if (s.align == a) Palette.Accent else Palette.TextDim) }
             }
             Spacer(Modifier.weight(1f))
-            Text("Shadow", fontSize = 12.sp, color = Palette.TextDim)
+            Text(stringResource(R.string.panel_shadow), fontSize = 12.sp, color = Palette.TextDim)
             Switch(checked = s.shadow, onCheckedChange = { b -> vm.updateText { it.copy(shadow = b) } })
         }
-        LabeledSlider("Size", s.size, 0.02f..0.35f, { "${(it * 1000).roundToInt() / 10f}" }, { v -> vm.liveText { it.copy(size = v) } }, vm::endGesture)
-        Text("Color", color = Palette.TextDim, fontSize = 12.sp)
+        LabeledSlider(stringResource(R.string.panel_size), s.size, 0.02f..0.35f, { "${(it * 1000).roundToInt() / 10f}" }, { v -> vm.liveText { it.copy(size = v) } }, vm::endGesture)
+        Text(stringResource(R.string.panel_color), color = Palette.TextDim, fontSize = 12.sp)
         ColorRow(textColors, s.color, { c -> vm.updateText { it.copy(color = c) } })
-        LabeledSlider("Outline", s.strokeWidth, 0f..0.25f, ::pct, { v -> vm.liveText { it.copy(strokeWidth = v) } }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_outline), s.strokeWidth, 0f..0.25f, ::pct, { v -> vm.liveText { it.copy(strokeWidth = v) } }, vm::endGesture)
         if (s.strokeWidth > 0f) ColorRow(textColors, s.strokeColor, { c -> vm.updateText { it.copy(strokeColor = c) } })
-        Text("Background", color = Palette.TextDim, fontSize = 12.sp)
+        Text(stringResource(R.string.panel_background), color = Palette.TextDim, fontSize = 12.sp)
         ColorRow(bgColors, s.backgroundColor, { c -> vm.updateText { it.copy(backgroundColor = c) } }, allowNone = true)
-        LabeledSlider("Letters", s.letterSpacing, -0.05f..0.5f, { "%.2f".format(it) }, { v -> vm.liveText { it.copy(letterSpacing = v) } }, vm::endGesture)
-        LabeledSlider("Lines", s.lineSpacing, 0.8f..2f, { "%.1f".format(it) }, { v -> vm.liveText { it.copy(lineSpacing = v) } }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_letters), s.letterSpacing, -0.05f..0.5f, { "%.2f".format(it) }, { v -> vm.liveText { it.copy(letterSpacing = v) } }, vm::endGesture)
+        LabeledSlider(stringResource(R.string.panel_lines), s.lineSpacing, 0.8f..2f, { "%.1f".format(it) }, { v -> vm.liveText { it.copy(lineSpacing = v) } }, vm::endGesture)
     }
 }
 
@@ -501,12 +519,12 @@ fun TextAnimPanel(vm: EditorViewModel) {
     val clip = vm.selectedClip ?: return
     val s = clip.text ?: return
     var dur by remember(clip.id) { mutableFloatStateOf(s.animDurationUs / 1_000_000f) }
-    PanelScaffold("Animation", { vm.panel = Panel.NONE }) {
-        Text("In", color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { TextAnim.entries.forEach { a -> FilterChip(selected = s.animIn == a, onClick = { vm.updateText { it.copy(animIn = a) } }, label = { Text(a.label) }) } }
-        Text("Out", color = Palette.TextDim, fontSize = 12.sp)
-        ChipRow { TextAnim.entries.filter { it != TextAnim.TYPEWRITER }.forEach { a -> FilterChip(selected = s.animOut == a, onClick = { vm.updateText { it.copy(animOut = a) } }, label = { Text(a.label) }) } }
-        LabeledSlider("Duration", dur, 0.1f..2f, { "%.1fs".format(it) }, { dur = it }, { vm.updateText { it.copy(animDurationUs = (dur * 1_000_000).toLong()) } })
+    PanelScaffold(stringResource(R.string.panel_animation), { vm.panel = Panel.NONE }) {
+        Text(stringResource(R.string.panel_in), color = Palette.TextDim, fontSize = 12.sp)
+        ChipRow { TextAnim.entries.forEach { a -> FilterChip(selected = s.animIn == a, onClick = { vm.updateText { it.copy(animIn = a) } }, label = { Text(a.displayName()) }) } }
+        Text(stringResource(R.string.panel_out), color = Palette.TextDim, fontSize = 12.sp)
+        ChipRow { TextAnim.entries.filter { it != TextAnim.TYPEWRITER }.forEach { a -> FilterChip(selected = s.animOut == a, onClick = { vm.updateText { it.copy(animOut = a) } }, label = { Text(a.displayName()) }) } }
+        LabeledSlider(stringResource(R.string.panel_duration), dur, 0.1f..2f, { "%.1fs".format(it) }, { dur = it }, { vm.updateText { it.copy(animDurationUs = (dur * 1_000_000).toLong()) } })
     }
 }
 
@@ -518,7 +536,7 @@ private val emojis = listOf(
 @UnstableApi
 @Composable
 fun StickerPanel(vm: EditorViewModel) {
-    PanelScaffold("Stickers", { vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_stickers), { vm.panel = Panel.NONE }) {
         ChipRow {
             emojis.forEach { e ->
                 Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(Palette.Surface2).clickable { vm.addSticker(e) }, contentAlignment = Alignment.Center) {
@@ -526,7 +544,7 @@ fun StickerPanel(vm: EditorViewModel) {
                 }
             }
         }
-        Text("Tip: use Overlay to add your own PNG stickers with transparency.", color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(R.string.panel_tip_use_overlay_to), color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -538,7 +556,7 @@ fun VoiceoverPanel(vm: EditorViewModel, requestPermission: () -> Unit, hasPermis
         while (vm.recording) { level = (vm.recorderLevel / 20000f).coerceIn(0f, 1f); delay(60) }
         level = 0f
     }
-    PanelScaffold("Voiceover", { if (vm.recording) vm.stopRecording(); vm.panel = Panel.NONE }) {
+    PanelScaffold(stringResource(R.string.panel_voiceover), { if (vm.recording) vm.stopRecording(); vm.panel = Panel.NONE }) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             Button(
                 onClick = { if (!hasPermission) requestPermission() else if (vm.recording) vm.stopRecording() else vm.startRecording() },
@@ -548,7 +566,7 @@ fun VoiceoverPanel(vm: EditorViewModel, requestPermission: () -> Unit, hasPermis
             ) { Icon(if (vm.recording) Icons.Default.Stop else Icons.Default.FiberManualRecord, null, modifier = Modifier.size(32.dp)) }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (vm.recording) "Recording… ${formatTime(vm.playheadUs - vm.recordingStartUs)}" else "Records from the playhead while the video plays.", color = Palette.TextDim)
+                Text(if (vm.recording) stringResource(R.string.panel_recording, formatTime(vm.playheadUs - vm.recordingStartUs)) else stringResource(R.string.panel_records_hint), color = Palette.TextDim)
                 Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Palette.Surface3)) {
                     Box(Modifier.fillMaxWidth(level).height(8.dp).background(Palette.Teal))
                 }
@@ -562,19 +580,93 @@ fun EmptyPanelBox(modifier: Modifier = Modifier) = Box(modifier.fillMaxSize())
 
 @UnstableApi
 @Composable
-fun CoverPanel(vm: EditorViewModel, onImport: () -> Unit) {
+fun CoverPanel(vm: EditorViewModel, headerModifier: Modifier = Modifier, onImport: () -> Unit) {
     val project = vm.project
-    PanelScaffold("Cover", onDone = { vm.panel = Panel.NONE }) {
-        Text("Choose a project thumbnail, or add it as a three-second opening clip and trim it in the timeline.", fontSize = 12.sp, color = Palette.TextDim)
-        Button(onClick = onImport) { Text("Choose image…") }
-        project.assets.filter { it.type == MediaType.IMAGE }.forEach { asset ->
-            TextButton(onClick = { vm.chooseCover(asset.id) }) {
-                Text((if (project.coverAssetId == asset.id) "✓ " else "") + asset.name)
+    val images = project.assets.filter { it.type == MediaType.IMAGE }
+    // Reading the version makes the thumbnails appear as soon as they are decoded.
+    val mediaVersion = vm.media.version.intValue
+    PanelScaffold(stringResource(R.string.panel_cover), onDone = { vm.panel = Panel.NONE }, headerModifier = headerModifier) {
+        Text(stringResource(R.string.panel_choose_a_project_thumbnail), fontSize = 12.sp, color = Palette.TextDim)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)).background(Palette.Surface2).clickable(onClickLabel = stringResource(R.string.panel_choose_photo), onClick = onImport),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Add, stringResource(R.string.panel_choose_photo), tint = Palette.Accent) }
+            images.forEach { asset ->
+                val chosen = project.coverAssetId == asset.id
+                val thumb = remember(mediaVersion, asset.id) { vm.media.thumbnail(asset, 0, 1, 216) }
+                Box(
+                    Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)).background(Palette.Surface2)
+                        .border(if (chosen) 2.dp else 0.dp, if (chosen) Palette.Accent else Color.Transparent, RoundedCornerShape(8.dp))
+                        .clickable(onClickLabel = stringResource(R.string.panel_use_as_cover)) { vm.chooseCover(asset.id) }
+                        .semantics { contentDescription = asset.name },
+                ) { if (thumb != null) Image(thumb, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             }
         }
-        TextButton(onClick = { vm.chooseCover(null) }, enabled = project.coverAssetId != null) { Text("Use automatic thumbnail") }
+        if (images.isEmpty()) Text(stringResource(R.string.panel_no_photos_in_this), fontSize = 12.sp, color = Palette.TextDim)
+        project.asset(project.coverAssetId)?.takeIf { it.type == MediaType.IMAGE }?.let { CoverFramer(vm, it, mediaVersion) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { vm.chooseCover(null) }, enabled = project.coverAssetId != null) { Text(stringResource(R.string.panel_use_automatic_thumbnail)) }
+            Spacer(Modifier.weight(1f))
+            if (project.asset(project.coverAssetId)?.type == MediaType.IMAGE) {
+                TextButton(onClick = { vm.commit(project.copy(coverFraming = CoverFraming())) }, enabled = project.coverFraming != CoverFraming()) { Text(stringResource(R.string.panel_reset_position)) }
+            }
+        }
         val locked = project.tracks.any { it.locked && (it.kind == TrackKind.MAIN || it.clips.isNotEmpty()) }
-        Button(onClick = { vm.prependCover() }, enabled = project.asset(project.coverAssetId)?.type == MediaType.IMAGE && !locked) { Text("Add cover to start") }
-        if (locked) Text("Unlock tracks before adding an opening clip.", fontSize = 12.sp, color = Palette.TextDim)
+        Button(onClick = { vm.prependCover() }, enabled = project.asset(project.coverAssetId)?.type == MediaType.IMAGE && !locked) { Text(stringResource(R.string.panel_add_cover_to_start)) }
+        if (locked) Text(stringResource(R.string.panel_unlock_tracks_before_adding), fontSize = 12.sp, color = Palette.TextDim)
     }
+}
+
+/** Shows the cover as it will fill the video frame; drag to move it, pinch or use the slider to zoom. */
+@UnstableApi
+@Composable
+private fun CoverFramer(vm: EditorViewModel, asset: MediaAsset, mediaVersion: Int) {
+    val framing = vm.project.coverFraming
+    val size = vm.project.canvas.size
+    val aspect = size.width.toFloat() / size.height
+    val img = remember(mediaVersion, asset.id) { vm.media.thumbnail(asset, 0, 1, 720) }
+    val coverPositionDescription = stringResource(R.string.panel_cover_position)
+    Text(stringResource(R.string.panel_drag_the_photo_to), fontSize = 12.sp, color = Palette.TextDim, modifier = Modifier.padding(top = 4.dp))
+    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Canvas(
+            Modifier.height(220.dp).aspectRatio(aspect).clip(RoundedCornerShape(6.dp)).background(Color.Black)
+                .border(1.dp, Palette.Accent, RoundedCornerShape(6.dp))
+                .semantics { contentDescription = coverPositionDescription }
+                .pointerInput(asset.id) {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        do {
+                            val event = awaitPointerEvent()
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            val bitmap = img
+                            if (bitmap != null && (zoom != 1f || pan != Offset.Zero)) {
+                                val now = vm.project.coverFraming
+                                val newZoom = (now.zoom * zoom).coerceIn(1f, CoverFraming.MAX_ZOOM)
+                                val at = now.copy(zoom = newZoom).placement(bitmap.width.toFloat(), bitmap.height.toFloat(), this.size.width.toFloat(), this.size.height.toFloat())
+                                // Moving the photo by pan pixels changes the pan by pan over half the overflow.
+                                val overflowX = (at[2] - this.size.width) / 2
+                                val overflowY = (at[3] - this.size.height) / 2
+                                vm.liveCover(CoverFraming(
+                                    newZoom,
+                                    if (overflowX > 0.5f) (now.panX - pan.x / overflowX).coerceIn(-1f, 1f) else now.panX,
+                                    if (overflowY > 0.5f) (now.panY - pan.y / overflowY).coerceIn(-1f, 1f) else now.panY,
+                                ))
+                                event.changes.forEach { it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                        vm.endGesture()
+                    }
+                },
+        ) {
+            if (img != null) {
+                val at = framing.placement(img.width.toFloat(), img.height.toFloat(), this.size.width, this.size.height)
+                drawImage(img, srcOffset = IntOffset.Zero, srcSize = IntSize(img.width, img.height),
+                    dstOffset = IntOffset(at[0].roundToInt(), at[1].roundToInt()), dstSize = IntSize(at[2].roundToInt().coerceAtLeast(1), at[3].roundToInt().coerceAtLeast(1)))
+            }
+        }
+    }
+    LabeledSlider(stringResource(R.string.anim_zoom), framing.zoom, 1f..CoverFraming.MAX_ZOOM, { "%.1f×".format(it) },
+        onChange = { vm.liveCover(vm.project.coverFraming.copy(zoom = it)) }, onFinished = { vm.endGesture() })
 }

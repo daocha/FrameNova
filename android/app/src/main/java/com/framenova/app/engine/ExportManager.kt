@@ -1,5 +1,6 @@
 package com.framenova.app.engine
 
+import com.framenova.app.R
 import com.framenova.app.LOG_TAG
 import android.content.ContentValues
 import android.content.Context
@@ -132,7 +133,7 @@ object ExportManager {
                 transformer = null
                 file.delete()
                 if (onFailure != null) onFailure()
-                else finish(ExportState.Failed(label, exportException.cause?.message ?: exportException.message ?: "Export failed"))
+                else finish(ExportState.Failed(label, exportException.cause?.message ?: exportException.message ?: app.getString(R.string.editor_export_failed)))
             }
         })
         val t = builder.build()
@@ -183,8 +184,8 @@ object ExportManager {
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
                 val resolver = app.contentResolver
-                val uri = resolver.insert(collection, values) ?: error("Could not create the output file")
-                resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out, 1 shl 20) } } ?: error("Could not write the output file")
+                val uri = resolver.insert(collection, values) ?: error(app.getString(R.string.export_cant_create))
+                resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out, 1 shl 20) } } ?: error(app.getString(R.string.export_cant_write))
                 resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
                 val bytes = file.length()
                 file.delete()
@@ -192,7 +193,7 @@ object ExportManager {
             } catch (e: Exception) {
                 android.util.Log.e(LOG_TAG, "Could not save $displayName", e)
                 file.delete()
-                main.post { finish(ExportState.Failed(label, e.message ?: "Could not save")) }
+                main.post { finish(ExportState.Failed(label, e.message ?: app.getString(R.string.export_cant_save))) }
             }
         }
     }
