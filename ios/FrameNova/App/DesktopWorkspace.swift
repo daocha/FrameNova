@@ -87,7 +87,10 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
             // The cover has its own dialog on the Mac instead of a side panel.
             if value == "Cover" {panel = panels.first {$0 != "Cover"} ?? "Ratio";showCover = true}
         }
-        .sheet(isPresented:$showCover) {CoverDialog(model:model,choosePhoto:$chooseCoverPhoto) {showCover = false}}
+        .overlay {
+            // An in-window dialog: the system sheet did not pass clicks to its buttons in the editor on the Mac.
+            if showCover {DesktopDialog(width:560,height:640) {CoverDialog(model:model,choosePhoto:$chooseCoverPhoto) {showCover = false}}}
+        }
         .onChange(of: model.selected) { _, _ in
             if !panels.contains(panel) || model.clip != nil { panel = panels[0] }
         }
@@ -180,9 +183,45 @@ struct CoverDialog: View {
             Divider()
             ScrollView {CoverPanel(model:model,choosePhoto:choosePhoto).padding(16)}
         }
-        .frame(minWidth:520,idealWidth:560,minHeight:480,idealHeight:560)
+        .frame(maxWidth:.infinity,maxHeight:.infinity)
         .background(Palette.surface)
         .accessibilityIdentifier("desktop.coverDialog")
+    }
+}
+
+/// A dialog drawn inside the window over a dimmed backdrop, for the Mac, where the dialogs opened from the editor are not
+/// presented as system sheets. The backdrop takes every click, so nothing behind the dialog reacts.
+struct DesktopDialog<Content:View>:View {
+    var width:CGFloat = 560
+    var height:CGFloat = 640
+    @ViewBuilder var content:()->Content
+    var body:some View {
+        GeometryReader {geo in
+            ZStack {
+                Color.black.opacity(0.5).ignoresSafeArea().contentShape(Rectangle()).onTapGesture {}
+                content()
+                    .frame(width:min(width,geo.size.width-48),height:min(height,geo.size.height-48))
+                    .background(Palette.surface3,in:RoundedRectangle(cornerRadius:14))
+                    .clipShape(RoundedRectangle(cornerRadius:14))
+                    .shadow(color:.black.opacity(0.5),radius:24,y:8)
+            }.frame(width:geo.size.width,height:geo.size.height)
+        }
+    }
+}
+
+/// The export dialog: a system sheet on iPhone and iPad, an in-window dialog on the Mac.
+struct ExportPresentation:ViewModifier {
+    @Binding var isPresented:Bool
+    let project:Project
+    let exporter:Exporter
+    func body(content:Content)->some View {
+        #if targetEnvironment(macCatalyst)
+        content.overlay {
+            if isPresented {DesktopDialog(width:560,height:680) {ExportView(project:project,exporter:exporter,onClose:{isPresented = false})}}
+        }
+        #else
+        content.sheet(isPresented:$isPresented) {ExportView(project:project,exporter:exporter,onClose:{isPresented = false})}
+        #endif
     }
 }
 
