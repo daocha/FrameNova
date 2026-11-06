@@ -47,12 +47,15 @@ struct TimelineView: View {
             let width = max(Double(viewport.size.width) - headerWidth, max(600, x(model.project.durationUs) + 180))
             // The layers fill the panel and sit in its vertical middle, growing outwards as layers are added. Both columns share
             // this height, so the horizontal scroll bar ends up at the bottom of the panel and the playhead spans all of it.
-            let fill = max(0,Double(viewport.size.height)-(desktop ? 64:28)-80)
+            // Explicit heights: the rows' natural height, or the whole space under the ruler when that is larger.
+            let items = model.project.tracks.count+(desktop ? 2:0)
+            let natural = Double(model.project.tracks.count)*rowHeight+(desktop ? 72:0)+Double(max(0,items-1))*5
+            let fill = max(natural,Double(viewport.size.height)-(desktop ? 64:28)-6)
             ScrollView(.vertical) {
                 LazyVStack(spacing:5,pinnedViews:[.sectionHeaders]) {
                   Section {
                    HStack(alignment: .top, spacing: 0) {
-                    headers.frame(minHeight:fill,alignment:.center)
+                    headers.frame(height:fill,alignment:.center)
                     ScrollViewReader { reader in
                         ScrollView(.horizontal) {
                             HStack(alignment:.top,spacing:0) {
@@ -66,9 +69,10 @@ struct TimelineView: View {
                                 }
                                 .background(GeometryReader {proxy in Color.clear.preference(key:TimelineOffsetKey.self,value:-proxy.frame(in:.named("timeline.scrollViewport")).minX)})
                             }
-                            .frame(minHeight:fill,alignment:.center)
+                            .frame(height:fill,alignment:.center)
                             .overlay(alignment: .topLeading) { playhead }
                         }
+                        .frame(height:fill)
                         .coordinateSpace(name:"timeline.scrollViewport")
                         .onPreferenceChange(TimelineOffsetKey.self) {offset in
                             // Before iOS 18 the offset can only be measured from the layout; later it is read from the scroll view.
@@ -436,7 +440,7 @@ private struct TimelineScrollTracking:ViewModifier {
     func body(content:Content)->some View {
         content
             .scrollPosition($position)
-            .scrollIndicators(.hidden,axes:.horizontal)
+            .scrollIndicators(.never,axes:.horizontal)
             .onScrollGeometryChange(for:Double.self,of:{$0.contentOffset.x+$0.contentInsets.leading}) {_,value in
                 scroll = value;offset = value-coverWidth
             }
