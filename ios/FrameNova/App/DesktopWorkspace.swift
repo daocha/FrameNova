@@ -18,8 +18,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @AppStorage("desktop.showInspector") private var showInspector = true
     @AppStorage("desktop.browserWidth") private var browserWidth = 240.0
     @AppStorage("desktop.inspectorWidth") private var inspectorWidth = 300.0
-    // A large value means "as tall as the window allows"; dragging the divider sets an exact height.
-    @AppStorage("desktop.timelineHeight") private var timelineHeight = 4000.0
+    @AppStorage("desktop.timelineHeight") private var timelineHeight = 540.0
     @AppStorage("desktop.timelineHeightDefaultVersion") private var timelineHeightDefaultVersion = 0
     @ViewState<Double> private var availableWidth = 1000
     @ViewState<Bool> private var chooseCoverPhoto = false
@@ -37,7 +36,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
 
     var body: some View {
         GeometryReader { viewport in
-            let timelineLimit = max(160,Double(viewport.size.height)-200)
+            let timelineLimit = max(160,Double(viewport.size.height)-300)
             VStack(spacing: 0) {
                 toolbar
                 HStack(spacing: 0) {
@@ -70,10 +69,10 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 }.frame(height: clamp(timelineHeight, 160, timelineLimit))
             }
             .onAppear {
-                if timelineHeightDefaultVersion < 2 {
-                    // Earlier versions stored a fixed height; the timeline now takes all the space below the preview by default.
-                    timelineHeight = 4000
-                    timelineHeightDefaultVersion = 2
+                if timelineHeightDefaultVersion < 3 {
+                    // Some builds stored "as tall as possible" (4000); go back to the normal default once.
+                    if timelineHeight == 270 || timelineHeight == 4000 {timelineHeight = 540}
+                    timelineHeightDefaultVersion = 3
                 }
                 availableWidth = viewport.size.width; timeline.rowHeight = 68; panel = model.clip == nil ? "Ratio" : panels[0]
             }
@@ -159,7 +158,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var commandActions: DesktopEditorActions {
         DesktopEditorActions(model: model, importMedia: onImport, replaceMedia: onReplace, importSubtitles: onSubtitles, export: onExport,
                              toggleBrowser: { showBrowser.toggle() }, toggleInspector: { showInspector.toggle() },
-                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 4000; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
+                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 540; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
                              zoom: { timeline.zoom($0) }, fit: { timeline.fit(duration: model.project.durationUs, width: availableWidth) })
     }
 }

@@ -113,8 +113,7 @@ struct TimelineView: View {
             .background {DesktopPointerModifiers(state:pointer)}
             #endif
         }
-        // Drawn over the bottom edge of the layers, so it takes no space of its own.
-        .overlay(alignment:.bottom) {scrollBar}
+        scrollBar
         }
         .padding(.vertical, 5)
         .background(Palette.bg)
@@ -224,7 +223,7 @@ struct TimelineView: View {
             let range = contentWidth-viewportWidth
             let scroll = clamp(horizontalOffset+coverWidth,0,range)
             HStack(spacing:0) {
-                Color.clear.frame(width:headerWidth)
+                Color.clear.frame(width:headerWidth,height:8)
                 GeometryReader {bar in
                     let trackWidth = Double(bar.size.width)
                     let thumb = max(40,trackWidth*viewportWidth/contentWidth)
