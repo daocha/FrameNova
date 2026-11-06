@@ -170,15 +170,15 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
 struct CoverDialog: View {
     @ObservedObject var model: EditorModel
     var choosePhoto:Binding<Bool>? = nil
-    /// Closes the dialog by clearing the state that presents it; `dismiss` alone was not reliable on the Mac.
+    /// Closes the dialog by clearing the state that presents it. `dismiss` is not used: in an in-window dialog it would
+    /// close the whole editor.
     let onClose:()->Void
-    @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Cover").font(.system(size:18,weight:.bold))
                 Spacer()
-                TextAction(title:loc("Done"),prominent:true) {onClose();dismiss()}.keyboardShortcut(.defaultAction)
+                TextAction(title:loc("Done"),prominent:true) {onClose()}.keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
             ScrollView {CoverPanel(model:model,choosePhoto:choosePhoto).padding(16)}
