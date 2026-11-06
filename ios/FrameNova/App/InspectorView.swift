@@ -286,6 +286,8 @@ struct ShareSheet: UIViewControllerRepresentable {
 struct ExportView: View {
     let project:Project
     @ObservedObject var exporter:Exporter
+    /// Closes the dialog by clearing the state that presents it; `dismiss` alone was not reliable on the Mac.
+    var onClose:()->Void = {}
     @Environment(\.dismiss) var dismiss
     @ViewState<ExportSettings> private var settings = ExportSettings()
     @ViewState<Bool> private var share = false
@@ -331,10 +333,10 @@ struct ExportView: View {
         else if exporter.url != nil {
             TextAction(title:loc("Share")) {share = true}
             TextAction(title:saved ? loc("Saved"):loc("Save video"),enabled:!saved) {Task {await exporter.saveToPhotos(); saved = exporter.error == nil}}
-            TextAction(title:loc("Done"),prominent:true) {dismiss()}
+            TextAction(title:loc("Done"),prominent:true) {onClose();dismiss()}.keyboardShortcut(.defaultAction)
         } else if exporter.error != nil {TextAction(title:loc("OK"),prominent:true) {exporter.error = nil}}
         else {
-            TextAction(title:loc("Cancel")) {dismiss()}.keyboardShortcut(.cancelAction)
+            TextAction(title:loc("Cancel")) {onClose();dismiss()}.keyboardShortcut(.cancelAction)
             FilledAction(title:loc("Export")) {exporter.start(project,settings:settings)}
         }
     }

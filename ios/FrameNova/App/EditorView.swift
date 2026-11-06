@@ -85,7 +85,7 @@ struct EditorView: View {
             Button("Photos…") {picker = true}
             Button("Cancel",role:.cancel) {}
         }
-        .sheet(isPresented:$export) { ExportView(project:model.project,exporter:model.exporter) }
+        .sheet(isPresented:$export) { ExportView(project:model.project,exporter:model.exporter,onClose:{export = false}) }
         .sheet(isPresented:Binding(get:{model.shareURL != nil},set:{if !$0 {model.shareURL = nil}})) {if let url = model.shareURL {ShareSheet(url:url)}}
         .alert("Rename project",isPresented:$rename) { TextField("Name",text:$name); Button("Save") {model.change {$0.name = name}}; Button("Cancel",role:.cancel) {} }
         .alert("FrameNova",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error = nil}})) {Button("OK") {model.error = nil}} message: {Text(model.error ?? "")}

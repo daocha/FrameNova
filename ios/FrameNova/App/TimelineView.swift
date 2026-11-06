@@ -7,7 +7,7 @@ import SwiftUI
     var geometry: TimelineGeometry { TimelineGeometry(pointsPerSecond: pointsPerSecond, snapping: snapping) }
     func zoom(_ factor: Double) { pointsPerSecond = clamp(pointsPerSecond * factor, 8, 1600) }
     func fit(duration: Int64, width: Double) {
-        pointsPerSecond = clamp(max(1, width - 132) / max(1, Double(duration) / 1_000_000), 0.1, 600)
+        pointsPerSecond = clamp(max(1, width - 120) / max(1, Double(duration) / 1_000_000), 0.1, 600)
     }
 }
 
@@ -37,7 +37,7 @@ struct TimelineView: View {
     @ViewState<TimelineScroller> private var scroller = TimelineScroller()
 
     private var geometry: TimelineGeometry { display.geometry }
-    private var headerWidth: Double { desktop ? 100 : 90 }
+    private var headerWidth: Double { desktop ? 88 : 90 }
     private var rowHeight: Double { desktop ? display.rowHeight : 55 }
     private func x(_ time: Int64) -> Double { geometry.position(time) }
 

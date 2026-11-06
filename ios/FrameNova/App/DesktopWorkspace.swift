@@ -87,7 +87,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
             // The cover has its own dialog on the Mac instead of a side panel.
             if value == "Cover" {panel = panels.first {$0 != "Cover"} ?? "Ratio";showCover = true}
         }
-        .sheet(isPresented:$showCover) {CoverDialog(model:model,choosePhoto:$chooseCoverPhoto)}
+        .sheet(isPresented:$showCover) {CoverDialog(model:model,choosePhoto:$chooseCoverPhoto) {showCover = false}}
         .onChange(of: model.selected) { _, _ in
             if !panels.contains(panel) || model.clip != nil { panel = panels[0] }
         }
@@ -167,13 +167,15 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
 struct CoverDialog: View {
     @ObservedObject var model: EditorModel
     var choosePhoto:Binding<Bool>? = nil
+    /// Closes the dialog by clearing the state that presents it; `dismiss` alone was not reliable on the Mac.
+    let onClose:()->Void
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Cover").font(.system(size:18,weight:.bold))
                 Spacer()
-                Button("Done") {dismiss()}.keyboardShortcut(.defaultAction)
+                TextAction(title:loc("Done"),prominent:true) {onClose();dismiss()}.keyboardShortcut(.defaultAction)
             }.padding(16)
             Divider()
             ScrollView {CoverPanel(model:model,choosePhoto:choosePhoto).padding(16)}
