@@ -68,7 +68,7 @@ class TimelineLockDeviceTest {
                             selectedId = model.selectedId, selectedGapUs = model.selectedGapUs, media = model.media,
                             onScrub = model::scrubTo, onZoom = { model.pxPerSecond = it }, onSelect = { model.selectedId = it },
                             onGapTap = { model.selectedGapUs = it }, onMove = model::move, onTrim = model::trim,
-                            onTransitionTap = {}, onClipDoubleTap = {}, onTrackHeaderTap = {},
+                            onTransitionTap = {}, onClipDoubleTap = {}, onTrackHeaderTap = {}, onCoverTap = {},
                             onTrackLockTap = { model.toggleTrackLock(it.id) },
                             modifier = Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow(); width = it.size.width },
                         )
