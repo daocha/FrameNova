@@ -7,7 +7,7 @@ import SwiftUI
     var geometry: TimelineGeometry { TimelineGeometry(pointsPerSecond: pointsPerSecond, snapping: snapping) }
     func zoom(_ factor: Double) { pointsPerSecond = clamp(pointsPerSecond * factor, 8, 1600) }
     func fit(duration: Int64, width: Double) {
-        pointsPerSecond = clamp(max(1, width - 168) / max(1, Double(duration) / 1_000_000), 0.1, 600)
+        pointsPerSecond = clamp(max(1, width - 132) / max(1, Double(duration) / 1_000_000), 0.1, 600)
     }
 }
 
@@ -37,7 +37,7 @@ struct TimelineView: View {
     @ViewState<TimelineScroller> private var scroller = TimelineScroller()
 
     private var geometry: TimelineGeometry { display.geometry }
-    private var headerWidth: Double { desktop ? 136 : 90 }
+    private var headerWidth: Double { desktop ? 100 : 90 }
     private var rowHeight: Double { desktop ? display.rowHeight : 55 }
     private func x(_ time: Int64) -> Double { geometry.position(time) }
 
@@ -127,12 +127,12 @@ struct TimelineView: View {
                     HStack(spacing:6) {
                         Text(loc(track.kind == .overlay ? "Layer" : track.kind.rawValue.capitalized)).font(.subheadline.bold())
                     }
-                    HStack(spacing: desktop ? 16 : 8) {
+                    HStack(spacing: desktop ? 10 : 8) {
                         trackButton(track, key: \.muted, icon: track.muted ? "speaker.slash" : "speaker.wave.1", label: loc("Mute track"))
                         trackButton(track, key: \.hidden, icon: track.hidden ? "eye.slash" : "eye", label: loc("Hide track"))
                         trackButton(track, key: \.locked, icon: track.locked ? "lock.fill" : "lock.open", label: track.locked ? loc("Unlock track") : loc("Lock track"))
                     }.font(.system(size: desktop ? 12 : 10))
-                }.padding(.horizontal, 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(track.locked ? Color.gray.opacity(0.2):Palette.surface2)
+                }.padding(.horizontal, desktop ? 6 : 8).frame(width: headerWidth, height: rowHeight, alignment: .leading).background(track.locked ? Color.gray.opacity(0.2):Palette.surface2)
             }
             if desktop {
                 Text("New layer").font(.subheadline).frame(width: headerWidth, height: 36)
