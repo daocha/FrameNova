@@ -2,6 +2,8 @@ package com.framenova.app
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -88,13 +90,11 @@ object DevTools {
         return folder + name
     }
 
-    /** Saves the whole log since it was last cleared (no share limit) to Download/[FOLDER]/logs, or null on failure. */
-    suspend fun saveLog(context: Context, log: String? = null): String? = withContext(Dispatchers.IO) {
-        val text = log ?: log(context)
-        val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date())
+    /** Writes the whole log since it was last cleared (no share limit) to the document the user chose; true on success. */
+    suspend fun saveLogTo(context: Context, uri: android.net.Uri, text: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            saveDownload(context, "logs", "FrameNova-log-$stamp.txt", "text/plain") { it.write((header() + text).toByteArray()) }
-        }.onFailure { android.util.Log.w(LOG_TAG, "Log not saved", it) }.getOrNull()
+            context.contentResolver.openOutputStream(uri)?.use { it.write((header() + text).toByteArray()) } ?: error("cannot write $uri")
+        }.onFailure { android.util.Log.w(LOG_TAG, "Log not saved", it) }.isSuccess
     }
 
     private fun header() = "FrameNova ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · " +
@@ -148,10 +148,27 @@ object DevTools {
     }
 }
 
-/** Saves the log and says where it went. */
-suspend fun saveLogToast(context: Context, log: String? = null) {
-    val path = DevTools.saveLog(context, log)
-    android.widget.Toast.makeText(context, if (path != null) "Saved to $path" else "Could not save the log", android.widget.Toast.LENGTH_LONG).show()
+/** Returns a function that asks where to save the log (the system save dialog), then writes it there. */
+@Composable
+fun rememberLogSaver(): (String?) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pending by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val text = pending
+        pending = null
+        if (uri != null && text != null) scope.launch {
+            val saved = DevTools.saveLogTo(context, uri, text)
+            android.widget.Toast.makeText(context, if (saved) "Log saved" else "Could not save the log", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    return { log ->
+        scope.launch {
+            pending = log ?: DevTools.log(context)
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date())
+            launcher.launch("FrameNova-log-$stamp.txt")
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -160,6 +177,7 @@ fun DevLogPanel(dismiss: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
+    val saveLog = rememberLogSaver()
     var log by remember { mutableStateOf<String?>(null) }
     val vertical = rememberScrollState()
     suspend fun refresh() {
@@ -195,7 +213,7 @@ fun DevLogPanel(dismiss: () -> Unit) {
                             .putExtra(Intent.EXTRA_SUBJECT, "FrameNova log")
                             .putExtra(Intent.EXTRA_TEXT, DevTools.shareable(text)), null))
                     }, enabled = log != null) { Text("Share") }
-                    TextButton(onClick = { log?.let { scope.launch { saveLogToast(context, it) } } }, enabled = log != null) {
+                    TextButton(onClick = { log?.let { saveLog(it) } }, enabled = log != null) {
                         Text("Save")
                     }
                     TextButton(onClick = dismiss) { Text("Close") }

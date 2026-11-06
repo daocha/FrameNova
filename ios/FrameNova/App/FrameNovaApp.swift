@@ -207,7 +207,7 @@ struct SettingsView: View {
     @AppStorage("developerToolsVersion") private var developerVersion = ""
     @ViewState<Int> private var taps = 0
     @ViewState<Bool> private var logs = false
-    @ViewState<Bool> private var shareLogs = false
+    @ViewState<URL?> private var logFile: URL?
     @ViewState<Bool> private var licensesExpanded = false
     private var version:String {Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"}
     private var build:String {Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"}
@@ -258,7 +258,7 @@ struct SettingsView: View {
                             Toggle("",isOn:Binding(get:{true},set:{if !$0 {developerVersion = ""; taps = 0}})).labelsHidden()
                         }.padding(.top,8)
                         OutlinedAction(title:loc("Developer logs")) {logs = true}
-                        OutlinedAction(title:loc("Save logs")) {if !FileManager.default.fileExists(atPath:AppLog.url.path) {AppLog.record("Developer tools enabled")}; shareLogs = true}
+                        OutlinedAction(title:loc("Save logs")) {logFile = AppLog.exportCopy()}
                     }
                     Button {licensesExpanded.toggle()} label: {
                         HStack {label("Licenses",medium:true); Spacer(); Image(systemName:licensesExpanded ? "arrowtriangle.up.fill":"arrowtriangle.down.fill").font(.system(size:10)).foregroundStyle(Palette.text)}
@@ -274,6 +274,6 @@ struct SettingsView: View {
             HStack {Spacer(); TextAction(title:loc("Close")) {dismiss()}}.padding(.top,24)
         }.padding(24).background(Palette.surface3.ignoresSafeArea()).presentationDetents([.medium,.large])
         .sheet(isPresented:$logs) {NavigationStack {ScrollView {Text(AppLog.text).font(.caption.monospaced()).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding()}.navigationTitle("Developer logs").toolbar {Button("Close") {logs = false}}}}
-        .sheet(isPresented:$shareLogs) {ShareSheet(url:AppLog.url)}
+        .sheet(isPresented:Binding(get:{logFile != nil},set:{if !$0 {logFile = nil}})) {if let url = logFile {FileSaveSheet(url:url) {logFile = nil}}}
     }
 }

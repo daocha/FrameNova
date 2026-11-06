@@ -259,6 +259,24 @@ struct InspectorView: View {
         for ext in ["ttf","otf"] {for url in Bundle.main.urls(forResourcesWithExtension:ext,subdirectory:nil) ?? [] {CTFontManagerRegisterFontsForURL(url as CFURL,.process,nil)}}
     }
 }
+/// Saves a copy of a file to a place the user chooses (the Files picker on iPhone and iPad, a save panel on the Mac).
+struct FileSaveSheet: UIViewControllerRepresentable {
+    let url:URL
+    var onFinish:()->Void = {}
+    func makeCoordinator() -> Coordinator {Coordinator(onFinish:onFinish)}
+    func makeUIViewController(context:Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting:[url],asCopy:true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ controller:UIDocumentPickerViewController,context:Context) {}
+    final class Coordinator:NSObject,UIDocumentPickerDelegate {
+        let onFinish:()->Void
+        init(onFinish:@escaping ()->Void) {self.onFinish = onFinish}
+        func documentPicker(_ controller:UIDocumentPickerViewController,didPickDocumentsAt urls:[URL]) {onFinish()}
+        func documentPickerWasCancelled(_ controller:UIDocumentPickerViewController) {onFinish()}
+    }
+}
 struct ShareSheet: UIViewControllerRepresentable {
     let url:URL
     func makeUIViewController(context:Context) -> UIActivityViewController {UIActivityViewController(activityItems:[url],applicationActivities:nil)}

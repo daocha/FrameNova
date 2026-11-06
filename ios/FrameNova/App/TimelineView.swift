@@ -113,7 +113,8 @@ struct TimelineView: View {
             .background {DesktopPointerModifiers(state:pointer)}
             #endif
         }
-        scrollBar
+        // Drawn over the bottom edge of the layers, so it takes no space of its own.
+        .overlay(alignment:.bottom) {scrollBar}
         }
         .padding(.vertical, 5)
         .background(Palette.bg)
@@ -242,8 +243,8 @@ struct TimelineView: View {
                         let newLeft = clamp(drag.location.x-(barGrab ?? thumb/2),0,travel)
                         scroller.scrollTo?(newLeft/travel*range)
                     }.onEnded {_ in barGrab = nil})
-                }.frame(height:12)
-            }.padding(.vertical,4).background(Palette.surface)
+                }.frame(height:8)
+            }.padding(.vertical,1).background(Palette.surface.opacity(0.85))
             .accessibilityLabel("Timeline scroll bar")
         }
     }

@@ -18,7 +18,8 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     @AppStorage("desktop.showInspector") private var showInspector = true
     @AppStorage("desktop.browserWidth") private var browserWidth = 240.0
     @AppStorage("desktop.inspectorWidth") private var inspectorWidth = 300.0
-    @AppStorage("desktop.timelineHeight") private var timelineHeight = 540.0
+    // A large value means "as tall as the window allows"; dragging the divider sets an exact height.
+    @AppStorage("desktop.timelineHeight") private var timelineHeight = 4000.0
     @AppStorage("desktop.timelineHeightDefaultVersion") private var timelineHeightDefaultVersion = 0
     @ViewState<Double> private var availableWidth = 1000
     @ViewState<Bool> private var chooseCoverPhoto = false
@@ -36,7 +37,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
 
     var body: some View {
         GeometryReader { viewport in
-            let timelineLimit = max(160,Double(viewport.size.height)-300)
+            let timelineLimit = max(160,Double(viewport.size.height)-200)
             VStack(spacing: 0) {
                 toolbar
                 HStack(spacing: 0) {
@@ -69,9 +70,10 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
                 }.frame(height: clamp(timelineHeight, 160, timelineLimit))
             }
             .onAppear {
-                if timelineHeightDefaultVersion == 0 {
-                    if timelineHeight == 270 {timelineHeight = 540}
-                    timelineHeightDefaultVersion = 1
+                if timelineHeightDefaultVersion < 2 {
+                    // Earlier versions stored a fixed height; the timeline now takes all the space below the preview by default.
+                    timelineHeight = 4000
+                    timelineHeightDefaultVersion = 2
                 }
                 availableWidth = viewport.size.width; timeline.rowHeight = 68; panel = model.clip == nil ? "Ratio" : panels[0]
             }
@@ -157,7 +159,7 @@ struct DesktopWorkspace<Preview: View, Transport: View, Tools: View>: View {
     private var commandActions: DesktopEditorActions {
         DesktopEditorActions(model: model, importMedia: onImport, replaceMedia: onReplace, importSubtitles: onSubtitles, export: onExport,
                              toggleBrowser: { showBrowser.toggle() }, toggleInspector: { showInspector.toggle() },
-                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 540; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
+                             resetLayout: { browserWidth = 240; inspectorWidth = 300; timelineHeight = 4000; showBrowser = true; showInspector = true; timeline.pointsPerSecond = 70; timeline.rowHeight = 68; timeline.snapping = true },
                              zoom: { timeline.zoom($0) }, fit: { timeline.fit(duration: model.project.durationUs, width: availableWidth) })
     }
 }
@@ -199,7 +201,7 @@ struct WorkspaceDivider: View {
                 switch phase {case .active(let point):pointerLocation = point;case .ended:pointerLocation = nil}
             }
             .gesture(DragGesture(minimumDistance: 0,coordinateSpace:.global).onChanged { drag in
-                if start == nil { start = value }
+                if start == nil { start = clamp(value, range.lowerBound, range.upperBound) }
                 pointerLocation = drag.location
                 let delta = horizontal ? drag.translation.height : drag.translation.width
                 value = clamp((start ?? value) + delta * (reversed ? -1 : 1), range.lowerBound, range.upperBound)
