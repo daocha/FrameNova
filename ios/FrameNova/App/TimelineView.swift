@@ -102,10 +102,6 @@ struct TimelineView: View {
             }
             .onAppear {
                 viewportWidth = max(0,viewport.size.width-headerWidth)
-                AppLog.record("Timeline layout: viewport=\(Int(viewport.size.width))x\(Int(viewport.size.height)) fill=\(Int(fill)) natural=\(Int(natural)) rowHeight=\(Int(rowHeight)) tracks=\(model.project.tracks.count)")
-            }
-            .onChange(of:viewport.size.height) {_,height in
-                AppLog.record("Timeline layout: viewport height=\(Int(height)) fill=\(Int(fill)) natural=\(Int(natural))")
             }
             .onChange(of:viewport.size.width) {_,width in viewportWidth = max(0,width-headerWidth)}
             #if targetEnvironment(macCatalyst)
@@ -183,7 +179,6 @@ struct TimelineView: View {
                     // Land exactly where the pointer was released, even if the last move event was coalesced.
                     let time = geometry.time(atViewportX:drag.location.x,scrollOffset:horizontalOffset)
                     model.scrub(time)
-                    AppLog.record("Ruler seek: x=\(Int(drag.location.x)) scroll=\(Int(horizontalOffset)) zoom=\(Int(display.pointsPerSecond)) time=\(time) playhead=\(model.playhead)")
                     rulerDragging = false;rulerHover = nil;model.finishScrub()
                 })
                 .preference(key:WorkspacePointerHintKey.self,value:rulerHover.map {
