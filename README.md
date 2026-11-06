@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="art/FrameNova-play-icon-512.png" width="112" height="112" alt="FrameNova app icon">
+  <img src="art/FrameNova-banner.png" width="100%" alt="FrameNova, a cross-platform video editor for iOS, Android and macOS">
   <h1>FrameNova</h1>
   <p><strong>One timeline. Room for every layer.</strong></p>
   <p>A multi-track video editor for Android, iPhone, iPad, and macOS.<br>Edit on your device, from the first cut to the final frame.</p>
