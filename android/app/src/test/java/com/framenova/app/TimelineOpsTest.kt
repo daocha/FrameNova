@@ -14,6 +14,20 @@ class TimelineOpsTest {
     private val photo = MediaAsset("p", "content://p", MediaType.IMAGE, "p.jpg", 0, 4000, 3000, hasVideo = true)
     private val song = MediaAsset("a", "content://a", MediaType.AUDIO, "a.m4a", 60_000_000, hasAudio = true)
 
+    @Test fun trimStartRetainsAnimatedPoseBetweenAndAfterKeys() {
+        val original = Clip(id = "animated", assetId = video.id, startUs = 0, srcOutUs = 10_000_000,
+            keyframes = listOf(Keyframe(0, Transform(cx = 0.2f)), Keyframe(4_000_000, Transform(cx = 0.8f), easing = Easing.LINEAR)))
+        val project = Project("trim", "Trim", 0, 0, assets = listOf(video), tracks = listOf(Track("main", TrackKind.MAIN, listOf(original))))
+        for (delta in listOf(2_000_000L, 4_000_000L, 6_000_000L)) {
+            val trimmed = project.trimStart(original.id, delta).clip(original.id)!!
+            assertEquals(original.endUs, trimmed.endUs)
+            assertEquals(original.transformAt(delta), trimmed.transformAt(trimmed.startUs))
+            assertEquals(1, trimmed.keyframes.count { it.offsetUs == 0L })
+        }
+        val trimmed = project.trimStart(original.id, 2_000_000).clip(original.id)!!
+        assertEquals(original.transformAt(3_000_000).cx, trimmed.transformAt(3_000_000).cx, 0.0001f)
+    }
+
     private fun base() = Project("id", "Test", 0, 0).addToMainAt(listOf(video, photo, video2), 0)
 
     @Test fun openingCoverShiftsAllTracksAndRespectsLocks() {

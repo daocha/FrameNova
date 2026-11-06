@@ -8,6 +8,8 @@ final class FrameRenderer {
     let context = CIContext(options:[.cacheIntermediates:false])
     private var images: [String:CIImage] = [:]
     private var cubes: [String:Data] = [:]
+    private let textImages = NSCache<NSString,CIImage>()
+    init() {textImages.totalCostLimit = 32*1024*1024}
     func render(_ instruction: FrameInstruction, at time: Int64, frame: (Int32) -> CIImage?) throws -> CIImage {
         let p = instruction.project, bounds = CGRect(origin:.zero,size:instruction.renderSize)
         var result = CIImage(color:CIColor(color:UIColor(argb:p.canvas.background))).cropped(to:bounds)
@@ -83,13 +85,19 @@ final class FrameRenderer {
         if a.vignette>0 {image = image.applyingFilter("CIVignette",parameters:["inputIntensity":a.vignette*2,"inputRadius":min(source.extent.width,source.extent.height)/2])}
         return image
     }
-    private func textImage(_ style: TextStyle,clip: Clip,time:Int64,canvas:CGSize) -> CIImage {
+    func textImage(_ style: TextStyle,clip: Clip,time:Int64,canvas:CGSize) -> CIImage {
+        let visible = TextAnimationMath.at(style,local:time-clip.startUs,duration:clip.durationUs).visible
+        let count = Int(Double(style.text.count)*visible)
+        // Position, scale and opacity are applied later; only raster appearance belongs in this key.
+        let encoder = JSONEncoder();encoder.outputFormatting = [.sortedKeys]
+        let fontName = TextFonts.font(style,size:canvas.height*style.size).fontName
+        let key = "\((try? encoder.encode(style))?.base64EncodedString() ?? "")|\(canvas.width)x\(canvas.height)|\(count)|\(fontName)" as NSString
+        if let cached = textImages.object(forKey:key) {return cached}
         let size = CGSize(width:canvas.width,height:canvas.height)
         let renderer = UIGraphicsImageRenderer(size:size,format:{ let f = UIGraphicsImageRendererFormat(); f.scale = 1; return f }())
         let uiImage = renderer.image { _ in
             var value = style.text
-            let visible = TextAnimationMath.at(style,local:time-clip.startUs,duration:clip.durationUs).visible
-            if visible<1 {value = String(value.prefix(Int(Double(value.count)*visible)))}
+            if visible<1 {value = String(value.prefix(count))}
             let fontSize = canvas.height*style.size
             var attrs = TextFonts.layoutAttributes(style,size:fontSize)
             attrs[.foregroundColor] = UIColor(argb:style.color)
@@ -101,6 +109,8 @@ final class FrameRenderer {
             if style.backgroundColor != 0 { UIColor(argb:style.backgroundColor).setFill(); UIBezierPath(roundedRect:rect.insetBy(dx:-10,dy:-5),cornerRadius:6).fill() }
             attributed.draw(in:rect)
         }
-        return CIImage(image:uiImage)!
+        let image = CIImage(image:uiImage)!
+        textImages.setObject(image,forKey:key,cost:Int(canvas.width*canvas.height*4))
+        return image
     }
 }

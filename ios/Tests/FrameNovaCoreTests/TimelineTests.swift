@@ -2,6 +2,25 @@ import Testing
 import Foundation
 @testable import FrameNovaCore
 @Suite struct TimelineTests {
+    @Test func trimStartRetainsAnimatedPoseBetweenAndAfterKeys() throws {
+        let original = Clip(id:"animated",srcOutUs:10_000_000,keyframes:[
+            Keyframe(offsetUs:0,transform:Transform(cx:0.2)),
+            Keyframe(offsetUs:4_000_000,transform:Transform(cx:0.8),smooth:false)])
+        var project = Project(name:"Trim")
+        project.tracks[0].clips = [original]
+        for delta:Int64 in [2_000_000,4_000_000,6_000_000] {
+            var trimmedProject = project
+            trimmedProject.trimStart(original.id,delta:delta)
+            let trimmed = try #require(trimmedProject.clip(original.id))
+            #expect(trimmed.endUs == original.endUs)
+            #expect(trimmed.transform(at:trimmed.startUs) == original.transform(at:delta))
+            #expect(trimmed.keyframes.filter {$0.offsetUs == 0}.count == 1)
+        }
+        project.trimStart(original.id,delta:2_000_000)
+        let trimmed = try #require(project.clip(original.id))
+        expectEqual(trimmed.transform(at:3_000_000).cx,original.transform(at:3_000_000).cx,accuracy:0.0001)
+    }
+
     @Test func extractedAudioKeepsVideoTimingAfterSaveReopenAndTrim() throws {
         for speed in [0.25,1.0,4.0] {
             var project = Project(name:"Extracted audio")

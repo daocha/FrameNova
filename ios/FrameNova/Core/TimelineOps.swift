@@ -97,11 +97,17 @@ extension Project {
         let stretch = c.text != nil || asset(c.assetID)?.type == .image
         let limit = c.transitionIn != nil ? 0 : max(0, c.startUs-(prev?.endUs ?? 0))
         let d = clamp(delta, -min(limit, stretch ? 3_600_000_000 : Int64(Double(c.srcInUs)/c.speed)), max(0,c.durationUs-minimumClip))
+        guard d != 0 else {return}
+        let boundary = c.transform(at:c.startUs+d)
         update(id) { v in
             v.startUs += d
             if stretch { v.srcOutUs -= v.srcInUs + Int64(Double(d)*v.speed); v.srcInUs = 0 }
             else { v.srcInUs += Int64(Double(d)*v.speed) }
             v.keyframes = v.keyframes.filter { $0.offsetUs >= d }.map { Keyframe(offsetUs: $0.offsetUs-d, transform: $0.transform, smooth: $0.smooth) }
+            // Preserve the evaluated pose even when no later animation keys survive.
+            if d>0 && !c.keyframes.isEmpty && !v.keyframes.contains(where:{$0.offsetUs == 0}) {
+                v.keyframes.insert(Keyframe(offsetUs:0,transform:boundary),at:0)
+            }
             if let tr = v.transitionIn { let overlap = (prev?.endUs ?? c.startUs)-v.startUs; v.transitionIn = overlap >= minimumClip ? Transition(type: tr.type, durationUs: min(tr.durationUs, overlap)) : nil }
         }
     }
