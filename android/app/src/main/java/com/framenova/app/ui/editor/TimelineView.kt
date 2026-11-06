@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -158,7 +157,7 @@ fun TimelineView(
     val rulerH = with(density) { 24.dp.toPx() }
     val gap = with(density) { 5.dp.toPx() }
     val handleW = with(density) { 14.dp.toPx() }
-    val headerW = with(density) { 96.dp.toPx() }
+    val headerW = with(density) { 60.dp.toPx() }
     val snapPx = with(density) { 10.dp.toPx() }
     val corner = with(density) { 6.dp.toPx() }
     fun rowHeight(kind: TrackKind) = with(density) {
@@ -464,10 +463,12 @@ fun TimelineView(
                     val rowDp = with(density) { row.height.toDp() }
                     val buttonH = rowDp
                     HeaderRow(Modifier.offset { IntOffset(0, (row.top - rulerH).roundToInt()) }
-                        .width(96.dp).height(rowDp).background(if (track.locked) Palette.Surface3 else Palette.Bg)) {
+                        .width(60.dp).height(rowDp).background(if (track.locked) Palette.Surface3 else Palette.Bg)) {
                         val visual = track.kind == TrackKind.OVERLAY
-                        IconButton(onClick = { onTrackHeaderTap(track) }, enabled = track.kind != TrackKind.TEXT,
-                            modifier = Modifier.width(48.dp).height(buttonH)) {
+                        // Two 30 dp zones with 16 dp icons, the size of the phone header on iPhone; a plain clickable box rather
+                        // than an IconButton, whose 48 dp minimum touch size would make the two zones overlap.
+                        Box(Modifier.width(30.dp).height(buttonH).clickable(enabled = track.kind != TrackKind.TEXT) { onTrackHeaderTap(track) },
+                            contentAlignment = Alignment.Center) {
                             Icon(when {
                                 track.kind == TrackKind.TEXT -> Icons.Default.TextFields
                                 visual -> if (track.hidden) Icons.Default.VisibilityOff else Icons.Default.Visibility
@@ -476,14 +477,15 @@ fun TimelineView(
                                 track.kind == TrackKind.TEXT -> stringResource(R.string.timeline_text_layer)
                                 visual -> stringResource(if (track.hidden) R.string.timeline_show else R.string.timeline_hide, label)
                                 else -> stringResource(if (track.muted) R.string.timeline_unmute else R.string.timeline_mute, label)
-                            }, modifier = Modifier.size(20.dp), tint = Palette.TextDim)
+                            }, modifier = Modifier.size(16.dp), tint = Palette.TextDim)
                         }
-                        IconButton(onClick = { onTrackLockTap(track) },
-                            modifier = Modifier.width(48.dp).height(buttonH)
-                                .background(if (track.locked) Palette.AccentSoft else Color.Transparent)) {
+                        Box(Modifier.width(30.dp).height(buttonH)
+                            .background(if (track.locked) Palette.AccentSoft else Color.Transparent)
+                            .clickable { onTrackLockTap(track) },
+                            contentAlignment = Alignment.Center) {
                             Icon(if (track.locked) Icons.Default.Lock else Icons.Default.LockOpen,
                                 contentDescription = stringResource(if (track.locked) R.string.timeline_unlock else R.string.timeline_lock, label),
-                                modifier = Modifier.size(20.dp), tint = if (track.locked) Palette.Accent else Palette.TextDim)
+                                modifier = Modifier.size(16.dp), tint = if (track.locked) Palette.Accent else Palette.TextDim)
                         }
                     }
                 }
