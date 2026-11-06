@@ -45,7 +45,7 @@ struct OutlinedAction: View {
         Button(action:action) {
             Text(title).font(.system(size:14,weight:.medium)).lineLimit(1).foregroundStyle(Palette.accent).padding(.horizontal,24).frame(height:40)
                 .overlay(Capsule().stroke(Color(argb:0xFF938F99),lineWidth:1)).padding(.vertical,4).contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1:0.4)
+        }.buttonStyle(.borderless).disabled(!enabled).opacity(enabled ? 1:0.4)
     }
 }
 
@@ -56,8 +56,9 @@ struct TextAction: View {
     var prominent = false
     let action:()->Void
     var body: some View {
-        Button(action:action) {Text(title).font(.system(size:14,weight:prominent ? .semibold:.medium)).foregroundStyle(Palette.accent).padding(.horizontal,12).frame(height:40).contentShape(Rectangle())}
-            .buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1:0.4)
+        // The native borderless style, so a click on the text-only label is always delivered on the Mac too.
+        Button(action:action) {Text(title).font(.system(size:14,weight:prominent ? .semibold:.medium)).padding(.horizontal,12).frame(height:40).contentShape(Rectangle())}
+            .buttonStyle(.borderless).tint(Palette.accent).foregroundStyle(Palette.accent).disabled(!enabled).opacity(enabled ? 1:0.4)
     }
 }
 

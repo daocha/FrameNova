@@ -37,22 +37,16 @@ struct EditorView: View {
                              inspectorRequest:inspectorRequest, preview:{preview}, transport:{transport}, tools:{toolButtons})
             #else
             let landscape = geo.size.width>geo.size.height
-            let textFocus = showInspector && ["Text","Font","Style","Animation","Stickers"].contains(panel)
-            // The cover panel slides over the editor instead of sharing the screen with it.
-            let coverOverlay = showInspector && panel == "Cover"
+            // Every panel slides up over the editor, as the cover panel does, so the preview keeps its size.
+            let panelOverlay = showInspector
             VStack(spacing:0) {
                 topBar
                 if fullscreen {
                     preview.frame(maxHeight:.infinity);transport
-                } else if textFocus && landscape {
-                    HStack(spacing:0) {preview.frame(maxWidth:.infinity,maxHeight:.infinity);inlinePanel.frame(width:min(380,geo.size.width*0.5))}
-                } else if textFocus {
-                    preview.frame(maxHeight:.infinity)
-                    inlinePanel.frame(height:geo.size.height*0.42)
                 } else if landscape {
                     HStack(spacing:0) {
                         preview.frame(maxWidth:.infinity,maxHeight:.infinity)
-                        Group {if showInspector && !coverOverlay {inlinePanel} else {toolGrid}}.frame(width:min(380,geo.size.width*0.5))
+                        toolGrid.frame(width:min(380,geo.size.width*0.5))
                     }.frame(maxHeight:.infinity)
                     transport
                     touchTimeline.frame(height:max(90,(geo.size.height-96)*0.44))
@@ -60,11 +54,11 @@ struct EditorView: View {
                     preview.frame(maxHeight:.infinity)
                     transport
                     touchTimeline.frame(height:clamp(geo.size.height*0.3,180,320))
-                    if showInspector && !coverOverlay {inlinePanel.frame(height:geo.size.height*0.34)} else {tools}
+                    tools
                 }
             }.background(Palette.bg)
             .overlay(alignment:.bottom) {
-                if coverOverlay {
+                if panelOverlay && !fullscreen {
                     InspectorView(model:model,panel:panel,onDone:{showInspector = false},onHeaderDrag:{drag,ended in
                         // Swiping down from the header hides the panel; letting go early lets it spring back.
                         if !ended {coverDrag = max(0,drag.translation.height)}
@@ -77,8 +71,8 @@ struct EditorView: View {
                         .transition(.move(edge:.bottom).combined(with:.opacity))
                 }
             }
-            .animation(.easeOut(duration:0.26),value:coverOverlay)
-            .onChange(of:coverOverlay) {_,shown in if shown {coverDrag = 0}}
+            .animation(.easeOut(duration:0.26),value:panelOverlay)
+            .onChange(of:panelOverlay) {_,shown in if shown {coverDrag = 0}}
             #endif
         }
         .navigationBarBackButtonHidden().toolbar(.hidden,for:.navigationBar)
@@ -116,7 +110,6 @@ struct EditorView: View {
             updateTrack(track,key)
         })
     }
-    private var inlinePanel:some View {InspectorView(model:model,panel:panel,onDone:{showInspector = false})}
     private func updateTrack(_ track:Track,_ key:WritableKeyPath<Track,Bool>) {
         model.change {p in if let index = p.tracks.firstIndex(where:{$0.id == track.id}) {p.tracks[index][keyPath:key].toggle()}}
     }

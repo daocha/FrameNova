@@ -6,6 +6,9 @@ struct CoverPanel: View {
     @ViewState<Bool> private var files = false
     @ViewState<Bool> private var photos = false
     @ViewState<Bool> private var sources = false
+    /// Set by the Mac timeline's empty cover tile: the panel then opens the photo choice straight away.
+    var choosePhoto:Binding<Bool>? = nil
+    private func answerRequest() {if choosePhoto?.wrappedValue == true {choosePhoto?.wrappedValue = false;sources = true}}
     private var images: [MediaAsset] {model.project.assets.filter {$0.type == .image}}
     private func choose(_ assets: [MediaAsset]) {
         guard let image = assets.first(where:{$0.type == .image}) else {return}
@@ -48,6 +51,8 @@ struct CoverPanel: View {
                 Text("Unlock tracks before adding an opening clip.").font(.caption).foregroundStyle(Palette.dim)
             }
         }
+        .onAppear {answerRequest()}
+        .onChange(of:choosePhoto?.wrappedValue ?? false) {_,_ in answerRequest()}
         .confirmationDialog("Choose media source",isPresented:$sources,titleVisibility:.visible) {
             Button("Files…") {files = true}
             Button("Photos…") {photos = true}
