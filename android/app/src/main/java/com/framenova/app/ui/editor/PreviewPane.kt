@@ -295,7 +295,6 @@ private fun QuickPreview(vm: EditorViewModel, modifier: Modifier) {
         val t = vm.playheadUs
         val cs = project.canvas.size
         val s = size.width / cs.width
-        val frameHeight = (size.height).roundToInt().coerceIn(180, 720)
         val layers = project.visualGeometriesAt(t, cs.width, cs.height) { c -> textSize(c, t, cs.width, cs.height) }
         for ((clip, g) in layers) {
             if (g.opacity <= 0f) continue
@@ -316,8 +315,14 @@ private fun QuickPreview(vm: EditorViewModel, modifier: Modifier) {
                 src = androidx.compose.ui.unit.IntOffset.Zero to androidx.compose.ui.unit.IntSize(image.width, image.height)
             } else {
                 val asset = project.asset(clip.assetId) ?: continue
-                image = vm.media.scrubFrame(asset, clip.sourceTimeAt(t), frameHeight) ?: continue
+                // Decode enough source pixels for the displayed layer, including crop and zoom. Bound the
+                // long edge to keep large sources affordable while avoiding the old 720px height ceiling.
                 val c = clip.crop
+                val sourceHeight = maxOf(g.height * s / c.heightFraction.coerceAtLeast(0.01f),
+                    g.width * s / c.widthFraction.coerceAtLeast(0.01f) * asset.height / asset.width.coerceAtLeast(1))
+                val maxHeight = (1920f * asset.height / maxOf(asset.width, asset.height, 1)).roundToInt().coerceAtLeast(1)
+                val frameHeight = sourceHeight.roundToInt().coerceIn(1, maxHeight)
+                image = vm.media.scrubFrame(asset, clip.sourceTimeAt(t), frameHeight) ?: continue
                 src = androidx.compose.ui.unit.IntOffset((c.left * image.width).roundToInt(), (c.top * image.height).roundToInt()) to
                     androidx.compose.ui.unit.IntSize((c.widthFraction * image.width).roundToInt().coerceAtLeast(1), (c.heightFraction * image.height).roundToInt().coerceAtLeast(1))
             }

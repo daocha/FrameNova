@@ -70,10 +70,10 @@ class MediaCache(private val context: Context) {
         }
     }
 
-    private val scrubWanted = ConcurrentHashMap<String, Long>()
+    private data class ScrubRequest(val timeUs: Long, val heightPx: Int)
+    private val scrubWanted = ConcurrentHashMap<String, ScrubRequest>()
     private val scrubRunning = ConcurrentHashMap.newKeySet<String>()
     private val scrubLast = ConcurrentHashMap<String, ImageBitmap>()
-    private val scrubLastAt = ConcurrentHashMap<String, Long>()
 
     /**
      * A frame of [asset] at source time [timeUs] for scrubbing and live layer gestures, shown instead of the player
@@ -84,20 +84,19 @@ class MediaCache(private val context: Context) {
         if (asset.type == MediaType.IMAGE) return thumbnail(asset, 0, 1, heightPx)
         val t = timeUs / SCRUB_STEP_US * SCRUB_STEP_US
         val key = "${asset.id}@scrub$t@$heightPx"
-        thumbs.get(key)?.let { scrubLast[asset.id] = it; scrubLastAt[asset.id] = t; return it }
-        scrubWanted[asset.id] = t
+        thumbs.get(key)?.let { scrubLast[asset.id] = it; return it }
+        scrubWanted[asset.id] = ScrubRequest(t, heightPx)
         if (scrubRunning.add(asset.id)) scope.launch {
             try {
                 while (true) {
                     val want = scrubWanted[asset.id] ?: break
-                    val k = "${asset.id}@scrub$want@$heightPx"
+                    val k = "${asset.id}@scrub${want.timeUs}@${want.heightPx}"
                     if (thumbs.get(k) == null) {
-                        val bmp = try { frameAt(asset, want, heightPx, MediaMetadataRetriever.OPTION_CLOSEST) } catch (_: Exception) { null }
+                        val bmp = try { frameAt(asset, want.timeUs, want.heightPx, MediaMetadataRetriever.OPTION_CLOSEST) } catch (_: Exception) { null }
                         if (bmp != null) {
                             val image = bmp.asImageBitmap()
                             thumbs.put(k, image)
                             scrubLast[asset.id] = image
-                            scrubLastAt[asset.id] = want
                             version.intValue++
                         }
                     }
@@ -105,9 +104,10 @@ class MediaCache(private val context: Context) {
                 }
             } finally { scrubRunning.remove(asset.id) }
         }
-        // Until the exact frame is decoded: the last one if it is close, else the nearest filmstrip frame.
-        val near = scrubLastAt[asset.id]?.let { abs(it - timeUs) < 1_000_000L } == true
-        return (if (near) scrubLast[asset.id] else null) ?: filmstripFrame(asset, timeUs) ?: scrubLast[asset.id]
+        // Keep the last preview-quality frame while decoding catches up. Switching back to a 128px filmstrip
+        // whenever a swipe moves more than a second made the entire preview visibly blurry during fast scrubs.
+        // The filmstrip is only a placeholder until this asset's first scrub frame is ready.
+        return scrubLast[asset.id] ?: filmstripFrame(asset, timeUs)
     }
 
     private fun decodeImage(asset: MediaAsset, heightPx: Int): Bitmap? {
