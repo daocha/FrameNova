@@ -55,6 +55,26 @@ class EngineDeviceTest {
         FontManager.init(context)
     }
 
+    @Test fun fastScrubKeepsPreviewResolutionWhileNextFrameDecodes() {
+        val asset = MediaProbe.probe(context, fixture("land.mp4"), "video/mp4")!!
+        assertTrue("Fixture must allow a seek beyond one second", asset.durationUs > 1_500_000L)
+        val cache = com.framenova.app.engine.MediaCache(context)
+        try {
+            cache.prepareFilmstrip(asset)
+            val deadline = SystemClock.uptimeMillis() + 20_000
+            while (cache.filmstripFrame(asset, 0) == null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(20)
+            assertNotNull(cache.filmstripFrame(asset, 0))
+            var frame = cache.scrubFrame(asset, 0, 360)
+            while ((frame == null || frame.height < 360) && SystemClock.uptimeMillis() < deadline) {
+                SystemClock.sleep(20)
+                frame = cache.scrubFrame(asset, 0, 360)
+            }
+            assertTrue("Initial preview frame decoded", frame != null && frame.height >= 360)
+            val duringSeek = cache.scrubFrame(asset, 1_500_000L, 360)
+            assertTrue("Fast scrubbing must not fall back to a tiny filmstrip", duringSeek != null && duringSeek.height >= 360)
+        } finally { cache.release() }
+    }
+
     private fun fixture(name: String): Uri {
         val out = File(context.cacheDir, "fixtures/$name").apply { parentFile?.mkdirs() }
         InstrumentationRegistry.getInstrumentation().context.assets.open(name).use { input -> out.outputStream().use { input.copyTo(it) } }

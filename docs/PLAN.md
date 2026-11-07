@@ -86,7 +86,9 @@ Media3 1.9's preview player needed several workarounds, all in `PreviewEngine` a
 `MediaCache.prepareFilmstrip` gives every video clip frames over its whole length (one per second, 10 to 120), taken
 at keyframes and saved as JPEGs under `cache/filmstrip/`, so a reopened project shows them at once. Missing frames are
 made in the background, coarse to fine (ten spread over the clip first). The timeline and the quick preview use the
-nearest frame.
+nearest frame. The quick preview uses the filmstrip only until its first decoded scrub frame is ready, then keeps
+the last preview-quality frame while the next one decodes. Scrub frames follow the displayed layer's crop and zoom,
+with a 1920-pixel long-edge limit.
 
 ### Speed changes
 
